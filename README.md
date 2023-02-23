@@ -1,1 +1,1 @@
-# funcon_lds
+# functional_connectivity_kalman
