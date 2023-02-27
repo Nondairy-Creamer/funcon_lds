@@ -40,7 +40,7 @@ minimum_frac_measured = 0.0
 
 # number of iteration through the full data set to run during gradient descent
 num_grad_steps = 50
-batch_size = 1
+batch_size = 10
 
 # the calcium dynamics always look strange at the start of a recording, possibly due to the laser being turned on
 # cut out the first ~15 seconds to let the system equilibrate

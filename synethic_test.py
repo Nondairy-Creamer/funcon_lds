@@ -23,7 +23,7 @@ from torch.profiler import profile, record_function, ProfilerActivity, schedule,
 # fitting needs to handle missing data in y
 
 # number of iteration through the full data set to run during gradient descent
-num_grad_steps = 30
+num_grad_steps = 50
 batch_size = 1
 
 random_seed = 0
@@ -32,7 +32,7 @@ device = 'cpu'
 dtype = torch.float64
 
 learning_rate = 1e-2
-latent_dim = 100
+latent_dim = 120
 obs_dim = latent_dim
 num_time = 5000
 num_datasets = 1
@@ -136,10 +136,11 @@ this_input = inputs_torch[0]
 
 for ep in range(num_grad_steps):
     optimizer.zero_grad()
-    # loss = torch.tensor(0, device=device, dtype=dtype)
+    loss = torch.tensor(0, device=device, dtype=dtype)
 
-    loss = loss_fun(model_params, this_data, this_input)
-    # loss = loss_fun2(model_params, this_data, this_input)
+    for d in range(num_datasets):
+        # loss = loss_fun(model_params, this_data, this_input)
+        loss += loss_fun2(model_params, emissions_torch[d], inputs_torch[d])
 
     # print(loss)
     # print(loss2)
