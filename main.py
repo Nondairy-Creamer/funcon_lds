@@ -3,7 +3,6 @@ import torch
 import preprocessing as pp
 from matplotlib import pyplot as plt
 from ssm_classes import LgssmSimple
-import yaml
 
 from torch.profiler import profile, record_function, ProfilerActivity, schedule, tensorboard_trace_handler
 # from torch.utils.tensorboard import SummaryWriter
@@ -22,8 +21,7 @@ from torch.profiler import profile, record_function, ProfilerActivity, schedule,
 # w_t, v_t are gaussian with 0 mean, and diagonal covariance
 
 # get run parameters, yaml file contains descriptions of the parameters
-with open('params.yaml', 'r') as file:
-    params = yaml.safe_load(file)
+params = pp.get_params(param_name='params')
 
 device = params['device']
 dtype = getattr(torch, params['dtype'])

@@ -2,6 +2,20 @@ import numpy as np
 import itertools as it
 import scipy.special as ss
 from pathlib import Path
+import yaml
+
+
+def get_params(param_name='params'):
+    with open(param_name + '.yml', 'r') as file:
+        params = yaml.safe_load(file)
+
+    if Path(param_name + '_update.yml').exists():
+        with open(param_name + '_update.yml', 'r') as file:
+            params_update = yaml.safe_load(file)
+
+        params.update(params_update)
+
+    return params
 
 
 def pearson_correlation(a, b):

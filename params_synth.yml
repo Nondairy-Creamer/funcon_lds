@@ -2,7 +2,7 @@ device: cpu
 dtype: float64
 
 # model parameters
-latent_dim: 5
+latent_dim: 10
 num_time: 1000
 num_data_sets: 1
 nan_freq: 0.1
@@ -18,6 +18,6 @@ learning_rate: 0.1
 verbose: True
 random_seed: 0
 
-plot_figures: False
+plot_figures: True
 save_model: True
 save_folder: trained_models

@@ -2,10 +2,9 @@ import numpy as np
 import torch
 from matplotlib import pyplot as plt
 from ssm_classes import LgssmSimple
-import yaml
+import preprocessing as pp
 
-with open('params_synth.yml', 'r') as file:
-    params = yaml.safe_load(file)
+params = pp.get_params(param_name='params_synth')
 
 device = params['device']
 dtype = getattr(torch, params['dtype'])
@@ -45,6 +44,9 @@ if params['save_model']:
     lgssm_model.save(path=params['save_folder'] + '/trained_model_synth.pkl')
 
 if params['plot_figures']:
+    import matplotlib as mpl
+    mpl.use('TkAgg')
+
     # Plots
     # Plot the loss
     plt.figure()

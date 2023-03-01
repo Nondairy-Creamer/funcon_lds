@@ -203,5 +203,4 @@ fabric.properties
 .idea/caches/build_file_checksums.ser
 
 pytorch-minimize
-params.yml
-params_synth.yml
+*_update.yml
