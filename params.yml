@@ -1,4 +1,4 @@
-data_path: C:\Users\mcreamer\Documents\data_sets\fun_con
+data_path: C:\Users\mcreamer\Documents\data_sets\funcon
 # some data sets are unreliable, remove them
 bad_data_sets: [0, 4, 6, 10, 11, 15, 17, 24, 35, 37, 45]
 
