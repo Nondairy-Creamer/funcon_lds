@@ -2,9 +2,7 @@ import numpy as np
 import torch
 from pathlib import Path
 import preprocessing as pp
-import inference as infer
 from matplotlib import pyplot as plt
-import time
 from ssm_classes import LgssmSimple
 
 

@@ -1,8 +1,6 @@
 import numpy as np
 import itertools as it
 import scipy.special as ss
-import torch
-import string
 
 
 def pearson_correlation(a, b):
@@ -243,83 +241,6 @@ def get_matrix_best_score(a, coverage) -> (np.ndarray, float):
 
     score = a.shape[0] * len(cols_to_test)
     return score, cols_to_test
-
-
-def nan_matmul(a, b, impute_val=0):
-    a_no_nan = torch.where(torch.isnan(a), impute_val, a)
-    b_no_nan = torch.where(torch.isnan(b), impute_val, b)
-
-    return a_no_nan @ b_no_nan
-
-
-def estimate_cov(a):
-    a_mean_sub = a - torch.nanmean(a, dim=0, keepdims=True)
-    # estimate the covariance from the data in a
-    cov = nan_matmul(a_mean_sub.T, a_mean_sub) / a.shape[0]
-
-    # some columns will be all 0s due to missing data
-    # replace those diagonals with the mean covariance
-    cov_diag = torch.diag(cov)
-    cov_diag_mean = torch.mean(cov_diag[cov_diag != 0])
-    cov_diag = torch.where(cov_diag == 0, cov_diag_mean, cov_diag)
-
-    cov[torch.eye(a.shape[1], dtype=torch.bool)] = cov_diag
-
-    return cov
-
-
-def generate_data(latent_dim=2, obs_dim=10, num_time=100, num_datasets=1, emission_eye=False, rng_seed=0):
-    rng = np.random.default_rng(rng_seed)
-    cell_ids = list(string.ascii_lowercase[:obs_dim])
-    latents = []
-    observations = []
-    stim_mat = []
-
-    input_weights = np.exp(rng.standard_normal(latent_dim))
-    dynamics_weights = rng.standard_normal((latent_dim, latent_dim))
-    dynamics_max_eig = np.max(np.abs(np.linalg.eigvals(dynamics_weights)))
-    dynamics_weights = dynamics_weights / dynamics_max_eig * 0.8
-
-    if emission_eye:
-        assert(latent_dim == obs_dim)
-        emissions_weights = np.eye(latent_dim)
-    else:
-        emissions_weights = rng.standard_normal((obs_dim, latent_dim))
-
-    dynamics_cov = np.exp(rng.standard_normal(latent_dim))
-    emissions_cov = np.exp(rng.standard_normal(obs_dim))
-    init_mean = np.zeros(latent_dim)
-    init_cov = rng.standard_normal((latent_dim, latent_dim))
-    init_cov = init_cov.T @ init_cov / latent_dim
-
-    for d in range(num_datasets):
-        x = np.zeros((num_time, latent_dim))
-        y = np.zeros((num_time, obs_dim))
-        inputs = rng.standard_normal((num_time, latent_dim))
-        x[0, :] = rng.multivariate_normal(dynamics_weights @ init_mean, init_cov)
-        y[0, :] = rng.multivariate_normal(emissions_weights @ x[0, :], np.diag(emissions_cov))
-
-        for t in range(1, num_time):
-            x_mu = dynamics_weights @ x[t-1, :] + input_weights * inputs[t, :]
-            x[t, :] = rng.multivariate_normal(x_mu, np.diag(dynamics_cov))
-            y[t, :] = rng.multivariate_normal(emissions_weights @ x[t, :], np.diag(emissions_cov))
-
-        latents.append(x)
-        observations.append(y)
-        stim_mat.append(inputs)
-
-    true_params = {'dynamics_weights': dynamics_weights,
-                   'emissions_weights': emissions_weights,
-                   'input_weights': input_weights,
-                   'dynamics_cov': dynamics_cov,
-                   'emissions_cov': emissions_cov,
-                   'init_mean': init_mean,
-                   'init_cov': init_cov,
-                   'latents': latents,
-                   }
-
-    return cell_ids, observations, stim_mat, true_params
-
 
 
 
