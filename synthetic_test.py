@@ -3,7 +3,6 @@ import torch
 from matplotlib import pyplot as plt
 from ssm_classes import LgssmSimple
 import yaml
-from pathlib import Path
 
 with open('params_synth.yml', 'r') as file:
     params = yaml.safe_load(file)
