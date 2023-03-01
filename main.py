@@ -66,9 +66,6 @@ if run_params['save_model']:
     lgssm_model.save(path=run_params['save_path'])
 
 if run_params['plot_figures']:
-    import matplotlib as mpl
-    mpl.use('TkAgg')
-
     # Plots
     # Plot the loss
     plt.figure()
