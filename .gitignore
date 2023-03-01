@@ -204,3 +204,5 @@ fabric.properties
 
 pytorch-minimize
 *_update.yml
+
+*.slurm

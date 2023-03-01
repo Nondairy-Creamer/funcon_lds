@@ -16,6 +16,7 @@ class LgssmSimple:
         self.device = device
         self.verbose = verbose
         self.loss = None
+        self.train_time = None
 
         self.dynamics_weights_init = 0.9 * np.eye(self.latent_dim)
         self.inputs_weights_log_init = np.zeros(self.latent_dim) - 1
@@ -72,6 +73,7 @@ class LgssmSimple:
 
         optimizer = torch.optim.Adam(model_params, lr=learning_rate)
         loss_out = []
+        time_out = []
 
         init_mean = [torch.nanmean(i, dim=0) for i in emissions]
         init_cov = [self._estimate_cov(i) for i in emissions]
@@ -84,14 +86,15 @@ class LgssmSimple:
             loss_out.append(loss.detach().cpu().numpy())
             optimizer.step()
 
-            end = time.time()
+            time_out.append(time.time() - start)
 
             if self.verbose:
                 print('Finished step ' + str(ep + 1) + '/' + str(num_steps))
                 print('Loss = ' + str(loss_out[-1]))
-                print('Time elapsed = ' + str(end - start))
+                print('Time elapsed = ' + str(time_out[-1]))
 
         self.loss = loss_out
+        self.train_time = time_out
 
     def fit_batch_sgd(self, emissions, inputs, learning_rate=1e-2, num_steps=50, num_splits=2, batch_size=10):
         """ This function will fit the model using batch stochastic gradient descent
@@ -113,6 +116,7 @@ class LgssmSimple:
 
         optimizer = torch.optim.Adam(model_params, lr=learning_rate)
         loss_out = []
+        time_out = []
 
         init_mean = [torch.nanmean(i, dim=0) for i in emissions]
         init_cov = [self._estimate_cov(i) for i in emissions]
@@ -139,11 +143,11 @@ class LgssmSimple:
                     print('Loss = ' + str(loss_out[-1]))
                     print('')
 
-            end = time.time()
+            time_out.append(time.time() - start)
 
             if self.verbose:
                 print('Finished epoch ' + str(ep + 1) + '/' + str(num_epochs))
-                print('Time elapsed = ' + str(end - start))
+                print('Time elapsed = ' + str(time_out[-1]))
                 print('')
 
         self.loss = loss_out

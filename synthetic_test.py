@@ -79,7 +79,6 @@ if params['plot_figures']:
 
     plt.tight_layout()
 
-
     # Plot the input weights
     plt.figure()
     plt.plot(np.exp(lgssm_model.inputs_weights_log_init))
