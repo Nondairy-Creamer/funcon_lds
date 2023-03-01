@@ -11,6 +11,13 @@ def trained_on_real(model_trained):
     plt.ylabel('negative log likelihood')
     plt.tight_layout()
 
+    # plot the time to train the model
+    plt.figure()
+    plt.plot(model_trained.train_time)
+    plt.xlabel('iterations')
+    plt.ylabel('total_time')
+    plt.tight_layout()
+
     # Plot the dynamics weights
     plt.figure()
     colorbar_shrink = 0.4
@@ -73,6 +80,13 @@ def trained_on_synthetic(model_synth_trained, model_synth_true, ll_true_params=N
     plt.xlabel('iterations')
     plt.ylabel('negative log likelihood')
 
+    plt.tight_layout()
+
+    # plot the time to train the model
+    plt.figure()
+    plt.plot(model_synth_trained.train_time)
+    plt.xlabel('iterations')
+    plt.ylabel('total_time')
     plt.tight_layout()
 
     # Plot the dynamics weights
