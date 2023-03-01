@@ -1,6 +1,7 @@
 import numpy as np
 import itertools as it
 import scipy.special as ss
+from pathlib import Path
 
 
 def pearson_correlation(a, b):
@@ -70,6 +71,8 @@ def get_cross_val_sets(activity_current, activity_history, num_split=5):
 
 
 def load_data(fun_atlas_path):
+    fun_atlas_path = Path(fun_atlas_path)
+
     recordings = []
     labels = []
     label_indicies = []

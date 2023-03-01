@@ -1,0 +1,39 @@
+data_path: C:\Users\mcreamer\Documents\data_sets\fun_con
+# some data sets are unreliable, remove them
+bad_data_sets: [0, 4, 6, 10, 11, 15, 17, 24, 35, 37, 45]
+
+# the calcium dynamics always look strange at the start of a recording, possibly due to the laser being turned on
+# cut out the first ~15 seconds to let the system equilibrate
+index_start: 25
+
+# We want to take our data set of recordings and pick a subset of those recordings and neurons in order
+# to maximize the number of recordings * the number of neurons that appear in those recordings
+# this variable allows a neuron to only appear in this fraction of recordings to still be included
+# (rather than enforcing it is in 100% of the recording subset)
+frac_neuron_coverage: 0.0
+
+# for a neuron to be included in the dataset, it must be in at least this fraction of the recordings
+# this is not a principled threshold, (you could have 90 bad recordings and 10 good ones), but it's a quick heuristic
+# to reduce dataset size
+minimum_frac_measured: 0.0
+
+device: cpu
+dtype: float64
+
+# gradient descent parameters
+# choices are: gradient_descent and batch_sgd
+fit_type: gradient_descent
+num_grad_steps: 100
+batch_size: 10
+# split the data sets to reduce memory consumption
+num_splits: 1
+learning_rate: 0.01
+verbose: True
+random_seed: null
+
+plot_figures: False
+save_model: True
+save_path: trained_model.pkl
+
+
+

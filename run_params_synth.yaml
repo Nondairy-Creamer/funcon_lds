@@ -1,0 +1,23 @@
+device: cpu
+dtype: float64
+
+# model parameters
+latent_dim: 5
+num_time: 1000
+num_data_sets: 1
+nan_freq: 0.1
+
+# gradient descent parameters
+# choices are: gradient_descent and batch_sgd
+fit_type: gradient_descent
+num_grad_steps: 50
+batch_size: 2
+# split the data sets to reduce memory consumption
+num_splits: 1
+learning_rate: 0.1
+verbose: True
+random_seed: 0
+
+plot_figures: True
+save_model: True
+save_path: trained_models/trained_model_synth.pkl

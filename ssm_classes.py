@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+import pickle
 import time
 
 
@@ -9,7 +10,7 @@ class LgssmSimple:
         This verison assumes diagonal input weights, diagonal noise covariance, no offsets, and identity emissions
     """
 
-    def __init__(self, latent_dim, dtype=torch.float64, device='cpu', random_seed=0, verbose=False):
+    def __init__(self, latent_dim, dtype=torch.float64, device='cpu', random_seed=0, verbose=True):
         self.latent_dim = latent_dim
         self.dtype = dtype
         self.device = device
@@ -31,6 +32,11 @@ class LgssmSimple:
 
         # this is only used for randomizing weights, sampling from the model, and selecting batches
         self._random_generator = np.random.default_rng(random_seed)
+
+    def save(self, path='trained_models/trained_model.pkl'):
+        save_file = open(path, 'wb')
+        pickle.dump(self, save_file)
+        save_file.close()
 
     def randomize_weights(self, max_eig_allowed=0.8, init_std=0.1, cov_log_offset=-1):
         self.dynamics_weights_init = self._random_generator.standard_normal((self.latent_dim, self.latent_dim))
@@ -142,76 +148,14 @@ class LgssmSimple:
         return loss_out
 
     def loss_fn(self, emissions, inputs, init_mean, init_cov, nan_fill=1e8):
-        inputs_weights = torch.exp(self.inputs_weights_log)
-        dynamics_cov = torch.exp(self.dynamics_cov_log)
-        emissions_cov = torch.exp(self.emissions_cov_log)
         loss = torch.tensor(0, dtype=self.dtype, device=self.device)
         num_data_points = [i.numel() for i in emissions]
         num_data_points = np.sum(num_data_points)
 
         for d in range(len(emissions)):
-            loss += self._lgssm_filter(emissions[d], inputs[d], init_mean[d], init_cov[d],
-                                       self.dynamics_weights, inputs_weights, dynamics_cov, emissions_cov,
-                                       nan_fill=nan_fill)[0]
+            loss += self._lgssm_filter(emissions[d], inputs[d], init_mean[d], init_cov[d], nan_fill=nan_fill)[0]
 
         return -loss / num_data_points
-
-    def _lgssm_filter(self, emissions, inputs, init_mean, init_cov,
-                      dynamics_weights, inputs_weights, dynamics_cov, emissions_cov,
-                      nan_fill=1e8):
-        """Run a Kalman filter to produce the marginal likelihood and filtered state estimates.
-        adapted from Dynamax.
-        This verison assumes diagonal input weights, diagonal noise covariance, no offsets, and identity emissions
-
-        Args:
-            params: model parameters
-            emissions: array of observations.
-            inputs: optional array of inputs.
-            nan_fill: value to put in place of nans in the emissions covariance diagonal
-
-        Returns:
-            PosteriorGSSMFiltered: filtered posterior object
-        """
-        num_timesteps = len(emissions)
-
-        if inputs is None:
-            inputs = torch.zeros((num_timesteps, 0), dtype=self.dtype, device=self.device)
-
-        def _step(carry, t):
-            ll, pred_mean, pred_cov = carry
-
-            # Shorthand: get parameters and inputs for time index t
-            y = emissions[t]
-
-            # added by msc to attempt to perform inference over nans
-            nan_loc = torch.isnan(y)
-            y = torch.where(nan_loc, 0, y)
-            R = torch.where(nan_loc, nan_fill, emissions_cov)
-
-            # Update the log likelihood
-            mu = pred_mean
-            cov = pred_cov + torch.diag(R)
-
-            ll += -torch.linalg.slogdet(cov)[1] - torch.dot(y - mu, torch.linalg.solve(cov, y - mu))
-
-            # Condition on this emission
-            # Compute the Kalman gain
-            S = torch.diag(R) + pred_cov
-            K = torch.linalg.solve(S, pred_cov).T
-            filtered_cov = pred_cov - K @ S @ K.T
-            filtered_mean = pred_mean + K @ (y - pred_mean)
-
-            # Predict the next state
-            pred_mean = dynamics_weights @ filtered_mean + inputs_weights * inputs[t]
-            pred_cov = dynamics_weights @ filtered_cov @ dynamics_weights.T + torch.diag(dynamics_cov)
-
-            return (ll, pred_mean, pred_cov), (filtered_mean, filtered_cov)
-
-        # Run the Kalman filter
-        carry = (0.0, init_mean, init_cov)
-        (ll, _, _), (filtered_means, filtered_covs) = self._scan(_step, carry, torch.arange(num_timesteps))
-
-        return ll, filtered_means, filtered_covs
 
     def sample(self, num_time=100, num_data_sets=1, nan_freq=0.0):
         all_latents = []
@@ -253,6 +197,54 @@ class LgssmSimple:
             all_latents.append(latents)
 
         return all_emissions, all_inputs, all_latents, init_mean, init_cov
+
+    def _lgssm_filter(self, emissions, inputs, init_mean, init_cov, nan_fill=1e8):
+        """Run a Kalman filter to produce the marginal likelihood and filtered state estimates.
+        adapted from Dynamax.
+        This verison assumes diagonal input weights, diagonal noise covariance, no offsets, and identity emissions
+        """
+        num_timesteps = len(emissions)
+
+        dynamics_weights = self.dynamics_weights
+        inputs_weights = torch.exp(self.inputs_weights_log)
+        dynamics_cov = torch.exp(self.dynamics_cov_log)
+        emissions_cov = torch.exp(self.emissions_cov_log)
+
+        def _step(carry, t):
+            ll, pred_mean, pred_cov = carry
+
+            # Shorthand: get parameters and inputs for time index t
+            y = emissions[t]
+
+            # added by msc to attempt to perform inference over nans
+            nan_loc = torch.isnan(y)
+            y = torch.where(nan_loc, 0, y)
+            R = torch.where(nan_loc, nan_fill, emissions_cov)
+
+            # Update the log likelihood
+            mu = pred_mean
+            cov = pred_cov + torch.diag(R)
+
+            ll += -torch.linalg.slogdet(cov)[1] - torch.dot(y - mu, torch.linalg.solve(cov, y - mu))
+
+            # Condition on this emission
+            # Compute the Kalman gain
+            S = torch.diag(R) + pred_cov
+            K = torch.linalg.solve(S, pred_cov).T
+            filtered_cov = pred_cov - K @ S @ K.T
+            filtered_mean = pred_mean + K @ (y - pred_mean)
+
+            # Predict the next state
+            pred_mean = dynamics_weights @ filtered_mean + inputs_weights * inputs[t]
+            pred_cov = dynamics_weights @ filtered_cov @ dynamics_weights.T + torch.diag(dynamics_cov)
+
+            return (ll, pred_mean, pred_cov), (filtered_mean, filtered_cov)
+
+        # Run the Kalman filter
+        carry = (0.0, init_mean, init_cov)
+        (ll, _, _), (filtered_means, filtered_covs) = self._scan(_step, carry, torch.arange(num_timesteps))
+
+        return ll, filtered_means, filtered_covs
 
     def _get_batches_inds(self, num_data, batch_size):
         num_batches = np.ceil(num_data / batch_size)
