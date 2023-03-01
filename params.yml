@@ -33,7 +33,7 @@ random_seed: null
 
 plot_figures: False
 save_model: True
-save_path: trained_model.pkl
+save_folder: trained_models
 
 
 

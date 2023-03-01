@@ -22,18 +22,18 @@ from torch.profiler import profile, record_function, ProfilerActivity, schedule,
 # w_t, v_t are gaussian with 0 mean, and diagonal covariance
 
 # get run parameters, yaml file contains descriptions of the parameters
-with open('run_params.yaml', 'r') as file:
-    run_params = yaml.safe_load(file)
+with open('params.yaml', 'r') as file:
+    params = yaml.safe_load(file)
 
-device = run_params['device']
-dtype = getattr(torch, run_params['dtype'])
+device = params['device']
+dtype = getattr(torch, params['dtype'])
 
 # load all the recordings
 emissions_unaligned, cell_ids_unaligned, q, q_labels, stim_cell_ids, inputs_unaligned = \
-    pp.load_data(run_params['data_path'])
+    pp.load_data(params['data_path'])
 
 # remove recordings that are noisy
-data_sets_to_remove = np.sort(run_params['bad_data_sets'])[::-1]
+data_sets_to_remove = np.sort(params['bad_data_sets'])[::-1]
 for bd in data_sets_to_remove:
     emissions_unaligned.pop(bd)
     cell_ids_unaligned.pop(bd)
@@ -43,33 +43,33 @@ for bd in data_sets_to_remove:
 # choose a subset of the data sets to maximize the number of recordings * the number of neurons included
 cell_ids, emissions, best_runs, inputs = \
     pp.get_combined_dataset(emissions_unaligned, cell_ids_unaligned, stim_cell_ids, inputs_unaligned,
-                            frac_neuron_coverage=run_params['frac_neuron_coverage'],
-                            minimum_freq=run_params['minimum_frac_measured'])
+                            frac_neuron_coverage=params['frac_neuron_coverage'],
+                            minimum_freq=params['minimum_frac_measured'])
 
 num_data = len(emissions)
-num_epochs = int(np.ceil(run_params['num_grad_steps'] * run_params['batch_size'] / num_data))
+num_epochs = int(np.ceil(params['num_grad_steps'] * params['batch_size'] / num_data))
 
 # remove the beginning of the recording which contains artifacts and mean subtract
 for ri in range(num_data):
-    emissions[ri] = emissions[ri][run_params['index_start']:, :]
+    emissions[ri] = emissions[ri][params['index_start']:, :]
     emissions[ri] = emissions[ri] - np.mean(emissions[ri], axis=0, keepdims=True)
-    inputs[ri] = inputs[ri][run_params['index_start']:, :]
+    inputs[ri] = inputs[ri][params['index_start']:, :]
 
 # initialize and train model
 latent_dim = len(cell_ids)
-lgssm_model = LgssmSimple(latent_dim, dtype=dtype, device=device, random_seed=run_params['random_seed'], verbose=run_params['verbose'])
-loss_out = lgssm_model.fit_batch_sgd(emissions, inputs, learning_rate=run_params['learning_rate'],
-                                     num_steps=run_params['num_grad_steps'], batch_size=run_params['batch_size'],
-                                     num_splits=run_params['num_splits'])
+lgssm_model = LgssmSimple(latent_dim, dtype=dtype, device=device, random_seed=params['random_seed'], verbose=params['verbose'])
+lgssm_model.fit_batch_sgd(emissions, inputs, learning_rate=params['learning_rate'],
+                          num_steps=params['num_grad_steps'], batch_size=params['batch_size'],
+                          num_splits=params['num_splits'])
 
-if run_params['save_model']:
-    lgssm_model.save(path=run_params['save_path'])
+if params['save_model']:
+    lgssm_model.save(path=params['save_folder'] + '/trained_model.pkl')
 
-if run_params['plot_figures']:
+if params['plot_figures']:
     # Plots
     # Plot the loss
     plt.figure()
-    plt.plot(loss_out)
+    plt.plot(lgssm_model.loss)
     plt.xlabel('iterations')
     plt.ylabel('negative log likelihood')
     plt.tight_layout()

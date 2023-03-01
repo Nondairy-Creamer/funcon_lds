@@ -18,6 +18,6 @@ learning_rate: 0.1
 verbose: True
 random_seed: 0
 
-plot_figures: True
+plot_figures: False
 save_model: True
-save_path: trained_models/trained_model_synth.pkl
+save_folder: trained_models

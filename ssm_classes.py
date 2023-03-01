@@ -15,6 +15,7 @@ class LgssmSimple:
         self.dtype = dtype
         self.device = device
         self.verbose = verbose
+        self.loss = None
 
         self.dynamics_weights_init = 0.9 * np.eye(self.latent_dim)
         self.inputs_weights_log_init = np.zeros(self.latent_dim) - 1
@@ -90,7 +91,7 @@ class LgssmSimple:
                 print('Loss = ' + str(loss_out[-1]))
                 print('Time elapsed = ' + str(end - start))
 
-        return loss_out
+        self.loss = loss_out
 
     def fit_batch_sgd(self, emissions, inputs, learning_rate=1e-2, num_steps=50, num_splits=2, batch_size=10):
         """ This function will fit the model using batch stochastic gradient descent
@@ -145,7 +146,7 @@ class LgssmSimple:
                 print('Time elapsed = ' + str(end - start))
                 print('')
 
-        return loss_out
+        self.loss = loss_out
 
     def loss_fn(self, emissions, inputs, init_mean, init_cov, nan_fill=1e8):
         loss = torch.tensor(0, dtype=self.dtype, device=self.device)
