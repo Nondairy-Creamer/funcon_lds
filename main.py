@@ -1,8 +1,8 @@
 import numpy as np
 import torch
 import preprocessing as pp
-from matplotlib import pyplot as plt
 from ssm_classes import LgssmSimple
+import plotting
 
 from torch.profiler import profile, record_function, ProfilerActivity, schedule, tensorboard_trace_handler
 # from torch.utils.tensorboard import SummaryWriter
@@ -55,64 +55,13 @@ for ri in range(num_data):
 
 # initialize and train model
 latent_dim = len(cell_ids)
-lgssm_model = LgssmSimple(latent_dim, dtype=dtype, device=device, random_seed=params['random_seed'], verbose=params['verbose'])
-lgssm_model.fit_batch_sgd(emissions, inputs, learning_rate=params['learning_rate'],
-                          num_steps=params['num_grad_steps'], batch_size=params['batch_size'],
-                          num_splits=params['num_splits'])
+model_trained = LgssmSimple(latent_dim, dtype=dtype, device=device, random_seed=params['random_seed'], verbose=params['verbose'])
+model_trained.fit_batch_sgd(emissions, inputs, learning_rate=params['learning_rate'],
+                            num_steps=params['num_grad_steps'], batch_size=params['batch_size'],
+                            num_splits=params['num_splits'])
 
 if params['save_model']:
-    lgssm_model.save(path=params['save_folder'] + '/trained_model.pkl')
+    model_trained.save(path=params['save_folder'] + '/model_trained.pkl')
 
 if params['plot_figures']:
-    # Plots
-    # Plot the loss
-    plt.figure()
-    plt.plot(lgssm_model.loss)
-    plt.xlabel('iterations')
-    plt.ylabel('negative log likelihood')
-    plt.tight_layout()
-
-    # Plot the dynamics weights
-    plt.figure()
-    colorbar_shrink = 0.4
-    plt.subplot(1, 2, 1)
-    plt.imshow(lgssm_model.dynamics_weights.detach().cpu().numpy(), interpolation='Nearest')
-    plt.title('dynamics weights')
-    plt.xlabel('input neurons')
-    plt.ylabel('output neurons')
-    plt.colorbar(shrink=colorbar_shrink)
-
-    plt.subplot(1, 2, 2)
-    plt.imshow(lgssm_model.dynamics_weights.detach().cpu().numpy() - np.identity(latent_dim), interpolation='Nearest')
-    plt.title('dynamics weights - I')
-    plt.xlabel('input neurons')
-    plt.ylabel('output neurons')
-    plt.colorbar(shrink=colorbar_shrink)
-    plt.tight_layout()
-
-    # Plot the input weights
-    plt.figure()
-    plt.plot(np.exp(lgssm_model.inputs_weights_log_init))
-    plt.plot(np.exp(lgssm_model.inputs_weights_log.detach().cpu().numpy()))
-    plt.legend(['init', 'final'])
-    plt.xlabel('neurons')
-    plt.ylabel('input weights')
-
-    # plot the covariances
-    plt.figure()
-    plt.subplot(1, 2, 1)
-    plt.plot(np.exp(lgssm_model.dynamics_cov_log_init))
-    plt.plot(np.exp(lgssm_model.dynamics_cov_log.detach().cpu().numpy()))
-    plt.legend(['init', 'final'])
-    plt.xlabel('neurons')
-    plt.ylabel('dynamics noise cov')
-
-    plt.subplot(1, 2, 2)
-    plt.plot(np.exp(lgssm_model.emissions_cov_log_init))
-    plt.plot(np.exp(lgssm_model.emissions_cov_log.detach().cpu().numpy()))
-    plt.legend(['init', 'final'])
-    plt.xlabel('neurons')
-    plt.ylabel('emissions noise cov')
-    plt.tight_layout()
-
-    plt.show()
+    plotting.trained_on_real(model_trained)
