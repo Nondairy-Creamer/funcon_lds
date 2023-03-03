@@ -10,7 +10,7 @@ class LgssmSimple:
         This verison assumes diagonal input weights, diagonal noise covariance, no offsets, and identity emissions
     """
 
-    def __init__(self, latent_dim, dtype=torch.float64, device='cpu', random_seed=0, verbose=True):
+    def __init__(self, latent_dim, dtype=torch.float64, device='cpu', random_seed=None, verbose=True):
         self.latent_dim = latent_dim
         self.dtype = dtype
         self.device = device
@@ -168,50 +168,44 @@ class LgssmSimple:
         return -torch.sum(loss) / emissions.numel()
 
     def sample(self, num_time=100, num_data_sets=None, nan_freq=0.0):
-        all_latents = []
-        all_emissions = []
-        all_inputs = []
-        init_mean = []
-        init_cov = []
-
-        dynamics_weights_np = self.dynamics_weights.detach().cpu().numpy().copy()
+        dynamics_weights = self.dynamics_weights.detach().cpu().numpy().copy()
         inputs_weights = np.exp(self.inputs_weights_log.detach().cpu().numpy().copy())
         dynamics_cov = np.exp(self.dynamics_cov_log.detach().cpu().numpy().copy())
         emissions_cov = np.exp(self.emissions_cov_log.detach().cpu().numpy().copy())
 
+        # generate a random initial mean and covariance
+        init_mean = self._random_generator.standard_normal((num_data_sets, self.latent_dim))
+        init_cov = self._random_generator.standard_normal((num_data_sets, self.latent_dim, self.latent_dim))
+        init_cov = np.transpose(init_cov, [0, 2, 1]) @ init_cov / self.latent_dim
+
+        latents = np.zeros((num_data_sets, num_time, self.latent_dim))
+        emissions = np.zeros((num_data_sets, num_time, self.latent_dim))
+
+        inputs = self._random_generator.standard_normal((num_data_sets, num_time, self.latent_dim))
+
         for d in range(num_data_sets):
-            # generate a random initial mean and covariance
-            init_mean.append(self._random_generator.standard_normal(self.latent_dim))
-            init_cov.append(self._random_generator.standard_normal((self.latent_dim, self.latent_dim)))
-            init_cov[-1] = init_cov[-1].T @ init_cov[-1] / self.latent_dim
+            latents[d, 0, :] = self._random_generator.multivariate_normal(dynamics_weights @ init_mean[d, :], init_cov[d, :, :])
+            emissions[d, 0, :] = self._random_generator.multivariate_normal(latents[d, 0, :], np.diag(emissions_cov))
 
-            latents = np.zeros((num_time, self.latent_dim))
-            emissions = np.zeros((num_time, self.latent_dim))
+        for t in range(1, num_time):
+            dynamics_noise = self._random_generator.multivariate_normal(np.zeros(self.latent_dim), np.diag(dynamics_cov), size=num_data_sets)
+            emissions_noise = self._random_generator.multivariate_normal(np.zeros(self.latent_dim), np.diag(emissions_cov), size=num_data_sets)
 
-            inputs = self._random_generator.standard_normal((num_time, self.latent_dim))
-            latents[0, :] = self._random_generator.multivariate_normal(dynamics_weights_np @ init_mean[-1], init_cov[-1])
-            emissions[0, :] = self._random_generator.multivariate_normal(latents[0, :], np.diag(emissions_cov))
+            latents[:, t, :] = (dynamics_weights[None, :, :] @ latents[:, t - 1, :, None])[:, :, 0] + inputs_weights[None, :] * inputs[:, t, :] + dynamics_noise
+            emissions[:, t, :] = latents[:, t, :] + emissions_noise
 
-            for t in range(1, num_time):
-                dynamics_noise = self._random_generator.multivariate_normal(np.zeros(self.latent_dim), np.diag(dynamics_cov))
-                emissions_noise = self._random_generator.multivariate_normal(np.zeros(self.latent_dim), np.diag(emissions_cov))
-                latents[t, :] = dynamics_weights_np @ latents[t - 1, :] + inputs_weights * inputs[t, :] + dynamics_noise
-                emissions[t, :] = latents[t, :] + emissions_noise
+        # add in nans
+        nan_mask = self._random_generator.random((num_data_sets, num_time, self.latent_dim)) <= nan_freq
+        emissions[nan_mask] = np.nan
 
-            # add in nans
-            nan_mask = self._random_generator.random((num_time, self.latent_dim)) <= nan_freq
-            emissions[nan_mask] = np.nan
+        emissions = [i for i in emissions]
+        inputs = [i for i in inputs]
+        init_mean = [i for i in init_mean]
+        init_cov = [i for i in init_cov]
 
-            all_emissions.append(emissions)
-            all_inputs.append(inputs)
-            all_latents.append(latents)
-
-            if self.verbose:
-                print('completed synthesizing data set ' + str(d + 1) + '/' + str(num_data_sets))
-
-        data_dict = {'emissions': all_emissions,
-                     'inputs': all_inputs,
-                     'latents': all_latents,
+        data_dict = {'emissions': emissions,
+                     'inputs': inputs,
+                     'latents': latents,
                      'init_mean': init_mean,
                      'init_cov': init_cov,
                      }
@@ -223,7 +217,7 @@ class LgssmSimple:
         adapted from Dynamax.
         This verison assumes diagonal input weights, diagonal noise covariance, no offsets, and identity emissions
         """
-        num_data_sets, num_timesteps, num_neurons = emissions.shape
+        num_data_sets, num_timesteps, _ = emissions.shape
         dynamics_weights = self.dynamics_weights
         inputs_weights = torch.exp(self.inputs_weights_log)
         dynamics_cov = torch.exp(self.dynamics_cov_log)
@@ -254,9 +248,8 @@ class LgssmSimple:
             filtered_mean = (pred_mean[:, :, None] + K @ y_mean_sub[:, :, None])[:, :, 0]
 
             # Predict the next state
-            pred_mean = dynamics_weights[None, :, :] @ filtered_mean[:, :, None] + inputs_weights[None, :, None] * inputs[:, t[0], :][:, :, None]
-            pred_mean = pred_mean[:, :, 0]
-            pred_cov = dynamics_weights[None, :, :] @ filtered_cov @ dynamics_weights.T[None, :, :] + torch.diag_embed(dynamics_cov)
+            pred_mean = (dynamics_weights[None, :, :] @ filtered_mean[:, :, None])[:, :, 0] + inputs_weights[None, :] * inputs[:, t[0], :]
+            pred_cov = dynamics_weights[None, :, :] @ filtered_cov @ dynamics_weights.T[None, :, :] + torch.diag_embed(dynamics_cov[None, :])
 
             return (ll, pred_mean, pred_cov), (filtered_mean, filtered_cov)
 

@@ -65,8 +65,8 @@ def trained_on_real(model_trained):
 
 
 def trained_on_synthetic(model_synth_trained, model_synth_true, ll_true_params=None):
-    # import matplotlib as mpl
-    # mpl.use('TkAgg')
+    import matplotlib as mpl
+    mpl.use('TkAgg')
 
     # Plots
     # Plot the loss

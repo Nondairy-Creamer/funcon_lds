@@ -42,6 +42,7 @@ init_cov_true = [synth_data_dict['init_cov'][i] for i in range(params['num_data_
 
 # make a new model to fit to the random model
 model_synth_trained = LgssmSimple(params['latent_dim'], dtype=dtype, device=device, verbose=params['verbose'])
+model_synth_trained.randomize_weights()
 
 if params['fit_type'] == 'gradient_descent':
     if profile_code:
@@ -73,6 +74,7 @@ else:
 if params['save_model']:
     model_synth_true.save(path=params['model_save_folder'] + '/model_synth_true.pkl')
     model_synth_trained.save(path=params['model_save_folder'] + '/model_synth_trained.pkl')
+    synth
 
 if params['plot_figures']:
     # get the negative log-likelihood of the data given the true parameters
