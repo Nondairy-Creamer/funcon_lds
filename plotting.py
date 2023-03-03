@@ -115,7 +115,7 @@ def trained_on_synthetic(model_synth_trained, model_synth_true, ll_true_params=N
 
     plt.subplot(2, 2, 4)
     plt.imshow((model_synth_true_np - model_synth_trained_np)**2, interpolation='Nearest')
-    plt.title('true dynamics weights')
+    plt.title('squared error trained vs true weights')
     plt.colorbar()
 
     plt.tight_layout()
