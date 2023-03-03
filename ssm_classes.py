@@ -58,45 +58,7 @@ class LgssmSimple:
         self.emissions_cov_log = torch.tensor(self.emissions_cov_log_init, device=self.device,
                                               dtype=self.dtype, requires_grad=True)
 
-    def fit_gd(self, emissions, inputs, learning_rate=1e-2, num_steps=50):
-        """ This function will fit the model using gradient descent on the entire data set
-        """
-        assert(type(emissions) is list)
-        assert(type(inputs) is list)
-
-        if emissions[0].dtype is not self.dtype:
-            emissions = [torch.tensor(i, device=self.device, dtype=self.dtype) for i in emissions]
-            inputs = [torch.tensor(i, device=self.device, dtype=self.dtype) for i in inputs]
-
-        # initialize the optimizer with the parameters we're going to optimize
-        model_params = [self.dynamics_weights, self.inputs_weights_log, self.dynamics_cov_log, self.emissions_cov_log]
-
-        optimizer = torch.optim.Adam(model_params, lr=learning_rate)
-        loss_out = []
-        time_out = []
-
-        init_mean = [torch.nanmean(i, dim=0) for i in emissions]
-        init_cov = [self._estimate_cov(i) for i in emissions]
-
-        start = time.time()
-        for ep in range(num_steps):
-            optimizer.zero_grad()
-            loss = self.loss_fn(emissions, inputs, init_mean, init_cov)
-            loss.backward()
-            loss_out.append(loss.detach().cpu().numpy())
-            optimizer.step()
-
-            time_out.append(time.time() - start)
-
-            if self.verbose:
-                print('Finished step ' + str(ep + 1) + '/' + str(num_steps))
-                print('Loss = ' + str(loss_out[-1]))
-                print('Time elapsed = ' + str(time_out[-1]))
-
-        self.loss = loss_out
-        self.train_time = time_out
-
-    def fit_gd_vectorized(self, emissions_list, inputs_list, learning_rate=1e-2, num_steps=50):
+    def fit_gd(self, emissions_list, inputs_list, learning_rate=1e-2, num_steps=50):
         """ This function will fit the model using gradient descent on the entire data set
         """
         assert(type(emissions_list) is list)
@@ -133,7 +95,7 @@ class LgssmSimple:
         start = time.time()
         for ep in range(num_steps):
             optimizer.zero_grad()
-            loss = self.loss_fn_vectorized(emissions, inputs, init_mean, init_cov)
+            loss = self.loss_fn(emissions, inputs, init_mean, init_cov)
             loss.backward()
             loss_out.append(loss.detach().cpu().numpy())
             optimizer.step()
@@ -205,17 +167,7 @@ class LgssmSimple:
         self.loss = loss_out
 
     def loss_fn(self, emissions, inputs, init_mean, init_cov, nan_fill=1e8):
-        loss = torch.tensor(0, dtype=self.dtype, device=self.device)
-        num_data_points = [i.numel() for i in emissions]
-        num_data_points = np.sum(num_data_points)
-
-        for d in range(len(emissions)):
-            loss += self._lgssm_filter(emissions[d], inputs[d], init_mean[d], init_cov[d], nan_fill=nan_fill)[0]
-
-        return -loss / num_data_points
-
-    def loss_fn_vectorized(self, emissions, inputs, init_mean, init_cov, nan_fill=1e8):
-        loss = self._lgssm_filter_vectorized(emissions, inputs, init_mean, init_cov, nan_fill=nan_fill)[0]
+        loss = self._lgssm_filter(emissions, inputs, init_mean, init_cov, nan_fill=nan_fill)[0]
 
         return -torch.sum(loss) / emissions.numel()
 
@@ -271,54 +223,6 @@ class LgssmSimple:
         return data_dict
 
     def _lgssm_filter(self, emissions, inputs, init_mean, init_cov, nan_fill=1e8):
-        """Run a Kalman filter to produce the marginal likelihood and filtered state estimates.
-        adapted from Dynamax.
-        This verison assumes diagonal input weights, diagonal noise covariance, no offsets, and identity emissions
-        """
-        num_timesteps = len(emissions)
-
-        dynamics_weights = self.dynamics_weights
-        inputs_weights = torch.exp(self.inputs_weights_log)
-        dynamics_cov = torch.exp(self.dynamics_cov_log)
-        emissions_cov = torch.exp(self.emissions_cov_log)
-
-        def _step(carry, t):
-            ll, pred_mean, pred_cov = carry
-
-            # Shorthand: get parameters and inputs for time index t
-            y = emissions[t]
-
-            # added by msc to attempt to perform inference over nans
-            nan_loc = torch.isnan(y)
-            y = torch.where(nan_loc, 0, y)
-            R = torch.where(nan_loc, nan_fill, emissions_cov)
-
-            # Update the log likelihood
-            mu = pred_mean
-            cov = pred_cov + torch.diag(R)
-
-            ll += -torch.linalg.slogdet(cov)[1] - torch.dot(y - mu, torch.linalg.solve(cov, y - mu))
-
-            # Condition on this emission
-            # Compute the Kalman gain
-            S = torch.diag(R) + pred_cov
-            K = torch.linalg.solve(S, pred_cov).T
-            filtered_cov = pred_cov - K @ S @ K.T
-            filtered_mean = pred_mean + K @ (y - pred_mean)
-
-            # Predict the next state
-            pred_mean = dynamics_weights @ filtered_mean + inputs_weights * inputs[t]
-            pred_cov = dynamics_weights @ filtered_cov @ dynamics_weights.T + torch.diag(dynamics_cov)
-
-            return (ll, pred_mean, pred_cov), (filtered_mean, filtered_cov)
-
-        # Run the Kalman filter
-        carry = (0.0, init_mean, init_cov)
-        (ll, _, _), (filtered_means, filtered_covs) = self._scan(_step, carry, torch.arange(num_timesteps))
-
-        return ll, filtered_means, filtered_covs
-
-    def _lgssm_filter_vectorized(self, emissions, inputs, init_mean, init_cov, nan_fill=1e8):
         """Run a Kalman filter to produce the marginal likelihood and filtered state estimates.
         adapted from Dynamax.
         This verison assumes diagonal input weights, diagonal noise covariance, no offsets, and identity emissions

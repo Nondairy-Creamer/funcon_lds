@@ -48,16 +48,16 @@ if params['fit_type'] == 'gradient_descent':
                 ],
                 profile_memory=True
         ) as p:
-            model_synth_trained.fit_gd_vectorized(emissions, inputs, learning_rate=params['learning_rate'],
-                                                  num_steps=params['num_grad_steps'])
+            model_synth_trained.fit_gd(emissions, inputs, learning_rate=params['learning_rate'],
+                                       num_steps=params['num_grad_steps'])
 
         print(p.key_averages().table(sort_by="cpu_time_total", row_limit=20))
         print(p.key_averages().table(sort_by="cpu_memory_usage", row_limit=20))
         print(p.key_averages().table(sort_by="cuda_time_total", row_limit=20))
         print(p.key_averages().table(sort_by="cuda_memory_usage", row_limit=20))
     else:
-        model_synth_trained.fit_gd_vectorized(emissions, inputs, learning_rate=params['learning_rate'],
-                                              num_steps=params['num_grad_steps'])
+        model_synth_trained.fit_gd(emissions, inputs, learning_rate=params['learning_rate'],
+                                   num_steps=params['num_grad_steps'])
 
 elif params['fit_type'] == 'batch_sgd':
     model_synth_trained.fit_batch_sgd(emissions, inputs, learning_rate=params['learning_rate'],
@@ -71,13 +71,13 @@ if params['save_model']:
     model_synth_trained.save(path=params['model_save_folder'] + '/model_synth_trained.pkl')
 
 if params['plot_figures']:
-    # # get the negative log-likelihood of the data given the true parameters
-    # init_mean_true_torch = [torch.tensor(i, dtype=dtype, device=device) for i in init_mean_true]
-    # init_cov_true_torch = [torch.tensor(i, dtype=dtype, device=device) for i in init_cov_true]
-    # emissions_torch = [torch.tensor(i, dtype=dtype, device=device) for i in emissions]
-    # inputs_torch = [torch.tensor(i, dtype=dtype, device=device) for i in inputs]
-    # ll_true_params = model_synth_true.loss_fn(emissions_torch, inputs_torch, init_mean_true_torch,
-    #                                           init_cov_true_torch).detach().cpu().numpy()
+    # get the negative log-likelihood of the data given the true parameters
+    init_mean_true_torch = [torch.tensor(i, dtype=dtype, device=device) for i in synth_data_dict['init_mean']]
+    init_cov_true_torch = [torch.tensor(i, dtype=dtype, device=device) for i in synth_data_dict['init_cov']]
+    emissions_torch = [torch.tensor(i, dtype=dtype, device=device) for i in emissions]
+    inputs_torch = [torch.tensor(i, dtype=dtype, device=device) for i in inputs]
+    ll_true_params = model_synth_true.loss_fn(emissions_torch, inputs_torch, init_mean_true_torch,
+                                              init_cov_true_torch).detach().cpu().numpy()
 
-    plotting.trained_on_synthetic(model_synth_trained, model_synth_true, None)
+    plotting.trained_on_synthetic(model_synth_trained, model_synth_true, ll_true_params)
 
