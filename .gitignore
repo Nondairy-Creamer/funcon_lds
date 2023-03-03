@@ -206,3 +206,4 @@ pytorch-minimize
 *_update.yml
 
 *.slurm
+runs

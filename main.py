@@ -55,13 +55,14 @@ for ri in range(num_data):
 
 # initialize and train model
 latent_dim = len(cell_ids)
-model_trained = LgssmSimple(latent_dim, dtype=dtype, device=device, random_seed=params['random_seed'], verbose=params['verbose'])
+model_trained = LgssmSimple(latent_dim, dtype=dtype, device=device, random_seed=params['random_seed'],
+                            verbose=params['verbose'])
 model_trained.fit_batch_sgd(emissions, inputs, learning_rate=params['learning_rate'],
                             num_steps=params['num_grad_steps'], batch_size=params['batch_size'],
                             num_splits=params['num_splits'])
 
 if params['save_model']:
-    model_trained.save(path=params['save_folder'] + '/model_trained.pkl')
+    model_trained.save(path=params['model_save_folder'] + '/model_trained.pkl')
 
 if params['plot_figures']:
     plotting.trained_on_real(model_trained)
