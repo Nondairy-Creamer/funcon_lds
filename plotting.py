@@ -90,6 +90,8 @@ def trained_on_synthetic(model_synth_trained, model_synth_true, ll_true_params=N
     plt.tight_layout()
 
     # Plot the dynamics weights
+    model_synth_trained_np = model_synth_trained.dynamics_weights.detach().cpu().numpy()
+    model_synth_true_np = model_synth_true.dynamics_weights.detach().cpu().numpy()
     plt.figure()
     colorbar_shrink = 0.4
     plt.subplot(2, 2, 1)
@@ -97,15 +99,22 @@ def trained_on_synthetic(model_synth_trained, model_synth_true, ll_true_params=N
     plt.title('init dynamics weights')
     plt.xlabel('input neurons')
     plt.ylabel('output neurons')
+    plt.colorbar()
 
     plt.subplot(2, 2, 2)
-    plt.imshow(model_synth_trained.dynamics_weights.detach().cpu().numpy(), interpolation='Nearest')
+    plt.imshow(model_synth_trained_np, interpolation='Nearest')
     plt.title('fit dynamics weights')
     plt.xlabel('input neurons')
     plt.ylabel('output neurons')
+    plt.colorbar()
 
     plt.subplot(2, 2, 3)
-    plt.imshow(model_synth_true.dynamics_weights.detach().cpu().numpy(), interpolation='Nearest')
+    plt.imshow(model_synth_true_np, interpolation='Nearest')
+    plt.title('true dynamics weights')
+    plt.colorbar()
+
+    plt.subplot(2, 2, 4)
+    plt.imshow((model_synth_true_np - model_synth_trained_np)**2, interpolation='Nearest')
     plt.title('true dynamics weights')
     plt.colorbar()
 
