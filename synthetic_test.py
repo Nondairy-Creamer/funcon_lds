@@ -74,7 +74,6 @@ else:
 if params['save_model']:
     model_synth_true.save(path=params['model_save_folder'] + '/model_synth_true.pkl')
     model_synth_trained.save(path=params['model_save_folder'] + '/model_synth_trained.pkl')
-    synth
 
 if params['plot_figures']:
     # get the negative log-likelihood of the data given the true parameters
