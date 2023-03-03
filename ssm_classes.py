@@ -58,6 +58,13 @@ class LgssmSimple:
         self.emissions_cov_log = torch.tensor(self.emissions_cov_log_init, device=self.device,
                                               dtype=self.dtype, requires_grad=True)
 
+    def set_device(self, new_device):
+        self.device = new_device
+        self.dynamics_weights = self.dynamics_weights.to(new_device)
+        self.inputs_weights_log = self.inputs_weights_log.to(new_device)
+        self.dynamics_cov_log = self.dynamics_cov_log.to(new_device)
+        self.emissions_cov_log = self.emissions_cov_log.to(new_device)
+
     def fit_gd(self, emissions_list, inputs_list, learning_rate=1e-2, num_steps=50):
         """ This function will fit the model using gradient descent on the entire data set
         """
@@ -68,18 +75,7 @@ class LgssmSimple:
             emissions_list = [torch.tensor(i, device=self.device, dtype=self.dtype) for i in emissions_list]
             inputs_list = [torch.tensor(i, device=self.device, dtype=self.dtype) for i in inputs_list]
 
-        data_set_time = [i.shape[0] for i in emissions_list]
-        max_time = np.max(data_set_time)
-        num_data_sets = len(emissions_list)
-        num_neurons = emissions_list[0].shape[1]
-
-        emissions = torch.empty((num_data_sets, max_time, num_neurons), device=self.device, dtype=self.dtype)
-        emissions[:] = torch.nan
-        inputs = torch.zeros((num_data_sets, max_time, num_neurons), device=self.device, dtype=self.dtype)
-
-        for d in range(num_data_sets):
-            emissions[d, :data_set_time[d], :] = emissions_list[d]
-            inputs[d, :data_set_time[d], :] = inputs_list[d]
+        emissions, inputs = self.stack_data(emissions_list, inputs_list)
 
         # initialize the optimizer with the parameters we're going to optimize
         model_params = [self.dynamics_weights, self.inputs_weights_log, self.dynamics_cov_log, self.emissions_cov_log]
@@ -237,7 +233,7 @@ class LgssmSimple:
             ll, pred_mean, pred_cov = carry
 
             # Shorthand: get parameters and inputs for time index t
-            y = emissions[:, t, :][:, 0, :]
+            y = emissions[:, t[0], :]
 
             # added by msc to attempt to perform inference over nans
             nan_loc = torch.isnan(y)
@@ -249,8 +245,7 @@ class LgssmSimple:
             cov = pred_cov + torch.diag_embed(R)
 
             y_mean_sub = y - mu
-            ll += -torch.linalg.slogdet(cov)[1] - \
-                  (y_mean_sub[:, None, :] @ torch.linalg.solve(cov, y_mean_sub)[:, :, None])[:, 0, 0]
+            ll += -torch.linalg.slogdet(cov)[1] - (y_mean_sub[:, None, :] @ torch.linalg.solve(cov, y_mean_sub)[:, :, None])[:, 0, 0]
 
             # Condition on this emission
             # Compute the Kalman gain
@@ -259,7 +254,7 @@ class LgssmSimple:
             filtered_mean = (pred_mean[:, :, None] + K @ y_mean_sub[:, :, None])[:, :, 0]
 
             # Predict the next state
-            pred_mean = dynamics_weights[None, :, :] @ filtered_mean[:, :, None] + inputs_weights[None, :, None] * inputs[:, t, :][:, 0, :, None]
+            pred_mean = dynamics_weights[None, :, :] @ filtered_mean[:, :, None] + inputs_weights[None, :, None] * inputs[:, t[0], :][:, :, None]
             pred_mean = pred_mean[:, :, 0]
             pred_cov = dynamics_weights[None, :, :] @ filtered_cov @ dynamics_weights.T[None, :, :] + torch.diag_embed(dynamics_cov)
 
@@ -278,6 +273,26 @@ class LgssmSimple:
         batch_data_inds = np.array_split(data_inds, num_batches)
 
         return batch_data_inds
+
+    @staticmethod
+    def stack_data(emissions_list, inputs_list):
+        device = emissions_list[0].device
+        dtype = inputs_list[0].dtype
+
+        data_set_time = [i.shape[0] for i in emissions_list]
+        max_time = np.max(data_set_time)
+        num_data_sets = len(emissions_list)
+        num_neurons = emissions_list[0].shape[1]
+
+        emissions = torch.empty((num_data_sets, max_time, num_neurons), device=device, dtype=dtype)
+        emissions[:] = torch.nan
+        inputs = torch.zeros((num_data_sets, max_time, num_neurons), device=device, dtype=dtype)
+
+        for d in range(num_data_sets):
+            emissions[d, :data_set_time[d], :] = emissions_list[d]
+            inputs[d, :data_set_time[d], :] = inputs_list[d]
+
+        return emissions, inputs
 
     @staticmethod
     def _split_data(emissions, inputs, num_splits=2):

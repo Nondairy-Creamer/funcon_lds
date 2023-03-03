@@ -33,8 +33,12 @@ else:
     load_file.close()
 
 model_synth_true = synth_data_dict['model']
+model_synth_true.set_device(params['device'])
 emissions = [synth_data_dict['emissions'][i][:params['num_time'], :] for i in range(params['num_data_sets'])]
 inputs = [synth_data_dict['inputs'][i][:params['num_time'], :] for i in range(params['num_data_sets'])]
+init_mean_true = [synth_data_dict['init_mean'][i] for i in range(params['num_data_sets'])]
+init_cov_true = [synth_data_dict['init_cov'][i] for i in range(params['num_data_sets'])]
+
 
 # make a new model to fit to the random model
 model_synth_trained = LgssmSimple(params['latent_dim'], dtype=dtype, device=device, verbose=params['verbose'])
@@ -72,10 +76,15 @@ if params['save_model']:
 
 if params['plot_figures']:
     # get the negative log-likelihood of the data given the true parameters
-    init_mean_true_torch = [torch.tensor(i, dtype=dtype, device=device) for i in synth_data_dict['init_mean']]
-    init_cov_true_torch = [torch.tensor(i, dtype=dtype, device=device) for i in synth_data_dict['init_cov']]
+    init_mean_true_torch = [torch.tensor(i, dtype=dtype, device=device)[None, :] for i in init_mean_true]
+    init_cov_true_torch = [torch.tensor(i, dtype=dtype, device=device)[None, :, :] for i in init_cov_true]
     emissions_torch = [torch.tensor(i, dtype=dtype, device=device) for i in emissions]
     inputs_torch = [torch.tensor(i, dtype=dtype, device=device) for i in inputs]
+
+    init_mean_true_torch = torch.cat(init_mean_true_torch, dim=0)
+    init_cov_true_torch = torch.cat(init_cov_true_torch, dim=0)
+    emissions_torch, inputs_torch = model_synth_true.stack_data(emissions_torch, inputs_torch)
+
     ll_true_params = model_synth_true.loss_fn(emissions_torch, inputs_torch, init_mean_true_torch,
                                               init_cov_true_torch).detach().cpu().numpy()
 
