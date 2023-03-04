@@ -223,7 +223,7 @@ class LgssmSimple:
         dynamics_cov = torch.exp(self.dynamics_cov_log)
         emissions_cov = torch.exp(self.emissions_cov_log)
 
-        ll = 0.0
+        ll = torch.zeros(num_data_sets, device=self.device, dtype=self.dtype)
         pred_mean = init_mean
         pred_cov = init_cov
 
