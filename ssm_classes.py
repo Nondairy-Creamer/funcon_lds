@@ -223,11 +223,16 @@ class LgssmSimple:
         dynamics_cov = torch.exp(self.dynamics_cov_log)
         emissions_cov = torch.exp(self.emissions_cov_log)
 
-        def _step(carry, t):
-            ll, pred_mean, pred_cov = carry
+        ll = 0.0
+        pred_mean = init_mean
+        pred_cov = init_cov
 
+        filtered_means_list = []
+        filtered_covs_list = []
+
+        for t in range(num_timesteps):
             # Shorthand: get parameters and inputs for time index t
-            y = emissions[:, t[0], :]
+            y = emissions[:, t, :]
 
             # added by msc to attempt to perform inference over nans
             nan_loc = torch.isnan(y)
@@ -239,23 +244,25 @@ class LgssmSimple:
             cov = pred_cov + torch.diag_embed(R)
 
             y_mean_sub = y - mu
-            ll += -torch.linalg.slogdet(cov)[1] - (y_mean_sub[:, None, :] @ torch.linalg.solve(cov, y_mean_sub)[:, :, None])[:, 0, 0]
+            ll += -torch.linalg.slogdet(cov)[1] - \
+                  (y_mean_sub[:, None, :] @ torch.linalg.solve(cov, y_mean_sub)[:, :, None])[:, 0, 0]
 
             # Condition on this emission
             # Compute the Kalman gain
             K = torch.permute(torch.linalg.solve(cov, pred_cov), (0, 2, 1))
+
             filtered_cov = pred_cov - K @ cov @ torch.permute(K, (0, 2, 1))
             filtered_mean = (pred_mean[:, :, None] + K @ y_mean_sub[:, :, None])[:, :, 0]
 
+            filtered_covs_list.append(filtered_cov)
+            filtered_means_list.append(filtered_mean)
+
             # Predict the next state
-            pred_mean = (dynamics_weights[None, :, :] @ filtered_mean[:, :, None])[:, :, 0] + inputs_weights[None, :] * inputs[:, t[0], :]
+            pred_mean = (dynamics_weights[None, :, :] @ filtered_mean[:, :, None])[:, :, 0] + inputs_weights[None, :] * inputs[:, t, :]
             pred_cov = dynamics_weights[None, :, :] @ filtered_cov @ dynamics_weights.T[None, :, :] + torch.diag_embed(dynamics_cov[None, :])
 
-            return (ll, pred_mean, pred_cov), (filtered_mean, filtered_cov)
-
-        # Run the Kalman filter
-        carry = (0.0, init_mean, init_cov)
-        (ll, _, _), (filtered_means, filtered_covs) = self._scan(_step, carry, torch.arange(num_timesteps, dtype=torch.int64, device=self.device))
+        filtered_means = torch.stack(filtered_means_list)
+        filtered_covs = torch.stack(filtered_covs_list)
 
         return ll, filtered_means, filtered_covs
 
@@ -323,31 +330,3 @@ class LgssmSimple:
         cov[torch.eye(a.shape[1], dtype=torch.bool)] = cov_diag
 
         return cov
-
-    @staticmethod
-    def _scan(f, init, xs, length=None):
-        if xs is None:
-            xs = [None] * length
-        carry = init
-        ys = []
-        if type(xs) is not tuple and type(xs) is not list:
-            xs = [xs]
-
-        for x in range(xs[0].shape[0]):
-            args = []
-            for i in xs:
-                args.append(i[x])
-
-            carry, y = f(carry, args)
-            ys.append(y)
-
-        out = []
-        for j in range(len(ys[0])):
-            var = []
-
-            for i in ys:
-                var.append(i[j])
-
-            out.append(torch.stack(var))
-
-        return carry, out

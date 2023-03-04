@@ -2,7 +2,6 @@ device: cpu
 dtype: float64
 
 # model parameters
-gen_new_data: True
 latent_dim: 10
 num_time: 1000
 num_data_sets: 1
@@ -20,6 +19,5 @@ verbose: True
 random_seed: 0
 
 plot_figures: True
-save_model: True
 model_save_folder: trained_models
 synth_data_save_folder: example_data
