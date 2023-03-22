@@ -10,7 +10,7 @@ class LgssmSimple:
         This verison assumes diagonal input weights, diagonal noise covariance, no offsets, and identity emissions
     """
 
-    def __init__(self, latent_dim, dtype=torch.float64, device='cpu', random_seed=None, verbose=True):
+    def __init__(self, latent_dim, dtype=torch.float64, device='cpu', verbose=True):
         self.latent_dim = latent_dim
         self.dtype = dtype
         self.device = device

@@ -9,11 +9,12 @@ params = pp.get_params(param_name='params_synth')
 
 device = params['device']
 dtype = getattr(torch, params['dtype'])
+random_seed = params['random_seed']
 
 # initialize an linear gaussian ssm model
-model_synth_true = LgssmSimple(params['latent_dim'], dtype=dtype, device=device, random_seed=params['random_seed'])
+model_synth_true = LgssmSimple(params['latent_dim'], dtype=dtype, device=device)
 # randomize the parameters (defaults are nonrandom)
-model_synth_true.randomize_weights()
+model_synth_true.randomize_weights(random_seed=random_seed)
 # sample from the randomized model
 synth_data_dict = \
     model_synth_true.sample(num_time=params['num_time'],
