@@ -71,7 +71,7 @@ def trained_on_synthetic(model_synth_trained, model_synth_true, ll_true_params=N
 
     if ll_true_params is not None:
         plt.plot(np.zeros(len(model_synth_trained.loss)) + ll_true_params, 'k-')
-        plt.legend({'ll over fitting', 'll for the true parameters'})
+        plt.legend({'log likelihood for model', 'log likelihood for true parameters'})
 
     plt.xlabel('iterations')
     plt.ylabel('negative log likelihood')
