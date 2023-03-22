@@ -1,6 +1,5 @@
 from matplotlib import pyplot as plt
 import numpy as np
-import torch
 
 
 def trained_on_real(model_trained):
@@ -65,9 +64,6 @@ def trained_on_real(model_trained):
 
 
 def trained_on_synthetic(model_synth_trained, model_synth_true, ll_true_params=None):
-    import matplotlib as mpl
-    mpl.use('TkAgg')
-
     # Plots
     # Plot the loss
     plt.figure()

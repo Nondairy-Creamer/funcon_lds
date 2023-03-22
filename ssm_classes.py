@@ -32,22 +32,21 @@ class LgssmSimple:
         self.emissions_cov_log = torch.tensor(self.emissions_cov_log_init, device=self.device,
                                               dtype=self.dtype, requires_grad=True)
 
-        # this is only used for randomizing weights, sampling from the model, and selecting batches
-        self._random_generator = np.random.default_rng(random_seed)
-
     def save(self, path='trained_models/trained_model.pkl'):
         save_file = open(path, 'wb')
         pickle.dump(self, save_file)
         save_file.close()
 
-    def randomize_weights(self, max_eig_allowed=0.8, init_std=0.1, cov_log_offset=-1):
-        self.dynamics_weights_init = self._random_generator.standard_normal((self.latent_dim, self.latent_dim))
+    def randomize_weights(self, max_eig_allowed=0.8, init_std=0.1, cov_log_offset=-1, random_seed=None):
+        rng = np.random.default_rng(random_seed)
+
+        self.dynamics_weights_init = rng.standard_normal((self.latent_dim, self.latent_dim))
         max_eig_in_mat = np.max(np.abs(np.linalg.eigvals(self.dynamics_weights_init)))
         self.dynamics_weights_init = max_eig_allowed * self.dynamics_weights_init / max_eig_in_mat
 
-        self.inputs_weights_log_init = init_std * self._random_generator.standard_normal(self.latent_dim) + cov_log_offset
-        self.dynamics_cov_log_init = init_std * self._random_generator.standard_normal(self.latent_dim) + cov_log_offset
-        self.emissions_cov_log_init = init_std * self._random_generator.standard_normal(self.latent_dim) + cov_log_offset
+        self.inputs_weights_log_init = init_std * rng.standard_normal(self.latent_dim) + cov_log_offset
+        self.dynamics_cov_log_init = init_std * rng.standard_normal(self.latent_dim) + cov_log_offset
+        self.emissions_cov_log_init = init_std * rng.standard_normal(self.latent_dim) + cov_log_offset
 
         self.dynamics_weights = torch.tensor(self.dynamics_weights_init, device=self.device,
                                              dtype=self.dtype, requires_grad=True)
@@ -106,11 +105,14 @@ class LgssmSimple:
         self.loss = loss_out
         self.train_time = time_out
 
-    def fit_batch_sgd(self, emissions, inputs, learning_rate=1e-2, num_steps=50, num_splits=2, batch_size=10):
+    def fit_batch_sgd(self, emissions, inputs, learning_rate=1e-2, num_steps=50,
+                      num_splits=2, batch_size=10, random_seed=None):
         """ This function will fit the model using batch stochastic gradient descent
         """
         assert(type(emissions) is list)
         assert(type(inputs) is list)
+
+        rng = np.random.default_rng(random_seed)
 
         if emissions[0].dtype is not self.dtype:
             emissions = [torch.tensor(i, device=self.device, dtype=self.dtype) for i in emissions]
@@ -134,7 +136,7 @@ class LgssmSimple:
         start = time.time()
         for ep in range(num_epochs):
             # randomize the batches
-            batch_inds = self._get_batches_inds(len(emissions), batch_size=batch_size)
+            batch_inds = self._get_batches_inds(len(emissions), batch_size=batch_size, generator=rng)
 
             for bi, b in enumerate(batch_inds):
                 emissions_batch = [emissions[i] for i in b]
@@ -167,35 +169,37 @@ class LgssmSimple:
 
         return -torch.sum(loss) / emissions.numel()
 
-    def sample(self, num_time=100, num_data_sets=None, nan_freq=0.0):
+    def sample(self, num_time=100, num_data_sets=None, nan_freq=0.0, random_seed=None):
+        rng = np.random.default_rng(random_seed)
+
         dynamics_weights = self.dynamics_weights.detach().cpu().numpy().copy()
         inputs_weights = np.exp(self.inputs_weights_log.detach().cpu().numpy().copy())
         dynamics_cov = np.exp(self.dynamics_cov_log.detach().cpu().numpy().copy())
         emissions_cov = np.exp(self.emissions_cov_log.detach().cpu().numpy().copy())
 
         # generate a random initial mean and covariance
-        init_mean = self._random_generator.standard_normal((num_data_sets, self.latent_dim))
-        init_cov = self._random_generator.standard_normal((num_data_sets, self.latent_dim, self.latent_dim))
+        init_mean = rng.standard_normal((num_data_sets, self.latent_dim))
+        init_cov = rng.standard_normal((num_data_sets, self.latent_dim, self.latent_dim))
         init_cov = np.transpose(init_cov, [0, 2, 1]) @ init_cov / self.latent_dim
 
         latents = np.zeros((num_data_sets, num_time, self.latent_dim))
         emissions = np.zeros((num_data_sets, num_time, self.latent_dim))
 
-        inputs = self._random_generator.standard_normal((num_data_sets, num_time, self.latent_dim))
+        inputs = rng.standard_normal((num_data_sets, num_time, self.latent_dim))
 
         for d in range(num_data_sets):
-            latents[d, 0, :] = self._random_generator.multivariate_normal(dynamics_weights @ init_mean[d, :], init_cov[d, :, :])
-            emissions[d, 0, :] = self._random_generator.multivariate_normal(latents[d, 0, :], np.diag(emissions_cov))
+            latents[d, 0, :] = rng.multivariate_normal(dynamics_weights @ init_mean[d, :], init_cov[d, :, :])
+            emissions[d, 0, :] = rng.multivariate_normal(latents[d, 0, :], np.diag(emissions_cov))
 
         for t in range(1, num_time):
-            dynamics_noise = self._random_generator.multivariate_normal(np.zeros(self.latent_dim), np.diag(dynamics_cov), size=num_data_sets)
-            emissions_noise = self._random_generator.multivariate_normal(np.zeros(self.latent_dim), np.diag(emissions_cov), size=num_data_sets)
+            dynamics_noise = rng.multivariate_normal(np.zeros(self.latent_dim), np.diag(dynamics_cov), size=num_data_sets)
+            emissions_noise = rng.multivariate_normal(np.zeros(self.latent_dim), np.diag(emissions_cov), size=num_data_sets)
 
             latents[:, t, :] = (dynamics_weights[None, :, :] @ latents[:, t - 1, :, None])[:, :, 0] + inputs_weights[None, :] * inputs[:, t, :] + dynamics_noise
             emissions[:, t, :] = latents[:, t, :] + emissions_noise
 
         # add in nans
-        nan_mask = self._random_generator.random((num_data_sets, num_time, self.latent_dim)) <= nan_freq
+        nan_mask = rng.random((num_data_sets, num_time, self.latent_dim)) <= nan_freq
         emissions[nan_mask] = np.nan
 
         emissions = [i for i in emissions]
@@ -266,10 +270,11 @@ class LgssmSimple:
 
         return ll, filtered_means, filtered_covs
 
-    def _get_batches_inds(self, num_data, batch_size):
+    @staticmethod
+    def _get_batches_inds(num_data, batch_size, generator):
         num_batches = np.ceil(num_data / batch_size)
         data_inds = np.arange(num_data)
-        self._random_generator.shuffle(data_inds)
+        generator.shuffle(data_inds)
         batch_data_inds = np.array_split(data_inds, num_batches)
 
         return batch_data_inds
