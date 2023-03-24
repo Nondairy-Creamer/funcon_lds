@@ -9,17 +9,17 @@ params = pp.get_params(param_name='params_synth')
 
 device = params['device']
 dtype = getattr(torch, params['dtype'])
-random_seed = params['random_seed']
 
 # initialize an linear gaussian ssm model
 model_synth_true = LgssmSimple(params['latent_dim'], dtype=dtype, device=device)
 # randomize the parameters (defaults are nonrandom)
-model_synth_true.randomize_weights(random_seed=random_seed)
+model_synth_true.randomize_weights(random_seed=params['random_seed'])
 # sample from the randomized model
 synth_data_dict = \
     model_synth_true.sample(num_time=params['num_time'],
                             num_data_sets=params['num_data_sets'],
-                            nan_freq=params['nan_freq'])
+                            nan_freq=params['nan_freq'],
+                            random_seed=params['random_seed'])
 
 emissions = synth_data_dict['emissions']
 inputs = synth_data_dict['inputs']
@@ -28,27 +28,11 @@ init_cov_true = synth_data_dict['init_cov']
 
 # make a new model to fit to the random model
 model_synth_trained = LgssmSimple(params['latent_dim'], dtype=dtype, device=device, verbose=params['verbose'])
-model_synth_trained.randomize_weights()
+# model_synth_trained.randomize_weights(random_seed=random_seed)
 
 if params['fit_type'] == 'gradient_descent':
-    if profile_code:
-        with torch.profiler.profile(
-                activities=[
-                    torch.profiler.ProfilerActivity.CPU,
-                    torch.profiler.ProfilerActivity.CUDA,
-                ],
-                profile_memory=True
-        ) as p:
-            model_synth_trained.fit_gd(emissions, inputs, learning_rate=params['learning_rate'],
-                                       num_steps=params['num_grad_steps'])
-
-        print(p.key_averages().table(sort_by="cpu_time_total", row_limit=20))
-        print(p.key_averages().table(sort_by="cpu_memory_usage", row_limit=20))
-        print(p.key_averages().table(sort_by="cuda_time_total", row_limit=20))
-        print(p.key_averages().table(sort_by="cuda_memory_usage", row_limit=20))
-    else:
-        model_synth_trained.fit_gd(emissions, inputs, learning_rate=params['learning_rate'],
-                                   num_steps=params['num_grad_steps'])
+    model_synth_trained.fit_gd(emissions, inputs, learning_rate=params['learning_rate'],
+                               num_steps=params['num_grad_steps'])
 
 elif params['fit_type'] == 'batch_sgd':
     model_synth_trained.fit_batch_sgd(emissions, inputs, learning_rate=params['learning_rate'],
