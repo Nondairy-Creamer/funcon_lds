@@ -23,10 +23,10 @@ class LgssmSimple:
         self.dynamics_cov_log_init = np.zeros(self.latent_dim) - 1
         self.emissions_cov_log_init = np.zeros(self.latent_dim) - 1
 
-        self.dynamics_weights = torch.tensor(self.dynamics_weights_init, device=self.device, dtype=self.dtype, requires_grad=True)
-        self.inputs_weights_log = torch.tensor(self.inputs_weights_log_init, device=self.device, dtype=self.dtype, requires_grad=True)
-        self.dynamics_cov_log = torch.tensor(self.dynamics_cov_log_init, device=self.device, dtype=self.dtype, requires_grad=True)
-        self.emissions_cov_log = torch.tensor(self.emissions_cov_log_init, device=self.device, dtype=self.dtype, requires_grad=True)
+        self.dynamics_weights = torch.tensor(self.dynamics_weights_init, device=self.device, dtype=self.dtype)
+        self.inputs_weights_log = torch.tensor(self.inputs_weights_log_init, device=self.device, dtype=self.dtype)
+        self.dynamics_cov_log = torch.tensor(self.dynamics_cov_log_init, device=self.device, dtype=self.dtype)
+        self.emissions_cov_log = torch.tensor(self.emissions_cov_log_init, device=self.device, dtype=self.dtype)
 
     def save(self, path='trained_models/trained_model.pkl'):
         save_file = open(path, 'wb')
@@ -44,14 +44,10 @@ class LgssmSimple:
         self.dynamics_cov_log_init = init_std * rng.standard_normal(self.latent_dim) + cov_log_offset
         self.emissions_cov_log_init = init_std * rng.standard_normal(self.latent_dim) + cov_log_offset
 
-        self.dynamics_weights = torch.tensor(self.dynamics_weights_init, device=self.device,
-                                             dtype=self.dtype, requires_grad=True)
-        self.inputs_weights_log = torch.tensor(self.inputs_weights_log_init, device=self.device,
-                                               dtype=self.dtype, requires_grad=True)
-        self.dynamics_cov_log = torch.tensor(self.dynamics_cov_log_init, device=self.device,
-                                             dtype=self.dtype, requires_grad=True)
-        self.emissions_cov_log = torch.tensor(self.emissions_cov_log_init, device=self.device,
-                                              dtype=self.dtype, requires_grad=True)
+        self.dynamics_weights = torch.tensor(self.dynamics_weights_init, device=self.device, dtype=self.dtype)
+        self.inputs_weights_log = torch.tensor(self.inputs_weights_log_init, device=self.device, dtype=self.dtype)
+        self.dynamics_cov_log = torch.tensor(self.dynamics_cov_log_init, device=self.device, dtype=self.dtype)
+        self.emissions_cov_log = torch.tensor(self.emissions_cov_log_init, device=self.device, dtype=self.dtype)
 
     def set_device(self, new_device):
         self.device = new_device
@@ -230,6 +226,11 @@ class LgssmSimple:
     def fit_gd(self, emissions_list, inputs_list, learning_rate=1e-2, num_steps=50):
         """ This function will fit the model using gradient descent on the entire data set
         """
+        self.dynamics_weights.requires_grad = True
+        self.inputs_weights_log.requires_grad = True
+        self.dynamics_cov_log.requires_grad = True
+        self.emissions_cov_log.requires_grad = True
+
         emissions, inputs = self._convert_data(emissions_list, inputs_list)
         init_mean, init_cov = self.estimate_init(emissions)
 
@@ -257,6 +258,11 @@ class LgssmSimple:
 
         self.log_likelihood = log_likelihood_out
         self.train_time = time_out
+
+        self.dynamics_weights.requires_grad = False
+        self.inputs_weights_log.requires_grad = False
+        self.dynamics_cov_log.requires_grad = False
+        self.emissions_cov_log.requires_grad = False
 
     def fit_em(self, emissions_list, inputs_list, num_steps=10):
         emissions, inputs = self._convert_data(emissions_list, inputs_list)

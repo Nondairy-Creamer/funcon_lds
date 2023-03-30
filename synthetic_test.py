@@ -1,5 +1,5 @@
 import torch
-from ssm_classes import LgssmSimple
+from ssm_classes import Lgssm, LgssmSimple
 import preprocessing as pp
 import plotting
 import pickle
@@ -29,7 +29,7 @@ init_cov_true = synth_data_dict['init_cov']
 
 # make a new model to fit to the random model
 model_synth_trained = LgssmSimple(params['latent_dim'], dtype=dtype, device=device, verbose=params['verbose'])
-model_synth_trained.randomize_weights(random_seed=params['random_seed'])
+# model_synth_trained.randomize_weights(random_seed=params['random_seed'])
 
 if params['fit_type'] == 'gd':
     model_synth_trained.fit_gd(emissions, inputs, learning_rate=params['learning_rate'],
