@@ -1,14 +1,15 @@
 from matplotlib import pyplot as plt
 import numpy as np
-import jax.numpy as jnp
+import torch
+import matplotlib as mpl
 
 
-def trained_on_real(loss, trained_params, init_params):
-    # Plot the loss
+def trained_on_real(log_likelihood, trained_params, init_params):
+    # Plot the log likelihood
     plt.figure()
-    plt.plot(loss)
+    plt.plot(log_likelihood)
     plt.xlabel('iterations')
-    plt.ylabel('negative log likelihood')
+    plt.ylabel('log likelihood')
     plt.tight_layout()
 
     # Plot the dynamics weights
@@ -22,7 +23,7 @@ def trained_on_real(loss, trained_params, init_params):
     plt.colorbar(shrink=colorbar_shrink)
 
     plt.subplot(1, 2, 2)
-    plt.imshow(trained_params.dynamics.weights - jnp.eye(trained_params.dynamics.weights.shape[0]), interpolation='Nearest')
+    plt.imshow(trained_params.dynamics.weights - torch.eye(trained_params.dynamics.weights.shape[0]), interpolation='Nearest')
     plt.title('dynamics weights - I')
     plt.xlabel('input neurons')
     plt.ylabel('output neurons')
@@ -76,17 +77,16 @@ def trained_on_real(loss, trained_params, init_params):
 
 def trained_on_synthetic(model_synth_trained, model_synth_true, ll_true_params=None):
     # Plots
-    # Plot the loss
+    # Plot the log likelihood
     plt.figure()
-    plt.plot(model_synth_trained.loss)
+    plt.plot(model_synth_trained.log_likelihood)
 
     if ll_true_params is not None:
-        plt.plot(np.zeros(len(model_synth_trained.loss)) + ll_true_params, 'k-')
+        plt.axhline(ll_true_params, color='k', linestyle=':', label="true")
         plt.legend({'log likelihood for model', 'log likelihood for true parameters'})
 
     plt.xlabel('iterations')
-    plt.ylabel('negative log likelihood')
-
+    plt.ylabel('log likelihood')
     plt.tight_layout()
 
     # plot the time to train the model
@@ -99,32 +99,37 @@ def trained_on_synthetic(model_synth_trained, model_synth_true, ll_true_params=N
     # Plot the dynamics weights
     model_synth_trained_np = model_synth_trained.dynamics_weights.detach().cpu().numpy()
     model_synth_true_np = model_synth_true.dynamics_weights.detach().cpu().numpy()
+    abs_max = np.max([np.max(np.abs(i)) for i in [model_synth_trained_np, model_synth_true_np, model_synth_true_np - model_synth_trained_np]])
+    colormap = mpl.colormaps['coolwarm']
+
     plt.figure()
-    colorbar_shrink = 0.4
     plt.subplot(2, 2, 1)
-    plt.imshow(model_synth_trained.dynamics_weights_init, interpolation='Nearest')
+    plt.imshow(model_synth_trained.dynamics_weights_init, interpolation='Nearest', cmap=colormap)
     plt.title('init dynamics weights')
     plt.xlabel('input neurons')
     plt.ylabel('output neurons')
+    plt.clim((-abs_max, abs_max))
     plt.colorbar()
 
     plt.subplot(2, 2, 2)
-    plt.imshow(model_synth_trained_np, interpolation='Nearest')
+    plt.imshow(model_synth_trained_np, interpolation='Nearest', cmap=colormap)
     plt.title('fit dynamics weights')
     plt.xlabel('input neurons')
     plt.ylabel('output neurons')
+    plt.clim((-abs_max, abs_max))
     plt.colorbar()
 
     plt.subplot(2, 2, 3)
-    plt.imshow(model_synth_true_np, interpolation='Nearest')
-    plt.title('true dynamics weights')
+    plt.imshow(model_synth_true_np - model_synth_trained_np, interpolation='Nearest', cmap=colormap)
+    plt.title('true - fit')
+    plt.clim((-abs_max, abs_max))
     plt.colorbar()
 
     plt.subplot(2, 2, 4)
-    plt.imshow((model_synth_true_np - model_synth_trained_np)**2, interpolation='Nearest')
-    plt.title('squared error trained vs true weights')
+    plt.imshow(model_synth_true_np, interpolation='Nearest', cmap=colormap)
+    plt.title('true dynamics weights')
+    plt.clim((-abs_max, abs_max))
     plt.colorbar()
-
     plt.tight_layout()
 
     # Plot the input weights

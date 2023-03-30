@@ -111,7 +111,7 @@ num_iters = 500
 em_2 = jnp.array((emissions, emissions))
 alpha = 1e-2
 optimizer = optax.adam(alpha)
-# test_params, marginal_lls = test_model.fit_em(test_params, param_props, emissions, num_iters=num_iters)
+test_params, marginal_lls = test_model.fit_em(test_params, param_props, emissions, num_iters=num_iters)
 test_params, marginal_lls = test_model.fit_sgd(test_params, param_props, emissions,
                                                inputs=inputs, num_epochs=num_iters,
                                                optimizer=optimizer)
@@ -144,8 +144,11 @@ plt.title('true dynamics weights')
 plt.colorbar()
 
 plt.subplot(2, 2, 4)
-plt.imshow((true_params.dynamics.weights - test_params.dynamics.weights)**2, interpolation='Nearest')
+dynamics_weights_error = true_params.dynamics.weights - test_params.dynamics.weights
+max_abs_error = jnp.max(jnp.abs(dynamics_weights_error))
+plt.imshow(dynamics_weights_error, interpolation='Nearest')
 plt.title('squared error trained vs true weights')
+plt.clim((-max_abs_error, max_abs_error))
 plt.colorbar()
 
 plt.tight_layout()
@@ -224,3 +227,4 @@ plt.colorbar()
 plt.tight_layout()
 
 plt.show()
+

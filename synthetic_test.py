@@ -23,21 +23,25 @@ synth_data_dict = \
 
 emissions = synth_data_dict['emissions']
 inputs = synth_data_dict['inputs']
+latents_true = synth_data_dict['latents']
 init_mean_true = synth_data_dict['init_mean']
 init_cov_true = synth_data_dict['init_cov']
 
 # make a new model to fit to the random model
 model_synth_trained = LgssmSimple(params['latent_dim'], dtype=dtype, device=device, verbose=params['verbose'])
-# model_synth_trained.randomize_weights(random_seed=random_seed)
+model_synth_trained.randomize_weights(random_seed=params['random_seed'])
 
-if params['fit_type'] == 'gradient_descent':
+if params['fit_type'] == 'gd':
     model_synth_trained.fit_gd(emissions, inputs, learning_rate=params['learning_rate'],
                                num_steps=params['num_grad_steps'])
 
-elif params['fit_type'] == 'batch_sgd':
-    model_synth_trained.fit_batch_sgd(emissions, inputs, learning_rate=params['learning_rate'],
-                                      num_steps=params['num_grad_steps'], batch_size=params['batch_size'],
-                                      num_splits=params['num_splits'])
+elif params['fit_type'] == 'em':
+    model_synth_trained.fit_em(emissions, inputs, num_steps=params['num_grad_steps'])
+
+elif params['fit_type'] == 'none':
+    # do nothing
+    a=1
+
 else:
     raise ValueError('Fit type not recognized')
 
@@ -45,18 +49,19 @@ else:
 model_synth_true.save(path=params['model_save_folder'] + '/model_synth_true.pkl')
 model_synth_trained.save(path=params['model_save_folder'] + '/model_synth_trained.pkl')
 
-# get the negative log-likelihood of the data given the true parameters
+# convert the emissions, inputs, init_mean, and init_cov into tensors
+emissions_torch = [torch.tensor(i, device=device, dtype=dtype) for i in emissions]
+inputs_torch = [torch.tensor(i, device=device, dtype=dtype) for i in inputs]
+emissions_torch, inputs_torch = LgssmSimple.stack_data(emissions_torch, inputs_torch)
+
 init_mean_true_torch = [torch.tensor(i, dtype=dtype, device=device)[None, :] for i in init_mean_true]
 init_cov_true_torch = [torch.tensor(i, dtype=dtype, device=device)[None, :, :] for i in init_cov_true]
-emissions_torch = [torch.tensor(i, dtype=dtype, device=device) for i in emissions]
-inputs_torch = [torch.tensor(i, dtype=dtype, device=device) for i in inputs]
-
 init_mean_true_torch = torch.cat(init_mean_true_torch, dim=0)
 init_cov_true_torch = torch.cat(init_cov_true_torch, dim=0)
-emissions_torch, inputs_torch = model_synth_true.stack_data(emissions_torch, inputs_torch)
 
-ll_true_params = model_synth_true.loss_fn(emissions_torch, inputs_torch, init_mean_true_torch,
-                                          init_cov_true_torch).detach().cpu().numpy()
+# get the negative log-likelihood of the data given the true parameters
+ll_true_params = model_synth_true.lgssm_filter(emissions_torch, inputs_torch, init_mean_true_torch,
+                                               init_cov_true_torch)[0].detach().cpu().numpy()
 
 synth_data_dict['model'] = model_synth_true
 synth_data_dict['ll_true_params'] = ll_true_params

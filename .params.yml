@@ -22,8 +22,8 @@ dtype: float64
 
 # gradient descent parameters
 # choices are: gradient_descent and batch_sgd
-fit_type: gradient_descent
-num_grad_steps: 100
+fit_type: em
+num_grad_steps: 10
 batch_size: 10
 # split the data sets to reduce memory consumption
 num_splits: 1
