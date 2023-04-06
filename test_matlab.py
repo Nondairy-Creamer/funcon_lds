@@ -119,7 +119,10 @@ save_dict = {'yy': yy,
              }
 sio.savemat(save_folder, save_dict)
 
+import time
+start = time.time()
 mm1, logEvTrace = mi.runEM_LDSgaussian(yy, mm0, uu, optsEM)
+print('time to train', time.time()-start)
 
 ## Examine fitted model
 

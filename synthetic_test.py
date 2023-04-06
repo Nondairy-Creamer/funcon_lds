@@ -1,32 +1,32 @@
 import torch
-from ssm_classes import Lgssm, LgssmSimple
+from ssm_classes import Lgssm
 import preprocessing as pp
 import plotting
 import pickle
+import numpy as np
+import inference as infer
 
 params = pp.get_params(param_name='params_synth')
 
-if params['model_type'] == 'simple':
-    model_class = LgssmSimple
-elif params['model_type'] == 'full':
+if params['model_type'] == 'full':
     model_class = Lgssm
 else:
     raise ValueError('model_type not recognized')
 
-
 device = params['device']
 dtype = getattr(torch, params['dtype'])
+rng = np.random.default_rng(params['random_seed'])
 
 # initialize an linear gaussian ssm model
-model_synth_true = model_class(params['latent_dim'], dtype=dtype, device=device)
+model_synth_true = model_class(params['dynamics_dim'], params['emissions_dim'], params['input_dim'],
+                               dtype=dtype, device=device)
 # randomize the parameters (defaults are nonrandom)
-model_synth_true.randomize_weights(random_seed=params['random_seed'])
+model_synth_true.randomize_weights(rng=rng)
 # sample from the randomized model
 synth_data_dict = \
     model_synth_true.sample(num_time=params['num_time'],
                             num_data_sets=params['num_data_sets'],
-                            nan_freq=params['nan_freq'],
-                            random_seed=params['random_seed'])
+                            nan_freq=params['nan_freq'])
 
 emissions = synth_data_dict['emissions']
 inputs = synth_data_dict['inputs']
@@ -35,8 +35,8 @@ init_mean_true = synth_data_dict['init_mean']
 init_cov_true = synth_data_dict['init_cov']
 
 # make a new model to fit to the random model
-model_synth_trained = model_class(params['latent_dim'], dtype=dtype, device=device, verbose=params['verbose'])
-# model_synth_trained.randomize_weights(random_seed=params['random_seed'])
+model_synth_trained = model_class(params['dynamics_dim'], params['emissions_dim'], params['input_dim'],
+                                  dtype=dtype, device=device, verbose=params['verbose'])
 
 if params['fit_type'] == 'gd':
     model_synth_trained.fit_gd(emissions, inputs, learning_rate=params['learning_rate'],
