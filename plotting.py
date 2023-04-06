@@ -148,9 +148,9 @@ def trained_on_synthetic(model_synth_trained, model_synth_true, ll_true_params=N
     compare_2d(model_synth_true_np, model_synth_trained_np, model_synth_init_np, title='dynamics weights')
 
     # Plot the input weights
-    model_synth_true_np = model_synth_true.inputs_weights.detach().cpu().numpy()
-    model_synth_trained_np = model_synth_trained.inputs_weights.detach().cpu().numpy()
-    model_synth_init_np = model_synth_trained.inputs_weights_init
+    model_synth_true_np = model_synth_true.dynamics_input_weights.detach().cpu().numpy()
+    model_synth_trained_np = model_synth_trained.dynamics_input_weights.detach().cpu().numpy()
+    model_synth_init_np = model_synth_trained.dynamics_input_weights_init
     compare_2d(model_synth_true_np, model_synth_trained_np, model_synth_init_np, title='input weights')
 
     # plot the covariances

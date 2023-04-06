@@ -1,5 +1,6 @@
 import numpy as np
 import scipy.stats as ss
+from matplotlib import pyplot as plt
 
 
 def sampleLDSgauss(mm, nT, uu, rng=np.random.default_rng()):
@@ -32,12 +33,13 @@ def sampleLDSgauss(mm, nT, uu, rng=np.random.default_rng()):
     yy = np.zeros((ny, nT))
 
     # Process inputs
-    zin = np.concatenate((np.zeros((nz, 1)), mm['B'] @ uu[:, 1:]), axis=1)  # additive intput to latents
+    zin = mm['B'] @ uu  # additive intput to latents
     yin = mm['D'] @ uu  # additive intput to observations
 
     # Sample data for first time bin
-    zz[:, 0] = rng.multivariate_normal(np.zeros(nz), mm['Q0'])  # 1st latent (Note: no input in 1st time bin)
-    yy[:, 0] = mm['C'] @ zz[:, 0] + yin[:, 0] + rng.multivariate_normal(np.zeros(ny), mm['R'])  # 1st observation
+    latents_init = rng.multivariate_normal(np.zeros(nz), mm['Q0'])  # 1st latent (Note: no input in 1st time bin)
+    zz[:, 0] = mm['A'] @ latents_init + zin[:, 0] + rng.multivariate_normal(np.zeros(nz), mm['Q'])  # latents
+    yy[:, 0] = mm['C'] @ zz[:, 0] + yin[:, 0] + rng.multivariate_normal(np.zeros(ny), mm['R'])  # observations
 
     # Sample data for remaining bins
     for jj in range(1, nT):
@@ -93,7 +95,7 @@ def runKalmanSmooth(yy, uu, mm):
 
     # check if input-latent matrix is provided
     if 'B' in mm.keys() and mm['B'] is not None:
-        zin = np.concatenate((np.zeros((nz, 1)), mm['B'] @ uu[:, 1:]), axis=1)  # additive intput to latents (as column vectors)
+        zin = mm['B'] @ uu  # additive intput to latents (as column vectors)
     else:
         zin = np.zeros((nz, nT))
 
@@ -114,10 +116,20 @@ def runKalmanSmooth(yy, uu, mm):
     # Kalman Filter (forward pass through data)
     # ============================================
 
-    # process 1st time bin
-    zzcov[:, :, 0] = np.linalg.inv(np.linalg.inv(mm['Q0']) + CtRinvC)
-    zzmu[:, 0] = zzcov[:, :, 0] @ (CtRinv @ yyctr[:, 0])  # NOTE: no inputs in first time bin
-    logcy[0] = ss.multivariate_normal(mm['C'] @ zin[:, 0], mm['C'] @ mm['Q0'] @ mm['C'].T + mm['R']).logpdf(yyctr[:, 0])
+    # # process 1st time bin
+    # zzcov[:, :, 0] = np.linalg.inv(np.linalg.inv(mm['Q0']) + CtRinvC)
+    # zzmu[:, 0] = zzcov[:, :, 0] @ (CtRinv @ yyctr[:, 0])  # NOTE: no inputs in first time bin
+    # logcy[0] = ss.multivariate_normal(mm['C'] @ zin[:, 0], mm['C'] @ mm['Q0'] @ mm['C'].T + mm['R']).logpdf(yyctr[:, 0])
+
+    # Step 1 (Predict):
+    Pnext[:, :, 0] = mm['A'] @ mm['Q0'] @ mm['A'].T + mm['Q']  # prior cov for time bin t
+    munext[:, 0] = zin[:, 0]  # prior mean for time bin t
+    # Step 2 (Update):
+    zzcov[:, :, 0] = np.linalg.inv(np.linalg.inv(Pnext[:, :, 0]) + CtRinvC)  # KF cov for time bin t
+    zzmu[:, 0] = zzcov[:, :, 0] @ (CtRinv @ yyctr[:, 0] + np.linalg.solve(Pnext[:, :, 0], munext[:, 0]))  # KF mean
+
+    # compute log P(y_t | y_{1:t-1})
+    logcy[0] = ss.multivariate_normal(mm['C'] @ munext[:, 0], mm['C'] @ Pnext[:, :, 0] @ mm['C'].T + mm['R']).logpdf(yyctr[:, 0])
 
     for tt in range(1, nT):
         # Step 1 (Predict):
@@ -133,6 +145,8 @@ def runKalmanSmooth(yy, uu, mm):
     # compute marginal log-likelihood P(y | theta)
     logli = np.sum(logcy)
 
+    filtered_means = zzmu.copy()
+    filtered_cov = zzcov
 
     # ============================================
     # Kalman Smoother (backward pass)
@@ -140,7 +154,7 @@ def runKalmanSmooth(yy, uu, mm):
     zzcov_offdiag1 = np.zeros((nz, nz, nT - 1))
 
     # Pass backwards, updating mean and covariance with info from the future
-    for tt in reversed(range(0, nT - 1)):
+    for tt in reversed(range(nT - 1)):
         Jt = np.linalg.solve(Pnext[:, :, tt+1].T, mm['A'] @ zzcov[:, :, tt].T).T  # matrix we need
         zzcov[:, :, tt] = zzcov[:, :, tt] + Jt @ (zzcov[:, :, tt+1] - Pnext[:, :, tt+1]) @ Jt.T  # update cov
         zzmu[:, tt] = zzmu[:, tt] + Jt @ (zzmu[:, tt+1] - munext[:, tt+1])  # update mean

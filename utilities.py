@@ -1,6 +1,10 @@
 import torch
 
 
+def batch_Ax(A, x):
+    return (A @ x[:, :, None])[:, :, 0]
+
+
 def block(block_list, dims=(2, 1)):
     layer = []
     for i in block_list:
@@ -13,7 +17,7 @@ def batch_trans(batch_matrix):
     return torch.permute(batch_matrix, (0, 2, 1))
 
 
-def _estimate_cov(a):
+def estimate_cov(a):
     def nan_matmul(a, b, impute_val=0):
         a_no_nan = torch.where(torch.isnan(a), impute_val, a)
         b_no_nan = torch.where(torch.isnan(b), impute_val, b)
