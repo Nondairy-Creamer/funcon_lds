@@ -145,9 +145,6 @@ def runKalmanSmooth(yy, uu, mm):
     # compute marginal log-likelihood P(y | theta)
     logli = np.sum(logcy)
 
-    filtered_means = zzmu.copy()
-    filtered_cov = zzcov
-
     # ============================================
     # Kalman Smoother (backward pass)
     # ============================================

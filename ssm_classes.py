@@ -33,6 +33,18 @@ class Lgssm:
         self.emissions_offset_init = np.zeros(self.emissions_dim)
         self.emissions_cov_init = np.eye(self.emissions_dim)
 
+        self.update = {'dynamics': {'weights': True,
+                                    'input_weights': True,
+                                    'offset': True,
+                                    'cov': True,
+                                    },
+                       'emissions': {'weights': True,
+                                     'input_weights': True,
+                                     'offset': True,
+                                     'cov': True,
+                                     },
+                       }
+
         # define the weights here, but set them to tensor versions of the intial values with _set_to_init()
         self.dynamics_weights = None
         self.dynamics_input_weights = None
@@ -72,66 +84,16 @@ class Lgssm:
 
         self._set_to_init()
 
-    def _set_to_init(self, update=None):
-        if update is None:
-            update = self._get_default_update()
+    def _set_to_init(self):
+        self.dynamics_weights = torch.tensor(self.dynamics_weights_init, device=self.device, dtype=self.dtype)
+        self.dynamics_input_weights = torch.tensor(self.dynamics_input_weights_init, device=self.device, dtype=self.dtype)
+        self.dynamics_offset = torch.tensor(self.dynamics_offset_init, device=self.device, dtype=self.dtype)
+        self.dynamics_cov = torch.tensor(self.dynamics_cov_init, device=self.device, dtype=self.dtype)
 
-        if update['dynamics']['weights']:
-            self.dynamics_weights = torch.tensor(self.dynamics_weights_init, device=self.device, dtype=self.dtype)
-        if update['dynamics']['input_weights']:
-            self.dynamics_input_weights = torch.tensor(self.dynamics_input_weights_init, device=self.device, dtype=self.dtype)
-        if update['dynamics']['offset']:
-            self.dynamics_offset = torch.tensor(self.dynamics_offset_init, device=self.device, dtype=self.dtype)
-        if update['dynamics']['cov']:
-            self.dynamics_cov = torch.tensor(self.dynamics_cov_init, device=self.device, dtype=self.dtype)
-
-        if update['emissions']['weights']:
-            self.emissions_weights = torch.tensor(self.emissions_weights_init, device=self.device, dtype=self.dtype)
-        if update['emissions']['input_weights']:
-            self.emissions_input_weights = torch.tensor(self.emissions_input_weights_init, device=self.device, dtype=self.dtype)
-        if update['emissions']['offset']:
-            self.emissions_offset = torch.tensor(self.emissions_offset_init, device=self.device, dtype=self.dtype)
-        if update['emissions']['cov']:
-            self.emissions_cov = torch.tensor(self.emissions_cov_init, device=self.device, dtype=self.dtype)
-
-    def set_params(self, params):
-        update = self._get_default_update(set_value=False)
-
-        # set dynamics weights
-        if params['dynamics']['weights'] is not None:
-            self.dynamics_weights_init = params['dynamics']['weights']
-            update['dynamics']['weights'] = True
-
-        if params['dynamics']['input_weights'] is not None:
-            self.dynamics_input_weights_init = params['dynamics']['input_weights']
-            update['dynamics']['input_weights'] = True
-
-        if params['dynamics']['offset'] is not None:
-            self.dynamics_offset_init = params['dynamics']['offset']
-            update['dynamics']['offset'] = True
-
-        if params['dynamics']['cov'] is not None:
-            self.dynamics_cov_init = params['dynamics']['cov']
-            update['dynamics']['cov'] = True
-
-        # set emissions weights
-        if params['emissions']['weights'] is not None:
-            self.emissions_weights_init = params['emissions']['weights']
-            update['emissions']['weights'] = True
-
-        if params['emissions']['input_weights'] is not None:
-            self.emissions_input_weights_init = params['emissions']['input_weights']
-            update['emissions']['input_weights'] = True
-
-        if params['emissions']['offset'] is not None:
-            self.emissions_offset_init = params['emissions']['offset']
-            update['emissions']['offset'] = True
-
-        if params['emissions']['cov'] is not None:
-            self.emissions_cov_init = params['emissions']['cov']
-            update['emissions']['cov'] = True
-
-        self._set_to_init(update)
+        self.emissions_weights = torch.tensor(self.emissions_weights_init, device=self.device, dtype=self.dtype)
+        self.emissions_input_weights = torch.tensor(self.emissions_input_weights_init, device=self.device, dtype=self.dtype)
+        self.emissions_offset = torch.tensor(self.emissions_offset_init, device=self.device, dtype=self.dtype)
+        self.emissions_cov = torch.tensor(self.emissions_cov_init, device=self.device, dtype=self.dtype)
 
     def standardize_inputs(self, emissions_list, input_list):
         assert(type(emissions_list) is list)
@@ -173,11 +135,14 @@ class Lgssm:
         self.emissions_offset = self.emissions_offset.to(new_device)
         self.emissions_cov = self.emissions_cov.to(new_device)
 
-    def sample(self, num_time=100, num_data_sets=None, nan_freq=0.0, rng=np.random.default_rng()):
+    def sample(self, num_time=100, init_mean=None, init_cov=None, num_data_sets=None, nan_freq=0.0, rng=np.random.default_rng()):
         # generate a random initial mean and covariance
-        init_mean = rng.standard_normal((num_data_sets, self.dynamics_dim))
-        init_cov = rng.standard_normal((num_data_sets, self.dynamics_dim, self.dynamics_dim))
-        init_cov = np.transpose(init_cov, [0, 2, 1]) @ init_cov / self.dynamics_dim
+        if init_mean is None:
+            init_mean = rng.standard_normal((num_data_sets, self.dynamics_dim))
+
+        if init_cov is None:
+            init_cov = rng.standard_normal((num_data_sets, self.dynamics_dim, self.dynamics_dim))
+            init_cov = np.transpose(init_cov, [0, 2, 1]) @ init_cov / self.dynamics_dim
 
         latents = np.zeros((num_data_sets, num_time, self.dynamics_dim))
         emissions = np.zeros((num_data_sets, num_time, self.dynamics_dim))
@@ -188,22 +153,22 @@ class Lgssm:
         emissions_noise = rng.multivariate_normal(np.zeros(self.dynamics_dim), self.emissions_cov, size=(num_data_sets, num_time))
         dynamics_inputs = (self.dynamics_input_weights @ inputs[:, :, :, None])[:, :, :, 0]
         emissions_inputs = (self.emissions_input_weights @ inputs[:, :, :, None])[:, :, :, 0]
+        latent_init = np.zeros((num_data_sets, self.dynamics_dim))
         for d in range(num_data_sets):
-            latent_init = rng.multivariate_normal(init_mean[d, :], init_cov[d, :, :])
+            latent_init[d, :] = rng.multivariate_normal(init_mean[d, :], init_cov[d, :, :])
 
-            latents[d, 0, :] = self.dynamics_weights @ latent_init + \
-                               dynamics_inputs[d, 0, :] + \
-                               self.dynamics_offset + \
-                               dynamics_noise[d, 0, :]
+        latents[:, 0, :] = utils.batch_Ax(self.dynamics_weights, latent_init) + \
+                           dynamics_inputs[:, 0, :] + \
+                           self.dynamics_offset[None, :] + \
+                           dynamics_noise[:, 0, :]
 
-            emissions[d, 0, :] = self.emissions_weights @ latents[d, 0, :] + \
-                                 emissions_inputs[d, 0, :] + \
-                                 self.emissions_offset + \
-                                 emissions_noise[d, 0, :]
+        emissions[:, 0, :] = utils.batch_Ax(self.emissions_weights, latents[:, 0, :]) + \
+                             emissions_inputs[:, 0, :] + \
+                             self.emissions_offset[None, :] + \
+                             emissions_noise[:, 0, :]
 
         # loop through time and generate the latents and emissions
         for t in range(1, num_time):
-            a=1
             latents[:, t, :] = (self.dynamics_weights @ latents[:, t-1, :, None])[:, :, 0] + \
                                 dynamics_inputs[:, t, :] + \
                                 self.dynamics_offset[None, :] + \
@@ -232,8 +197,8 @@ class Lgssm:
 
         return data_dict
 
-    def fit_em(self, emissions_list, input_list, init_mean=None, init_cov=None, num_steps=10):
-        emissions, input = self.standardize_inputs(emissions_list, input_list)
+    def fit_em(self, emissions_list, inputs_list, init_mean=None, init_cov=None, num_steps=10):
+        emissions, inputs = self.standardize_inputs(emissions_list, inputs_list)
 
         if init_mean is None:
             init_mean = self.estimate_init_mean(emissions)
@@ -247,25 +212,15 @@ class Lgssm:
             init_cov = [torch.tensor(i, device=self.device, dtype=self.dtype) for i in init_cov]
             init_cov = torch.stack(init_cov)
 
-        params = {'dynamics': {'weights': self.dynamics_weights,
-                               'input_weights': self.dynamics_input_weights,
-                               'offset': self.dynamics_offset,
-                               'cov': self.dynamics_cov,
-                               },
-                  'emissions': {'weights': self.emissions_weights,
-                                'input_weights': self.emissions_input_weights,
-                                'offset': self.emissions_offset,
-                                'cov': self.emissions_cov,
-                                }
-                  }
-
         log_likelihood_out = []
         time_out = []
 
         start = time.time()
         for ep in range(num_steps):
-            ll, init_stats, dynamics_stats, emission_stats = self.e_step(emissions, input, init_mean, init_cov)
-            self.m_step(init_stats, dynamics_stats, emission_stats)
+            # ll, init_stats, dynamics_stats, emission_stats = self.e_step(emissions, inputs, init_mean, init_cov)
+            # self.m_step(init_stats, dynamics_stats, emission_stats)
+
+            ll = self.em_step_pillow(emissions, inputs, init_mean, init_cov)
 
             log_likelihood_out.append(ll.detach().cpu().numpy())
             time_out.append(time.time() - start)
@@ -286,8 +241,8 @@ class Lgssm:
         num_data_sets, num_timesteps = emissions.shape[:2]
 
         ll = torch.zeros(num_data_sets, device=self.device, dtype=self.dtype)
-        pred_mean = init_mean
-        pred_cov = init_cov
+        filtered_mean = init_mean
+        filtered_cov = init_cov
 
         dynamics_inputs = (self.dynamics_input_weights @ inputs[:, :, :, None])[:, :, :, 0]
         emissions_inputs = (self.emissions_input_weights @ inputs[:, :, :, None])[:, :, :, 0]
@@ -303,6 +258,10 @@ class Lgssm:
             nan_loc = torch.isnan(y)
             y = torch.where(nan_loc, 0, y)
             R = torch.where(torch.diag_embed(nan_loc), nan_fill, torch.tile(self.emissions_cov, (num_data_sets, 1, 1)))
+
+            # Predict the next state
+            pred_mean = utils.batch_Ax(self.dynamics_weights, filtered_mean) + dynamics_inputs[:, t, :] + self.dynamics_offset
+            pred_cov = self.dynamics_weights @ filtered_cov @ self.dynamics_weights.T + self.dynamics_cov
 
             # Update the log likelihood
             ll_mu = utils.batch_Ax(self.emissions_weights, pred_mean) + emissions_inputs[:, t, :] + self.emissions_offset[None, :]
@@ -321,15 +280,11 @@ class Lgssm:
             filtered_covs_list.append(filtered_cov)
             filtered_means_list.append(filtered_mean)
 
-            # Predict the next state
-            pred_mean = utils.batch_Ax(self.dynamics_weights, filtered_mean) + dynamics_inputs[:, t, :] + self.dynamics_offset
-            pred_cov = self.dynamics_weights @ filtered_cov @ self.dynamics_weights.T + self.dynamics_cov
-
         filtered_means = torch.permute(torch.stack(filtered_means_list), (1, 0, 2))
         filtered_covs = torch.permute(torch.stack(filtered_covs_list), (1, 0, 2, 3))
 
-        # ll = torch.sum(ll) / emissions.numel()
-        ll = torch.sum(ll)
+        # ll = ll.sum() / emissions.numel()
+        ll = ll.sum()
 
         return ll, filtered_means, filtered_covs
 
@@ -358,30 +313,28 @@ class Lgssm:
             smoothed_cov_next = smoothed_covs[:, t + 1, :, :]
             smoothed_mean_next = smoothed_means[:, t + 1, :]
 
+            # Compute the smoothed mean and covariance
+            pred_mean = utils.batch_Ax(self.dynamics_weights, filtered_mean) + dynamics_inputs[:, t+1, :] + self.dynamics_offset
+            pred_cov = self.dynamics_weights @ filtered_cov @ self.dynamics_weights.T + self.dynamics_cov
+
             # This is like the Kalman gain but in reverse
             # See Eq 8.11 of Saarka's "Bayesian Filtering and Smoothing"
-            a = self.dynamics_cov + self.dynamics_weights @ filtered_cov @ self.dynamics_weights.T
-            b = self.dynamics_weights @ filtered_cov
-            G = utils.batch_trans(torch.linalg.solve(a, b))
-
-            # Compute the smoothed mean and covariance
-            pred_mean = utils.batch_Ax(self.dynamics_weights, filtered_mean) + dynamics_inputs[:, t, :] + self.dynamics_offset
-            pred_cov = self.dynamics_weights @ filtered_cov @ self.dynamics_weights.T + self.dynamics_cov
+            G = utils.batch_trans(torch.linalg.solve(pred_cov, self.dynamics_weights @ filtered_cov))
             smoothed_covs[:, t, :, :] = filtered_cov + G @ (smoothed_cov_next - pred_cov) @ utils.batch_trans(G)
             smoothed_means[:, t, :] = filtered_mean + utils.batch_Ax(G, smoothed_mean_next - pred_mean)
 
             # Compute the smoothed expectation of x_t x_{t+1}^T
-            smoothed_crosses[:, t, :, :] = G @ smoothed_cov_next + smoothed_means[:, t, :, None] * smoothed_mean_next[:,
-                                                                                                   None, :]
+            # TODO: ask why the second expression is not in jonathan's code
+            smoothed_crosses[:, t, :, :] = G @ smoothed_cov_next #+ smoothed_means[:, t, :, None] * smoothed_mean_next[:, None, :]
 
         return ll, filtered_means, filtered_covs, smoothed_means, smoothed_covs, smoothed_crosses
 
-    def e_step(self, emissions, input, init_mean, init_cov):
+    def e_step(self, emissions, inputs, init_mean, init_cov):
         num_data_sets, num_timesteps = emissions.shape[:2]
 
         # Run the smoother to get posterior expectations
         ll, filtered_means, filtered_covs, smoothed_means, smoothed_covs, smoothed_crosses = \
-            self.lgssm_smoother(emissions, input, init_mean, init_cov)
+            self.lgssm_smoother(emissions, inputs, init_mean, init_cov)
 
         # shorthand
         Ex = smoothed_means
@@ -393,15 +346,15 @@ class Lgssm:
         Expxn = smoothed_crosses
 
         # Append bias to the input
-        input = torch.cat((input, torch.ones((num_data_sets, num_timesteps, 1))), dim=2)
-        up = input[:, :-1, :]
-        u = input
+        inputs = torch.cat((inputs, torch.ones((num_data_sets, num_timesteps, 1))), dim=2)
+        up = inputs[:, :-1, :]
+        u = inputs
         y = emissions
         y = torch.where(torch.isnan(y), 0, y)
 
         # expected sufficient statistics for the initial tfd.Distribution
         Ex0 = smoothed_means[:, 0, :]
-        Ex0x0T = smoothed_covs[:, 0, :] + Ex0[:, :, None] @ Ex0[:, None, :]
+        Ex0x0T = smoothed_covs[:, 0, :, :] + Ex0[:, :, None] @ Ex0[:, None, :]
         init_stats = (Ex0, Ex0x0T, torch.tensor(1, dtype=self.dtype, device=self.device))
 
         # expected sufficient statistics for the dynamics tfd.Distribution
@@ -469,6 +422,128 @@ class Lgssm:
 
         return
 
+    def em_step_pillow(self, emissions, inputs, init_mean, init_cov):
+        # mm = runMstep_LDSgaussian(yy,uu,mm,zzmu,zzcov,zzcov_d1,optsEM)
+        #
+        # Run M-step updates for LDS-Gaussian model
+        #
+        # Inputs
+        # =======
+        #     yy [ny x T] - Bernoulli observations- design matrix
+        #     uu [ns x T] - external inputs
+        #     mm [struct] - model structure with fields
+        #              .A [nz x nz] - dynamics matrix
+        #              .B [nz x ns] - input matrix (optional)
+        #              .C [ny x nz] - latents-to-observations matrix
+        #              .D [ny x ns] - input-to-observations matrix (optional)
+        #              .Q [nz x nz] - latent noise covariance
+        #              .Q0 [ny x ny] - latent noise covariance for first latent sample
+        #     zzmu [nz x T]        - posterior mean of latents
+        #    zzcov [nz*T x nz*T]   -  diagonal blocks of posterior cov over latents
+        # zzcov_d1 [nz*T x nz*T-1] - above-diagonal blocks of posterior covariance
+        #   optsEM [struct] - optimization params (optional)
+        #       .maxiter - maximum # of iterations
+        #       .dlogptol - stopping tol for change in log-likelihood
+        #       .display - how often to report log-li
+        #       .update  - specify which params to update during M step
+        #
+        # Output
+        # =======
+        #  mmnew - new model struct with updated parameters
+
+        ll, filtered_means, filtered_covs, smoothed_means, smoothed_covs, smoothed_crosses = \
+            self.lgssm_smoother(emissions, inputs, init_mean, init_cov)
+
+        uu = inputs
+        yy = emissions
+        yy = torch.where(torch.isnan(yy), 0, yy)
+        zzmu = smoothed_means
+        zzcov = smoothed_covs
+        zzcov_d1 = smoothed_crosses
+
+        # Extract sizes
+        nz = self.dynamics_dim  # number of latents
+        nt = emissions.shape[1]  # number of time bins
+
+        # =============== Update dynamics parameters ==============
+        # Compute sufficient statistics for latents
+        Mz1 = zzcov[:, :-1, :, :].sum(1) + utils.batch_trans(zzmu[:, :-1, :]) @ zzmu[:, :-1, :]  # E[zz@zz'] for 1 to T-1
+        Mz2 = zzcov[:, 1:, :, :].sum(1) + utils.batch_trans(zzmu[:, 1:, :]) @ zzmu[:, 1:, :]  # E[zz@zz'] for 2 to T
+        Mz12 = zzcov_d1.sum(1) + utils.batch_trans(zzmu[:, :-1, :]) @ zzmu[:, 1:, :]  # E[zz_t@zz_{t+1}'] (above-diag)
+
+        # Compute sufficient statistics for inputs x latents
+        Mu = utils.batch_trans(uu[:, 1:, :]) @ uu[:, 1:, :]  # E[uu@uu'] for 2 to T
+        Muz2 = utils.batch_trans(uu[:, 1:, :]) @ zzmu[:, 1:, :]  # E[uu@zz'] for 2 to T
+        Muz21 = utils.batch_trans(uu[:, 1:, :]) @ zzmu[:, :-1, :]  # E[uu_t@zz_{t-1} for 2 to T
+
+        # sum the statistics across batches
+        Mz1 = Mz1.sum(0)
+        Mz2 = Mz2.sum(0)
+        Mz12 = Mz12.sum(0)
+
+        Mu = Mu.sum(0)
+        Muz2 = Muz2.sum(0)
+        Muz21 = Muz21.sum(0)
+
+        # update dynamics matrix A & input matrix B
+        if self.update['dynamics']['weights'] and self.update['dynamics']['input_weights']:
+            # do a joint update for A and B
+            Mlin = torch.cat((Mz12, Muz2), dim=0)  # from linear terms
+            Mquad = utils.block(((Mz1, Muz21.T), (Muz21, Mu)), dims=(1, 0))  # from quadratic terms
+            ABnew = torch.linalg.solve(Mquad.T, Mlin).T  # new A and B from regression
+            self.dynamics_weights = ABnew[:, :nz]  # new A
+            self.dynamics_input_weights = ABnew[:, nz:]  # new B
+
+        elif self.update['dynamics']['weights']:  # update dynamics matrix A only
+            Anew = torch.linalg.solve(Mz1.T, Mz12 - Muz21.T @ self.dynamics_input_weights.T).T  # new A
+            self.dynamics_weights = Anew
+
+        elif self.update['dynamics']['input_weights']:  # update input matrix B only
+            Bnew = torch.linalg.solve(Mu.T, Muz2 - Muz21 @ self.dynamics_weights.T).T  # new B
+            self.dynamics_input_weights = Bnew
+
+        # Update noise covariance Q
+        if self.update['dynamics']['cov']:
+            self.dynamics_cov = (Mz2 + self.dynamics_weights @ Mz1 @ self.dynamics_weights.T + self.dynamics_input_weights @ Mu @ self.dynamics_input_weights.T
+                                - self.dynamics_weights @ Mz12 - Mz12.T @ self.dynamics_weights.T
+                                - self.dynamics_input_weights @ Muz2 - Muz2.T @ self.dynamics_input_weights.T
+                                + self.dynamics_weights @ Muz21.T @ self.dynamics_input_weights.T + self.dynamics_input_weights @ Muz21 @ self.dynamics_weights.T) / (nt - 1)
+
+        # =============== Update observation parameters ==============
+        # Compute sufficient statistics
+        Mz = Mz1 + (zzcov[:, -1, :, :] + zzmu[:, -1, :, None] * zzmu[:, -1, None, :]).sum(0)  # re-use Mz1 if possible
+        Mu = Mu + (uu[:, 0, :, None] @ uu[:, 0, None, :]).sum(0)  # reuse Mu
+        Muz = Muz2 + (uu[:, 0, :, None] @ zzmu[:, 0, None, :]).sum(0)  # reuse Muz
+
+        Mzy = (utils.batch_trans(zzmu) @ yy).sum(0)  # E[zz@yy']
+        Muy = (utils.batch_trans(uu) @ yy).sum(0)  # E[uu@yy']
+
+        # update obs matrix C & input matrix D
+        if self.update['emissions']['weights'] and self.update['emissions']['input_weights']:
+            # do a joint update to C and D
+            Mlin = torch.cat((Mzy, Muy), dim=0)  # from linear terms
+            Mquad = utils.block([[Mz, Muz.T], [Muz, Mu]], dims=(1, 0))  # from quadratic terms
+            CDnew = torch.linalg.solve(Mquad.T, Mlin).T  # new A and B from regression
+            self.emissions_weights = CDnew[:, :nz]  # new A
+            self.emissions_input_weights = CDnew[:, nz:]  # new B
+        elif self.update['emissions']['weights']:  # update C only
+            Cnew = torch.linalg.solve(Mz.T, Mzy - Muz.T @ self.emissions_input_weights.T).T  # new A
+            self.emissions_weights = Cnew
+        elif self.update['emissions']['input_weights']:  # update D only
+            Dnew = torch.linalg.solve(Mu.T, Muy - Muz @ self.emissions_weights.T).T  # new B
+            self.emissions_input_weights = Dnew
+
+        # update obs noise covariance R
+        if self.update['emissions']['cov']:
+            My = (utils.batch_trans(yy) @ yy).sum(0)  # compute suff stat E[yy@yy']
+
+            self.emissions_cov = (My + self.emissions_weights @ Mz @ self.emissions_weights.T + self.emissions_input_weights @ Mu @ self.emissions_input_weights.T
+                                 - self.emissions_weights @ Mzy - Mzy.T @ self.emissions_weights.T
+                                 - self.emissions_input_weights @ Muy - Muy.T @ self.emissions_input_weights.T
+                                 + self.emissions_weights @ Muz.T @ self.emissions_input_weights.T + self.emissions_input_weights @ Muz @ self.emissions_weights.T) / nt
+
+        return ll
+
     def fit_gd(self, emissions_list, input_list, learning_rate=1e-2, num_steps=50):
         """ This function will fit the model using gradient descent on the entire data set
         """
@@ -509,22 +584,6 @@ class Lgssm:
         self.input_weights.requires_grad = False
         self.dynamics_cov.requires_grad = False
         self.emissions_cov.requires_grad = False
-
-    @staticmethod
-    def _get_default_update(set_value=True):
-        update = {'dynamics': {'weights': set_value,
-                               'input_weights': set_value,
-                               'offset': set_value,
-                               'cov': set_value,
-                               },
-                  'emissions': {'weights': set_value,
-                                'input_weights': set_value,
-                                'offset': set_value,
-                                'cov': set_value,
-                                },
-                  }
-
-        return update
 
     @staticmethod
     def estimate_init_mean(emissions):
