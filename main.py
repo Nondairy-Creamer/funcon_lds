@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 import preprocessing as pp
-from ssm_classes import LgssmSimple
+from ssm_classes import Lgssm
 import plotting
 
 from torch.profiler import profile, record_function, ProfilerActivity, schedule, tensorboard_trace_handler
@@ -21,48 +21,67 @@ from torch.profiler import profile, record_function, ProfilerActivity, schedule,
 # w_t, v_t are gaussian with 0 mean, and diagonal covariance
 
 # get run parameters, yaml file contains descriptions of the parameters
-params = pp.get_params(param_name='params')
+run_params = pp.get_params(param_name='params')
 
-device = params['device']
-dtype = getattr(torch, params['dtype'])
+device = run_params['device']
+dtype = getattr(torch, run_params['dtype'])
 
 # load all the recordings
 emissions_unaligned, cell_ids_unaligned, q, q_labels, stim_cell_ids, inputs_unaligned = \
-    pp.load_data(params['data_path'])
+    pp.load_data(run_params['data_path'])
 
 # remove recordings that are noisy
-data_sets_to_remove = np.sort(params['bad_data_sets'])[::-1]
+data_sets_to_remove = np.sort(run_params['bad_data_sets'])[::-1]
 for bd in data_sets_to_remove:
     emissions_unaligned.pop(bd)
     cell_ids_unaligned.pop(bd)
     inputs_unaligned.pop(bd)
     stim_cell_ids.pop(bd)
 
+emissions_unaligned = emissions_unaligned[:2]
+cell_ids_unaligned = cell_ids_unaligned[:2]
+inputs_unaligned = inputs_unaligned[:2]
+stim_cell_ids = stim_cell_ids[:2]
+
 # choose a subset of the data sets to maximize the number of recordings * the number of neurons included
 cell_ids, emissions, best_runs, inputs = \
     pp.get_combined_dataset(emissions_unaligned, cell_ids_unaligned, stim_cell_ids, inputs_unaligned,
-                            frac_neuron_coverage=params['frac_neuron_coverage'],
-                            minimum_freq=params['minimum_frac_measured'])
+                            frac_neuron_coverage=run_params['frac_neuron_coverage'],
+                            minimum_freq=run_params['minimum_frac_measured'])
 
 num_data = len(emissions)
-num_epochs = int(np.ceil(params['num_grad_steps'] * params['batch_size'] / num_data))
+num_epochs = int(np.ceil(run_params['num_grad_steps'] * run_params['batch_size'] / num_data))
+num_neurons = emissions[0].shape[1]
 
 # remove the beginning of the recording which contains artifacts and mean subtract
 for ri in range(num_data):
-    emissions[ri] = emissions[ri][params['index_start']:, :]
+    emissions[ri] = emissions[ri][run_params['index_start']:, :]
     emissions[ri] = emissions[ri] - np.mean(emissions[ri], axis=0, keepdims=True)
-    inputs[ri] = inputs[ri][params['index_start']:, :]
+    inputs[ri] = inputs[ri][run_params['index_start']:, :]
 
-# initialize and train model
-latent_dim = len(cell_ids)
-model_trained = LgssmSimple(latent_dim, dtype=dtype, device=device,
-                            verbose=params['verbose'])
-model_trained.fit_batch_sgd(emissions, inputs, learning_rate=params['learning_rate'],
-                            num_steps=params['num_grad_steps'], batch_size=params['batch_size'],
-                            num_splits=params['num_splits'])
+# initialize a linear gaussian ssm model and train
+param_props = {'update': {'dynamics_offset': False,
+                          'emissions_weights': False,
+                          'emissions_offset': False,
+                          },
+               'shape': {'dynamics_input_weights': 'diag',
+                         'dynamics_cov': 'diag',
+                         'emissions_cov': 'diag'}}
 
-if params['save_model']:
-    model_trained.save(path=params['model_save_folder'] + '/model_trained.pkl')
+model_trained = Lgssm(num_neurons, num_neurons, num_neurons,
+                      dtype=dtype, device=device, verbose=run_params['verbose'], param_props=param_props)
 
-if params['plot_figures']:
+model_trained.emissions_weights = torch.eye(model_trained.dynamics_dim,
+                                            device=model_trained.device,
+                                            dtype=model_trained.dtype)
+
+model_trained.fit_gd(emissions, inputs,
+                     learning_rate=run_params['learning_rate'],
+                     num_steps=run_params['num_grad_steps'])
+
+if run_params['save_model']:
+    model_trained.save(path=run_params['save_folder'] + '/model_trained.pkl')
+
+if run_params['plot_figures']:
     plotting.trained_on_real(model_trained)
+

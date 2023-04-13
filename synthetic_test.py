@@ -11,7 +11,7 @@ device = run_params['device']
 dtype = getattr(torch, run_params['dtype'])
 rng = np.random.default_rng(run_params['random_seed'])
 
-# initialize an linear gaussian ssm model
+# initialize a linear gaussian ssm model
 param_props = {'update': {'dynamics_offset': False,
                           'emissions_weights': False,
                           'emissions_offset': False,
@@ -46,7 +46,7 @@ init_cov_true = data_dict['init_cov']
 
 # make a new model to fit to the random model
 model_trained = Lgssm(run_params['dynamics_dim'], run_params['emissions_dim'], run_params['input_dim'],
-                      dtype=dtype, device=device, verbose=run_params['verbose'], param_props =param_props)
+                      dtype=dtype, device=device, verbose=run_params['verbose'], param_props=param_props)
 
 model_trained.emissions_weights = torch.eye(model_true.dynamics_dim,
                                             device=model_trained.device,

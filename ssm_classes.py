@@ -755,6 +755,8 @@ class Lgssm:
     def estimate_init_mean(emissions):
         init_mean = torch.nanmean(emissions, dim=1)
 
+        init_mean[torch.isnan(init_mean)] = torch.tile(torch.nanmean(init_mean, dim=0), (emissions.shape[0], 1))[torch.isnan(init_mean)]
+
         return init_mean
 
     @staticmethod
