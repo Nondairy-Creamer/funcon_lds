@@ -16,16 +16,14 @@ param_props = {'update': {'dynamics_offset': False,
                           'emissions_weights': False,
                           'emissions_offset': False,
                           },
-               'shape': {'dynamics_input_weights': 'diag',
-                         'dynamics_cov': 'diag',
-                         'emissions_cov': 'diag'}}
+               'shape': {'dynamics_input_weights': 'full',
+                         'dynamics_cov': 'full',
+                         'emissions_cov': 'full'}}
 model_true = Lgssm(run_params['dynamics_dim'], run_params['emissions_dim'], run_params['input_dim'],
-                               dtype=dtype, device=device, param_props=param_props)
+                   dtype=dtype, device=device, param_props=param_props)
 # randomize the parameters (defaults are nonrandom)
 model_true.randomize_weights(rng=rng)
-model_true.emissions_weights = torch.eye(model_true.dynamics_dim,
-                                         device=device,
-                                         dtype=dtype)
+model_true.emissions_weights = torch.eye(model_true.dynamics_dim, device=device, dtype=dtype)
 
 # sample from the randomized model
 data_dict = \
@@ -37,6 +35,7 @@ data_dict = \
 
 # data_dict['emissions'][0][:, 0] = np.nan
 # data_dict['emissions'][1][:, -1] = np.nan
+# data_dict['inputs'][0][:, -1] = 0
 
 emissions = data_dict['emissions']
 inputs = data_dict['inputs']
