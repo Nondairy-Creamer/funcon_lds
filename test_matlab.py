@@ -20,9 +20,9 @@ import pickle
 # With X_1 ~ N(0,Q0)    initial condition:
 
 # Set dimensions
-nz = 3  # dimensionality of latent z
-ny = 3  # dimensionality of observation y
-nu = 3  # dimensionality of external inputs
+nz = 5  # dimensionality of latent z
+ny = 5  # dimensionality of observation y
+nu = 5  # dimensionality of external inputs
 nT = 1000 * 1  # number of time steps
 rng = np.random.default_rng(2)
 
@@ -124,19 +124,19 @@ sio.savemat(save_folder, save_dict)
 
 
 ###### load data from python
-# load_file = open('/home/mcreamer/Documents/python/funcon_lds/example_data/synth_data.pkl', 'rb')
-# data_in = pickle.load(load_file)
-#
-# yy = data_in['emissions'][0].T
-# uu = data_in['inputs'][0].T
-# mm0 = {'A': data_in['params_init']['dynamics']['weights'],
-#        'B': data_in['params_init']['dynamics']['input_weights'],
-#        'C': data_in['params_init']['emissions']['weights'],
-#        'D': data_in['params_init']['emissions']['input_weights'],
-#        'Q': data_in['params_init']['dynamics']['cov'],
-#        'R': data_in['params_init']['emissions']['cov'],
-#        'Q0': data_in['params_init']['init_cov'][0],
-#        }
+load_file = open('/home/mcreamer/Documents/python/funcon_lds/example_data/data.pkl', 'rb')
+data_in = pickle.load(load_file)
+
+yy = data_in['emissions'][1].T
+uu = data_in['inputs'][1].T
+mm0 = {'A': data_in['params_init']['dynamics']['weights'],
+       'B': data_in['params_init']['dynamics']['input_weights'],
+       'C': data_in['params_init']['emissions']['weights'],
+       'D': data_in['params_init']['emissions']['input_weights'],
+       'Q': data_in['params_init']['dynamics']['cov'],
+       'R': data_in['params_init']['emissions']['cov'],
+       'Q0': data_in['params_init']['init_cov'][1],
+       }
 
 import time
 start = time.time()

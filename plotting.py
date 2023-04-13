@@ -103,22 +103,22 @@ def trained_on_synthetic_diag(model_synth_trained, model_synth_true, ll_true_par
     compare_2d(model_synth_true_np, model_synth_trained_np, model_synth_init_np, title='dynamics weights')
 
     # Plot the input weights
-    model_synth_true_np = np.exp(model_synth_true.inputs_weights_log.detach().cpu().numpy())
-    model_synth_trained_np = np.exp(model_synth_trained.inputs_weights_log.detach().cpu().numpy())
-    model_synth_init_np = np.exp(model_synth_trained.inputs_weights_log_init)
+    model_synth_true_np = np.exp(model_synth_true.dynamics_input_weights.detach().cpu().numpy())
+    model_synth_trained_np = np.exp(model_synth_trained.dynamics_input_weights.detach().cpu().numpy())
+    model_synth_init_np = np.exp(model_synth_trained.dynamics_input_weights_init)
     compare_1d(model_synth_true_np, model_synth_trained_np, model_synth_init_np, title='input weights')
 
     # plot the covariances
-    model_synth_true_np = np.exp(model_synth_true.dynamics_cov_log.detach().cpu().numpy())
-    model_synth_trained_np = np.exp(model_synth_trained.dynamics_cov_log.detach().cpu().numpy())
-    model_synth_init_np = np.exp(model_synth_trained.dynamics_cov_log_init)
+    model_synth_true_np = np.exp(model_synth_true.dynamics_cov.detach().cpu().numpy())
+    model_synth_trained_np = np.exp(model_synth_trained.dynamics_cov.detach().cpu().numpy())
+    model_synth_init_np = np.exp(model_synth_trained.dynamics_cov_init)
     compare_1d(model_synth_true_np, model_synth_trained_np, model_synth_init_np, title='dynamics covariance')
 
-    model_synth_true_np = np.exp(model_synth_true.emissions_cov_log.detach().cpu().numpy())
-    model_synth_trained_np = np.exp(model_synth_trained.emissions_cov_log.detach().cpu().numpy())
-    model_synth_init_np = np.exp(model_synth_trained.emissions_cov_log_init)
+    model_synth_true_np = np.exp(model_synth_true.emissions_cov.detach().cpu().numpy())
+    model_synth_trained_np = np.exp(model_synth_trained.emissions_cov.detach().cpu().numpy())
+    model_synth_init_np = np.exp(model_synth_trained.emissions_cov_init)
     compare_1d(model_synth_true_np, model_synth_trained_np, model_synth_init_np, title='emissions covariance')
-
+    a=1
 
 def trained_on_synthetic(model_synth_trained, model_synth_true, ll_true_params=None):
     # Plots
