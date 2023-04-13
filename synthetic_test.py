@@ -14,9 +14,10 @@ rng = np.random.default_rng(run_params['random_seed'])
 # initialize a linear gaussian ssm model
 param_props = {'update': {'dynamics_offset': False,
                           'emissions_weights': False,
+                          'emissions_input_weights': False,
                           'emissions_offset': False,
                           },
-               'shape': {'dynamics_input_weights': 'full',
+               'shape': {'dynamics_input_weights': 'diag',
                          'dynamics_cov': 'full',
                          'emissions_cov': 'full'}}
 model_true = Lgssm(run_params['dynamics_dim'], run_params['emissions_dim'], run_params['input_dim'],
@@ -24,6 +25,7 @@ model_true = Lgssm(run_params['dynamics_dim'], run_params['emissions_dim'], run_
 # randomize the parameters (defaults are nonrandom)
 model_true.randomize_weights(rng=rng)
 model_true.emissions_weights = torch.eye(model_true.dynamics_dim, device=device, dtype=dtype)
+model_true.emissions_input_weights = torch.zeros((model_true.dynamics_dim, model_true.emissions_dim), device=device, dtype=dtype)
 
 # sample from the randomized model
 data_dict = \
@@ -47,9 +49,8 @@ init_cov_true = data_dict['init_cov']
 model_trained = Lgssm(run_params['dynamics_dim'], run_params['emissions_dim'], run_params['input_dim'],
                       dtype=dtype, device=device, verbose=run_params['verbose'], param_props=param_props)
 
-model_trained.emissions_weights = torch.eye(model_true.dynamics_dim,
-                                            device=model_trained.device,
-                                            dtype=model_trained.dtype)
+model_trained.emissions_weights = torch.eye(model_true.dynamics_dim, device=model_trained.device, dtype=model_trained.dtype)
+model_trained.emissions_input_weights = torch.zeros((model_true.dynamics_dim, model_true.emissions_dim), device=device, dtype=dtype)
 
 ############# load in matlab data
 # import scipy.io as sio
