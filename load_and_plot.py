@@ -3,6 +3,7 @@ import plotting
 import pickle
 import preprocessing as pp
 
+model_true = None
 has_ground_truth = True
 if len(sys.argv) == 2:
     has_ground_truth = sys.argv[1]
@@ -21,18 +22,10 @@ if has_ground_truth:
     dtype = model_trained.dtype
     device = model_trained.device
 
-    data_dict_path = run_params['synth_data_save_folder'] + '/data.pkl'
-    data_dict_file = open(data_dict_path, 'rb')
-    data_dict = pickle.load(data_dict_file)
-    data_dict_file.close()
-
     model_true_path = run_params['model_save_folder'] + '/model_true.pkl'
     model_true_file = open(model_true_path, 'rb')
     model_true = pickle.load(model_true_file)
     model_true_file.close()
-
-else:
-    model_true = None
 
 plotting.plot_model_params(model_trained, model_synth_true=model_true)
 

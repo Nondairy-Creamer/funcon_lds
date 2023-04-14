@@ -9,6 +9,18 @@ num_time: 1000
 num_data_sets: 10
 nan_freq: 0.0
 
+param_props:
+  update:
+    dynamics_offset: False
+    emissions_weights: False
+    emissions_input_weights: False
+    emissions_offset: False
+
+  shape:
+    dynamics_input_weights: diag
+    dynamics_cov: full
+    emissions_cov: full
+
 # gradient descent parameters
 # choices are: gradient_descent and batch_sgd
 fit_type: em
