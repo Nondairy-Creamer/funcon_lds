@@ -80,8 +80,8 @@ model_trained.fit_gd(emissions, inputs,
                      num_steps=run_params['num_grad_steps'])
 
 if run_params['save_model']:
-    model_trained.save(path=run_params['save_folder'] + '/model_trained.pkl')
+    model_trained.save(path=run_params['model_save_folder'] + '/model_trained.pkl')
 
 if run_params['plot_figures']:
-    plotting.trained_on_real(model_trained)
+    plotting.plot_model_params(model_trained)
 
