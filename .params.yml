@@ -24,16 +24,13 @@ dtype: float64
 # choices are: gradient_descent and batch_sgd
 fit_type: em
 num_grad_steps: 10
-batch_size: 10
-# split the data sets to reduce memory consumption
-num_splits: 1
-learning_rate: 0.01
+learning_rate: 0.001
 verbose: True
 random_seed: null
 
 plot_figures: False
 save_model: True
-save_folder: trained_models
+model_save_folder: trained_models
 
 
 

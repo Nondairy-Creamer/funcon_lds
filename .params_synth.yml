@@ -2,18 +2,17 @@ device: cpu
 dtype: float64
 
 # model parameters
-latent_dim: 4
+dynamics_dim: 5
+emissions_dim: 5
+input_dim: 5
 num_time: 1000
-num_data_sets: 1
-nan_freq: 0.1
+num_data_sets: 10
+nan_freq: 0.0
 
 # gradient descent parameters
 # choices are: gradient_descent and batch_sgd
 fit_type: em
 num_grad_steps: 10
-batch_size: 2
-# split the data sets to reduce memory consumption
-num_splits: 1
 learning_rate: 0.1
 verbose: True
 random_seed: 0

@@ -151,16 +151,25 @@ class Lgssm:
         return emissions, input
 
     def get_params(self):
-        params_out = {'dynamics': {'weights': self.dynamics_weights.detach().cpu().numpy(),
-                                   'input_weights': self.dynamics_input_weights.detach().cpu().numpy(),
-                                   'offset': self.dynamics_offset.detach().cpu().numpy(),
-                                   'cov': self.dynamics_cov.detach().cpu().numpy(),
-                                   },
-                      'emissions': {'weights': self.emissions_weights.detach().cpu().numpy(),
-                                    'input_weights': self.emissions_input_weights.detach().cpu().numpy(),
-                                    'offset': self.emissions_offset.detach().cpu().numpy(),
-                                    'cov': self.emissions_cov.detach().cpu().numpy(),
-                                    },
+        params_out = {'init': {'dynamics_weights': self.dynamics_weights_init,
+                               'dynamics_input_weights': self.dynamics_input_weights_init,
+                               'dynamics_offset': self.dynamics_offset_init,
+                               'dynamics_cov': self.dynamics_cov_init,
+                               'emissions_weights': self.emissions_weights_init,
+                               'emissions_input_weights': self.emissions_input_weights_init,
+                               'emissions_offset': self.emissions_offset_init,
+                               'emissions_cov': self.emissions_cov_init,
+                               },
+
+                      'trained': {'dynamics_weights': self.dynamics_weights.detach().cpu().numpy(),
+                                  'dynamics_input_weights': self.dynamics_input_weights.detach().cpu().numpy(),
+                                  'dynamics_offset': self.dynamics_offset.detach().cpu().numpy(),
+                                  'dynamics_cov': self.dynamics_cov.detach().cpu().numpy(),
+                                  'emissions_weights': self.emissions_weights.detach().cpu().numpy(),
+                                  'emissions_input_weights': self.emissions_input_weights.detach().cpu().numpy(),
+                                  'emissions_offset': self.emissions_offset.detach().cpu().numpy(),
+                                  'emissions_cov': self.emissions_cov.detach().cpu().numpy(),
+                                  },
                       }
 
         return params_out
@@ -346,10 +355,10 @@ class Lgssm:
             ll_mu = utils.batch_Ax(self.emissions_weights, pred_mean) + emissions_inputs[:, t, :] + self.emissions_offset[None, :]
             ll_cov = self.emissions_weights @ pred_cov @ self.emissions_weights.T + R
 
-            ll = torch.distributions.multivariate_normal.MultivariateNormal(ll_mu, ll_cov).log_prob(y)
-            # mean_diff = ll_mu - y
-            # ll += -1/2 * (emissions.shape[2] * np.log(2*np.pi) + torch.linalg.slogdet(ll_cov)[1] +
-            #               utils.batch_Ax(mean_diff[:, None, :], torch.linalg.solve(ll_cov, mean_diff))[:, 0])
+            # ll += torch.distributions.multivariate_normal.MultivariateNormal(ll_mu, ll_cov).log_prob(y)
+            mean_diff = ll_mu - y
+            ll += -1/2 * (emissions.shape[2] * np.log(2*np.pi) + torch.linalg.slogdet(ll_cov)[1] +
+                          utils.batch_Ax(mean_diff[:, None, :], torch.linalg.solve(ll_cov, mean_diff))[:, 0])
 
             # Condition on this emission
             # Compute the Kalman gain

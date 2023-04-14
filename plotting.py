@@ -1,221 +1,112 @@
 from matplotlib import pyplot as plt
 import numpy as np
-import torch
 import matplotlib as mpl
 
 
-def trained_on_real(log_likelihood, trained_params, init_params):
+def plot_model_params(model_synth_trained, model_synth_true=None, ll_true_params=None):
+    # Plots
     # Plot the log likelihood
     plt.figure()
-    plt.plot(log_likelihood)
+    plt.plot(model_synth_trained.log_likelihood)
+
+    if ll_true_params is not None:
+        plt.axhline(ll_true_params, color='k', linestyle=':', label="true")
+        plt.legend({'log likelihood for model', 'log likelihood for true parameters'})
+
     plt.xlabel('iterations')
     plt.ylabel('log likelihood')
     plt.tight_layout()
 
-    # Plot the dynamics weights
+    # plot the time to train the model
     plt.figure()
-    colorbar_shrink = 0.4
-    plt.subplot(1, 2, 1)
-    plt.imshow(trained_params.dynamics.weights, interpolation='Nearest')
-    plt.title('dynamics weights')
-    plt.xlabel('input neurons')
-    plt.ylabel('output neurons')
-    plt.colorbar(shrink=colorbar_shrink)
-
-    plt.subplot(1, 2, 2)
-    plt.imshow(trained_params.dynamics.weights - torch.eye(trained_params.dynamics.weights.shape[0]), interpolation='Nearest')
-    plt.title('dynamics weights - I')
-    plt.xlabel('input neurons')
-    plt.ylabel('output neurons')
-    plt.colorbar(shrink=colorbar_shrink)
+    plt.plot(model_synth_trained.train_time)
+    plt.xlabel('iterations')
+    plt.ylabel('total_time')
     plt.tight_layout()
 
+    if model_synth_true is not None:
+        params_true = model_synth_true.get_params()
+    params_trained = model_synth_trained.get_params()
+
+    for k in params_trained['trained'].keys():
+        if model_synth_trained.param_props['update'][k]:
+            param_init = params_trained['init'][k]
+            param_trained = params_trained['trained'][k]
+
+            if model_synth_true is not None:
+                param_true = params_true['trained'][k]
+            else:
+                param_true = None
+
+            plot_params(param_init, param_trained, param_true, title=k)
+
+
+def plot_params(true_param, fit_param, init_param, title=''):
+    if true_param.ndim == 1:
+        compare_1d(true_param, fit_param, init_param, title=title)
+    else:
+        compare_2d(true_param, fit_param, init_param, title=title)
+
+
+def compare_1d(init_param, fit_param, true_param, title=''):
     # Plot the input weights
     plt.figure()
-    plt.plot(init_params.dynamics.input_weights)
-    plt.plot(trained_params.dynamics.input_weights)
-    plt.legend(['init', 'final'])
+    plt.plot(init_param)
+    plt.plot(fit_param)
+
+    if true_param is not None:
+        plt.plot(true_param)
+        plt.legend(['init', 'final', 'true'])
+    else:
+        plt.legend(['init', 'final'])
+
     plt.xlabel('neurons')
-    plt.ylabel('input weights')
-
-    # plot the dynamics covariance
-    plt.figure()
-    plt.subplot(1, 2, 1)
-    plt.imshow(init_params.dynamics.cov, interpolation='Nearest')
-    plt.title('init dynamics cov')
-    plt.xlabel('input neurons')
-    plt.ylabel('output neurons')
-    plt.colorbar(shrink=colorbar_shrink)
-
-    plt.subplot(1, 2, 2)
-    plt.imshow(trained_params.dynamics.cov, interpolation='Nearest')
-    plt.title('trained dynamics cov')
-    plt.xlabel('input neurons')
-    plt.ylabel('output neurons')
-    plt.colorbar(shrink=colorbar_shrink)
-    plt.tight_layout()
-
-    # plot the emissions covariance
-    plt.figure()
-    plt.subplot(1, 2, 1)
-    plt.imshow(init_params.emissions.cov, interpolation='Nearest')
-    plt.title('init emissions cov')
-    plt.xlabel('input neurons')
-    plt.ylabel('output neurons')
-    plt.colorbar(shrink=colorbar_shrink)
-
-    plt.subplot(1, 2, 2)
-    plt.imshow(trained_params.emissions.cov, interpolation='Nearest')
-    plt.title('trained emissions cov')
-    plt.xlabel('input neurons')
-    plt.ylabel('output neurons')
-    plt.colorbar(shrink=colorbar_shrink)
-    plt.tight_layout()
-
+    plt.ylabel('weights')
+    plt.title(title)
     plt.show()
 
 
-def trained_on_synthetic_diag(model_synth_trained, model_synth_true, ll_true_params=None):
-    # Plots
-    # Plot the log likelihood
-    plt.figure()
-    plt.plot(model_synth_trained.log_likelihood)
-
-    if ll_true_params is not None:
-        plt.axhline(ll_true_params, color='k', linestyle=':', label="true")
-        plt.legend({'log likelihood for model', 'log likelihood for true parameters'})
-
-    plt.xlabel('iterations')
-    plt.ylabel('log likelihood')
-    plt.tight_layout()
-
-    # plot the time to train the model
-    plt.figure()
-    plt.plot(model_synth_trained.train_time)
-    plt.xlabel('iterations')
-    plt.ylabel('total_time')
-    plt.tight_layout()
-
-    # Plot the dynamics weights
-    model_synth_true_np = model_synth_true.dynamics_weights.detach().cpu().numpy()
-    model_synth_trained_np = model_synth_trained.dynamics_weights.detach().cpu().numpy()
-    model_synth_init_np = model_synth_trained.dynamics_weights_init
-    compare_2d(model_synth_true_np, model_synth_trained_np, model_synth_init_np, title='dynamics weights')
-
-    # Plot the input weights
-    model_synth_true_np = np.exp(model_synth_true.dynamics_input_weights.detach().cpu().numpy())
-    model_synth_trained_np = np.exp(model_synth_trained.dynamics_input_weights.detach().cpu().numpy())
-    model_synth_init_np = np.exp(model_synth_trained.dynamics_input_weights_init)
-    compare_1d(model_synth_true_np, model_synth_trained_np, model_synth_init_np, title='input weights')
-
-    # plot the covariances
-    model_synth_true_np = np.exp(model_synth_true.dynamics_cov.detach().cpu().numpy())
-    model_synth_trained_np = np.exp(model_synth_trained.dynamics_cov.detach().cpu().numpy())
-    model_synth_init_np = np.exp(model_synth_trained.dynamics_cov_init)
-    compare_1d(model_synth_true_np, model_synth_trained_np, model_synth_init_np, title='dynamics covariance')
-
-    model_synth_true_np = np.exp(model_synth_true.emissions_cov.detach().cpu().numpy())
-    model_synth_trained_np = np.exp(model_synth_trained.emissions_cov.detach().cpu().numpy())
-    model_synth_init_np = np.exp(model_synth_trained.emissions_cov_init)
-    compare_1d(model_synth_true_np, model_synth_trained_np, model_synth_init_np, title='emissions covariance')
-    a=1
-
-def trained_on_synthetic(model_synth_trained, model_synth_true, ll_true_params=None):
-    # Plots
-    # Plot the log likelihood
-    plt.figure()
-    plt.plot(model_synth_trained.log_likelihood)
-
-    if ll_true_params is not None:
-        plt.axhline(ll_true_params, color='k', linestyle=':', label="true")
-        plt.legend({'log likelihood for model', 'log likelihood for true parameters'})
-
-    plt.xlabel('iterations')
-    plt.ylabel('log likelihood')
-    plt.tight_layout()
-
-    # plot the time to train the model
-    plt.figure()
-    plt.plot(model_synth_trained.train_time)
-    plt.xlabel('iterations')
-    plt.ylabel('total_time')
-    plt.tight_layout()
-
-    # Plot the dynamics weights
-    model_synth_true_np = model_synth_true.dynamics_weights.detach().cpu().numpy()
-    model_synth_trained_np = model_synth_trained.dynamics_weights.detach().cpu().numpy()
-    model_synth_init_np = model_synth_trained.dynamics_weights_init
-    compare_2d(model_synth_true_np, model_synth_trained_np, model_synth_init_np, title='dynamics weights')
-
-    # Plot the input weights
-    # model_synth_true_np = model_synth_true.dynamics_input_weights.detach().cpu().numpy()
-    # model_synth_trained_np = model_synth_trained.dynamics_input_weights.detach().cpu().numpy()
-    # model_synth_init_np = model_synth_trained.dynamics_input_weights_init
-    # compare_2d(model_synth_true_np, model_synth_trained_np, model_synth_init_np, title='input weights')
-
-    # Plot the input weights
-    model_synth_true_np = np.exp(model_synth_true.dynamics_input_weights.detach().cpu().numpy())
-    model_synth_trained_np = np.exp(model_synth_trained.dynamics_input_weights.detach().cpu().numpy())
-    model_synth_init_np = np.exp(model_synth_trained.dynamics_input_weights_init)
-    compare_1d(model_synth_true_np, model_synth_trained_np, model_synth_init_np, title='input weights')
-
-    # plot the covariances
-    model_synth_true_np = model_synth_true.dynamics_cov.detach().cpu().numpy()
-    model_synth_trained_np = model_synth_trained.dynamics_cov.detach().cpu().numpy()
-    model_synth_init_np = model_synth_trained.dynamics_cov_init
-    compare_2d(model_synth_true_np, model_synth_trained_np, model_synth_init_np, title='dynamics covariance')
-
-    model_synth_true_np = model_synth_true.emissions_cov.detach().cpu().numpy()
-    model_synth_trained_np = model_synth_trained.emissions_cov.detach().cpu().numpy()
-    model_synth_init_np = model_synth_trained.emissions_cov_init
-    compare_2d(model_synth_true_np, model_synth_trained_np, model_synth_init_np, title='emissions covariance')
-
-
-def compare_2d(true, fit, init, title=''):
-    abs_max = np.max([np.max(np.abs(i)) for i in [init, true, fit, true - fit]])
+def compare_2d(init_param, fit_param, true_param, title=''):
     colormap = mpl.colormaps['coolwarm']
 
+    if true_param is not None:
+        n_row = 2
+        abs_max = np.max([np.max(np.abs(i)) for i in [init_param, fit_param, true_param, true_param - fit_param]])
+    else:
+        n_row = 1
+        abs_max = np.max([np.max(np.abs(i)) for i in [init_param, fit_param]])
+
     plt.figure()
-    plt.subplot(2, 2, 1)
-    plt.imshow(init, interpolation='Nearest', cmap=colormap)
+    plt.subplot(n_row, 2, 1)
+    plt.imshow(init_param, interpolation='Nearest', cmap=colormap)
     plt.title('init weights, ' + title)
     plt.xlabel('input neurons')
     plt.ylabel('output neurons')
     plt.clim((-abs_max, abs_max))
     plt.colorbar()
 
-    plt.subplot(2, 2, 2)
-    plt.imshow(fit, interpolation='Nearest', cmap=colormap)
+    plt.subplot(n_row, 2, 2)
+    plt.imshow(fit_param, interpolation='Nearest', cmap=colormap)
     plt.title('fit weights')
     plt.xlabel('input neurons')
     plt.ylabel('output neurons')
     plt.clim((-abs_max, abs_max))
     plt.colorbar()
 
-    plt.subplot(2, 2, 3)
-    plt.imshow(true - fit, interpolation='Nearest', cmap=colormap)
-    plt.title('true - fit')
-    plt.clim((-abs_max, abs_max))
-    plt.colorbar()
+    if true_param is not None:
+        plt.subplot(n_row, 2, 3)
+        plt.imshow(true_param - fit_param, interpolation='Nearest', cmap=colormap)
+        plt.title('true - fit')
+        plt.clim((-abs_max, abs_max))
+        plt.colorbar()
 
-    plt.subplot(2, 2, 4)
-    plt.imshow(true, interpolation='Nearest', cmap=colormap)
-    plt.title('true weights')
-    plt.clim((-abs_max, abs_max))
-    plt.colorbar()
+        plt.subplot(n_row, 2, 4)
+        plt.imshow(true_param, interpolation='Nearest', cmap=colormap)
+        plt.title('true weights')
+        plt.clim((-abs_max, abs_max))
+        plt.colorbar()
+
     plt.tight_layout()
     plt.show()
 
-
-def compare_1d(true, fit, init, title=''):
-    # Plot the input weights
-    plt.figure()
-    plt.plot(init)
-    plt.plot(fit)
-    plt.plot(true)
-    plt.legend(['init', 'final', 'true'])
-    plt.xlabel('neurons')
-    plt.ylabel('weights')
-    plt.title(title)
-    plt.show()
 

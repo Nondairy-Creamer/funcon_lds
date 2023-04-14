@@ -52,34 +52,6 @@ model_trained = Lgssm(run_params['dynamics_dim'], run_params['emissions_dim'], r
 model_trained.emissions_weights = torch.eye(model_true.dynamics_dim, device=model_trained.device, dtype=model_trained.dtype)
 model_trained.emissions_input_weights = torch.zeros((model_true.dynamics_dim, model_true.emissions_dim), device=device, dtype=dtype)
 
-############# load in matlab data
-# import scipy.io as sio
-# matlab_data = sio.loadmat('/home/mcreamer/Documents/data_sets/matlab_kalman_data.mat')
-#
-# emissions = [matlab_data['yy'].T]
-# inputs = [matlab_data['uu'].T]
-#
-# model_trained.dynamics_weights = torch.tensor(matlab_data['mm0'][0, 0]['A'], device=device, dtype=dtype)
-# model_trained.dynamics_input_weights = torch.tensor(matlab_data['mm0'][0, 0]['B'], device=device, dtype=dtype)
-# model_trained.dynamics_cov = torch.tensor(matlab_data['mm0'][0, 0]['Q'], device=device, dtype=dtype)
-#
-#
-# model_trained.emissions_input_weights = torch.tensor(matlab_data['mm0'][0, 0]['D'], device=device, dtype=dtype)
-# model_trained.emissions_cov = torch.tensor(matlab_data['mm0'][0, 0]['R'], device=device, dtype=dtype)
-#
-# model_true.dynamics_weights = torch.tensor(matlab_data['mmtrue'][0, 0]['A'], device=device, dtype=dtype)
-# model_true.dynamics_input_weights = torch.tensor(matlab_data['mmtrue'][0, 0]['B'], device=device, dtype=dtype)
-# model_true.dynamics_cov = torch.tensor(matlab_data['mmtrue'][0, 0]['Q'], device=device, dtype=dtype)
-#
-# model_true.emissions_input_weights = torch.tensor(matlab_data['mmtrue'][0, 0]['D'], device=device, dtype=dtype)
-# model_true.emissions_cov = torch.tensor(matlab_data['mmtrue'][0, 0]['R'], device=device, dtype=dtype)
-
-#########
-
-
-
-
-
 # save the data
 data_dict['params_init'] = model_trained.get_params()
 data_dict['params_init']['init_mean'] = init_mean_true
@@ -127,8 +99,5 @@ ll_true_params = model_true.lgssm_filter(emissions_torch, inputs_torch, init_mea
 
 # plotting
 if run_params['plot_figures']:
-    if param_props['shape']['dynamics_cov'] == 'diag':
-        plotting.trained_on_synthetic_diag(model_trained, model_true, ll_true_params)
-    else:
-        plotting.trained_on_synthetic(model_trained, model_true, ll_true_params)
+    plotting.plot_model_params(model_trained, model_true, ll_true_params)
 
