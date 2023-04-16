@@ -30,14 +30,11 @@ init_cov_true = synth_data_dict["init_cov"]
 latents = synth_data_dict["latents"][0]
 
 A = model_synth_true.dynamics_weights.detach().numpy()
-print(A)
 
 # fit A_hat with p time lags
 # X_i is a granger cause of another time series X_j if at least 1 element A_tau(j,i)
 # for tau=1,...,L is signif larger than 0
 # X_t = sum_1^L A_tau*X(t-tau) + noise(t)
-
-mse = []
 
 num_lags = 3
 num_time, num_neurons = emissions.shape
@@ -49,7 +46,7 @@ y_target = np.zeros((num_time - num_lags, num_neurons))
 y_history = np.zeros((num_time - num_lags, 0))
 
 # note this goes from time point num_lags to T
-y_target = emissions[:-num_lags, :]
+y_target = emissions[num_lags:, :]
 
 for p in range(1, num_lags+1):
     if p-num_lags:
@@ -57,17 +54,24 @@ for p in range(1, num_lags+1):
     else:
         y_history = np.concatenate((y_history, emissions[p:, :]), axis=1)
 
-A_hat = np.linalg.solve(y_history, y_target).T
+# A_hat = np.linalg.solve(y_history, y_target).T
+# linalg.solve doesn't work because y_history is not square --> use least squares instead
+# q, r = np.linalg.qr(y_history)
+# p = np.dot(q.T, y_target)
+# a_hat = np.dot(np.linalg.inv(r), p)
 
-y_hat = y_target @ A_hat.T
+# a_hat is each A_hat matrix for each lag
+a_hat = np.linalg.lstsq(y_history, y_target, rcond=None)[0]
 
-# mse.append(np.mean((y - yhat) ** 2))
+y_hat = y_history @ a_hat
+print(a_hat)
+print(y_hat)
+mse = np.mean((y_target - y_hat) ** 2)
 
-# fig, axs = plt.subplots(1, 3)
-# Apos = axs[0].imshow(A)
-# bhatpos = axs[1].imshow(bhat[0])
-# fig.colorbar(Apos, ax=axs[0])
-# fig.colorbar(bhatpos, ax=axs[1])
-# axs[2].plot(range(1, 100), mse)
-#
-# plt.show()
+fig, axs = plt.subplots(1, 2)
+A_pos = axs[0].imshow(A)
+a_hat_pos = axs[1].imshow(a_hat)
+fig.colorbar(A_pos, ax=axs[0])
+fig.colorbar(a_hat_pos, ax=axs[1])
+
+plt.show()
