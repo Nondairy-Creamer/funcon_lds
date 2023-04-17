@@ -845,9 +845,9 @@ class Lgssm:
             lagged_data = np.zeros((num_data_sets, num_time - lags + 1, 0))
         else:
             cat_fun = torch.cat
-            lagged_data = torch.zeros((num_data_sets, num_time - lags, 0))
+            lagged_data = torch.zeros((num_data_sets, num_time - lags + 1, 0))
 
-        for tau in range(lags):
+        for tau in reversed(range(lags)):
             if tau == lags-1:
                 lagged_data = cat_fun((lagged_data, data[:, tau:, :]), 2)
             else:
