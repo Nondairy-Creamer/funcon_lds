@@ -208,8 +208,8 @@ class Lgssm:
             init_cov = np.transpose(init_cov, [0, 2, 1]) @ init_cov / (self.dynamics_dim * dynamics_weights_tau)
 
         latents = np.zeros((num_data_sets, num_time, self.dynamics_dim * dynamics_weights_tau))
-        emissions = np.zeros((num_data_sets, num_time, self.dynamics_dim * dynamics_weights_tau))
-        inputs = rng.standard_normal((num_data_sets, num_time, self.dynamics_dim))
+        emissions = np.zeros((num_data_sets, num_time, self.emissions_dim))
+        inputs = rng.standard_normal((num_data_sets, num_time + dynamics_input_weights_tau - 1, self.input_dim))
         inputs = self._get_lagged_data(inputs, dynamics_input_weights_tau)
 
         # set up the weights, creating full matricies from diagonals and padding for higher order AR dynamics
@@ -237,7 +237,7 @@ class Lgssm:
 
         # get the initial observations
         dynamics_noise = rng.multivariate_normal(np.zeros(self.dynamics_dim), dynamics_cov, size=(num_data_sets, num_time))
-        self._pad_zeros(dynamics_noise, dynamics_weights_tau, axis=0)
+        dynamics_noise = self._pad_zeros(dynamics_noise, dynamics_weights_tau, axis=2)
         emissions_noise = rng.multivariate_normal(np.zeros(self.dynamics_dim), emissions_cov, size=(num_data_sets, num_time))
         dynamics_inputs = (dynamics_input_weights @ inputs[:, :, :, None])[:, :, :, 0]
         emissions_inputs = (self.emissions_input_weights @ inputs[:, :, :self.input_dim, None])[:, :, :, 0]
@@ -277,8 +277,9 @@ class Lgssm:
         nan_mask = rng.random((num_data_sets, num_time, self.dynamics_dim)) <= nan_freq
         emissions[nan_mask] = np.nan
 
-        emissions = [i for i in emissions]
+        latents = [i for i in latents]
         inputs = [i for i in inputs]
+        emissions = [i for i in emissions]
         init_mean = [i for i in init_mean]
         init_cov = [i for i in init_cov]
 
@@ -889,29 +890,10 @@ class Lgssm:
             zeros_fun = torch.zeros
             cat_fun = torch.cat
 
-        if weights.ndim == 1:
-            if axis == 0:
-                pad = zeros_fun(weights.shape[0] * (tau - 1))
-            elif axis == 1:
-                pad = zeros_fun(weights.shape[1] * (tau - 1))
-            else:
-                raise Exception('_pad_zeros can only handle axis 0 or 1')
-        elif weights.ndim == 2:
-            if axis == 0:
-                pad = zeros_fun((weights.shape[0] * (tau - 1), weights.shape[1]))
-            elif axis == 1:
-                pad = zeros_fun((weights.shape[0], weights.shape[1] * (tau - 1)))
-            else:
-                raise Exception('_pad_zeros can only handle axis 0 or 1')
-        elif weights.ndim == 3:
-            if axis == 0:
-                pad = zeros_fun((weights.shape[0] * (tau - 1), weights.shape[1]))
-            elif axis == 1:
-                pad = zeros_fun((weights.shape[0], weights.shape[1] * (tau - 1)))
-            else:
-                raise Exception('_pad_zeros can only handle axis 0 or 1')
-        else:
-            raise Exception('_pad_zeros can only handle 1, 2, or 3 dimensional weights')
+        zeros_shape = list(weights.shape)
+        zeros_shape[axis] = zeros_shape[axis] * (tau - 1)
 
-        return cat_fun((weights, pad), axis)
+        zero_pad = zeros_fun(zeros_shape)
+
+        return cat_fun((weights, zero_pad), axis)
 
