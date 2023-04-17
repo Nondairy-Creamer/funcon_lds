@@ -40,19 +40,24 @@ class Lgssm:
                                       'emissions_offset': 'full',
                                       'emissions_cov': 'full',
                                       },
+                            'tau': {'dynamics_weights': 1,
+                                    'dynamics_input_weights': 1,
+                                    }
                             }
 
         if param_props is not None:
-            self.param_props['update'].update(param_props['update'])
-            self.param_props['shape'].update(param_props['shape'])
+            for k in self.param_props.keys():
+                self.param_props[k].update(param_props[k])
 
         # initialize dynamics weights
-        self.dynamics_weights_init = 0.9 * np.eye(self.dynamics_dim)
+        dynamics_tau = self.param_props['tau']['dynamics_weights']
+        self.dynamics_weights_init = 0.9 * np.tile(np.eye(self.dynamics_dim), (dynamics_tau, 1, 1))
 
+        dynamics_input_tau = self.param_props['tau']['dynamics_input_weights']
         if self.param_props['shape']['dynamics_input_weights'] == 'diag':
-            self.dynamics_input_weights_init = np.zeros(self.dynamics_dim)
+            self.dynamics_input_weights_init = np.zeros((dynamics_input_tau, self.dynamics_dim))
         else:
-            self.dynamics_input_weights_init = np.zeros((self.dynamics_dim, self.input_dim))
+            self.dynamics_input_weights_init = np.zeros((dynamics_input_tau, self.dynamics_dim, self.input_dim))
 
         self.dynamics_offset_init = np.zeros(self.dynamics_dim)
 
@@ -70,8 +75,6 @@ class Lgssm:
             self.emissions_cov_init = np.zeros(self.dynamics_dim)
         else:
             self.emissions_cov_init = np.eye(self.dynamics_dim)
-
-
 
         # define the weights here, but set them to tensor versions of the intial values with _set_to_init()
         self.dynamics_weights = None
@@ -94,17 +97,22 @@ class Lgssm:
 
     def randomize_weights(self, max_eig_allowed=0.8, init_std=1.0, rng=np.random.default_rng()):
         # randomize dynamics weights
-        self.dynamics_weights_init = rng.standard_normal((self.dynamics_dim, self.dynamics_dim))
+        dynamics_tau = self.param_props['tau']['dynamics_weights']
+        self.dynamics_weights_init = rng.standard_normal((dynamics_tau, self.dynamics_dim, self.dynamics_dim))
         eig_vals, eig_vects = np.linalg.eig(self.dynamics_weights_init)
         eig_vals = eig_vals / np.max(np.abs(eig_vals)) * max_eig_allowed
         negative_real_eigs = np.real(eig_vals) < 0
         eig_vals[negative_real_eigs] = -eig_vals[negative_real_eigs]
-        self.dynamics_weights_init = np.real(eig_vects @ np.linalg.solve(eig_vects.T, np.diag(eig_vals)).T)
+        eig_vals_mat = np.zeros((dynamics_tau, self.dynamics_dim, self.dynamics_dim), dtype=np.cdouble)
+        for i in range(dynamics_tau):
+            eig_vals_mat[i, :, :] = np.diag(eig_vals[i, :])
+        self.dynamics_weights_init = np.real(eig_vects @ np.linalg.solve(np.transpose(eig_vects, (0, 2, 1)), eig_vals_mat))
 
+        dynamics_input_tau = self.param_props['tau']['dynamics_input_weights']
         if self.param_props['shape']['dynamics_input_weights'] == 'diag':
-            self.dynamics_input_weights_init = init_std * rng.standard_normal(self.dynamics_dim)
+            self.dynamics_input_weights_init = init_std * rng.standard_normal((dynamics_input_tau, self.dynamics_dim))
         else:
-            self.dynamics_input_weights_init = init_std * rng.standard_normal((self.dynamics_dim, self.input_dim))
+            self.dynamics_input_weights_init = init_std * rng.standard_normal((dynamics_input_tau, self.dynamics_dim, self.input_dim))
 
         self.dynamics_offset_init = 0 * rng.standard_normal(self.dynamics_dim)
 
@@ -188,25 +196,32 @@ class Lgssm:
         self.emissions_cov = self.emissions_cov.to(new_device)
 
     def sample(self, num_time=100, init_mean=None, init_cov=None, num_data_sets=None, nan_freq=0.0, rng=np.random.default_rng()):
+        dynamics_weights_tau = self.param_props['tau']['dynamics_weights']
+        dynamics_input_weights_tau = self.param_props['tau']['dynamics_input_weights']
+
         # generate a random initial mean and covariance
         if init_mean is None:
-            init_mean = rng.standard_normal((num_data_sets, self.dynamics_dim))
+            init_mean = rng.standard_normal((num_data_sets, self.dynamics_dim * dynamics_weights_tau))
 
         if init_cov is None:
-            init_cov = rng.standard_normal((num_data_sets, self.dynamics_dim, self.dynamics_dim))
-            init_cov = np.transpose(init_cov, [0, 2, 1]) @ init_cov / self.dynamics_dim
+            init_cov = rng.standard_normal((num_data_sets, self.dynamics_dim * dynamics_weights_tau, self.dynamics_dim * dynamics_weights_tau))
+            init_cov = np.transpose(init_cov, [0, 2, 1]) @ init_cov / (self.dynamics_dim * dynamics_weights_tau)
 
-        latents = np.zeros((num_data_sets, num_time, self.dynamics_dim))
-        emissions = np.zeros((num_data_sets, num_time, self.dynamics_dim))
+        latents = np.zeros((num_data_sets, num_time, self.dynamics_dim * dynamics_weights_tau))
+        emissions = np.zeros((num_data_sets, num_time, self.dynamics_dim * dynamics_weights_tau))
         inputs = rng.standard_normal((num_data_sets, num_time, self.dynamics_dim))
+        inputs = self._get_lagged_data(inputs, dynamics_input_weights_tau)
+
+        dynamics_weights = self._get_lagged_weights(self.dynamics_weights)
 
         if self.param_props['shape']['dynamics_input_weights'] == 'diag':
-            dynamics_input_weights = torch.diag(torch.exp(self.dynamics_input_weights))
+            dynamics_input_weights = torch.diag_embed(torch.exp(self.dynamics_input_weights))
         else:
             dynamics_input_weights = self.dynamics_input_weights
+        dynamics_input_weights = self._get_lagged_weights(dynamics_input_weights)
 
         if self.param_props['shape']['dynamics_cov'] == 'diag':
-            dynamics_cov = torch.diag(torch.exp(self.dynamics_cov))
+            dynamics_cov = torch.diag_embed(torch.exp(self.dynamics_cov))
         else:
             dynamics_cov = self.dynamics_cov
 
@@ -219,12 +234,13 @@ class Lgssm:
         dynamics_noise = rng.multivariate_normal(np.zeros(self.dynamics_dim), dynamics_cov, size=(num_data_sets, num_time))
         emissions_noise = rng.multivariate_normal(np.zeros(self.dynamics_dim), emissions_cov, size=(num_data_sets, num_time))
         dynamics_inputs = (dynamics_input_weights @ inputs[:, :, :, None])[:, :, :, 0]
-        emissions_inputs = (self.emissions_input_weights @ inputs[:, :, :, None])[:, :, :, 0]
-        latent_init = np.zeros((num_data_sets, self.dynamics_dim))
+        emissions_inputs = (self.emissions_input_weights @ inputs[:, :, :self.input_dim, None])[:, :, :, 0]
+        latent_init = np.zeros((num_data_sets, self.dynamics_dim * dynamics_weights_tau))
+
         for d in range(num_data_sets):
             latent_init[d, :] = rng.multivariate_normal(init_mean[d, :], init_cov[d, :, :])
 
-        latents[:, 0, :] = utils.batch_Ax(self.dynamics_weights, latent_init) + \
+        latents[:, 0, :] = utils.batch_Ax(dynamics_weights, latent_init) + \
                            dynamics_inputs[:, 0, :] + \
                            self.dynamics_offset[None, :] + \
                            dynamics_noise[:, 0, :]
@@ -236,7 +252,7 @@ class Lgssm:
 
         # loop through time and generate the latents and emissions
         for t in range(1, num_time):
-            latents[:, t, :] = (self.dynamics_weights @ latents[:, t-1, :, None])[:, :, 0] + \
+            latents[:, t, :] = (dynamics_weights @ latents[:, t-1, :, None])[:, :, 0] + \
                                 dynamics_inputs[:, t, :] + \
                                 self.dynamics_offset[None, :] + \
                                 dynamics_noise[:, t, :]
@@ -808,3 +824,38 @@ class Lgssm:
 
         return emissions_split, input_split
 
+    @staticmethod
+    def _get_lagged_data(data, lags):
+        num_data_sets, num_time, num_neurons = data.shape
+
+        if type(data) is np.ndarray:
+            cat_fun = np.concatenate
+            lagged_data = np.zeros((num_data_sets, num_time - lags + 1, 0))
+        else:
+            cat_fun = torch.cat
+            lagged_data = torch.zeros((num_data_sets, num_time - lags, 0))
+
+        for tau in range(lags):
+            if tau == lags-1:
+                lagged_data = cat_fun((lagged_data, data[:, tau:, :]), 2)
+            else:
+                lagged_data = cat_fun((lagged_data, data[:, tau:-lags + tau + 1, :]), 2)
+
+        return lagged_data
+
+    @staticmethod
+    def _get_lagged_weights(weights):
+        if type(weights) is np.ndarray:
+            cat_fun = np.concatenate
+            split_fun = np.split
+            eye_fun = np.eye
+        else:
+            cat_fun = torch.cat
+            split_fun = torch.split
+            eye_fun = torch.eye
+
+        lagged_weights = cat_fun(split_fun(weights, 1, 0), 2)[0, :, :]
+        lower_eye = eye_fun(lagged_weights.shape[1] - lagged_weights.shape[0], lagged_weights.shape[1])
+        lagged_weights = cat_fun((lagged_weights, lower_eye), 0)
+
+        return lagged_weights

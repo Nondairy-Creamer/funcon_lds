@@ -20,7 +20,7 @@ model_true.emissions_input_weights = torch.zeros((model_true.dynamics_dim, model
 
 # sample from the randomized model
 data_dict = \
-    model_true.sample(init_mean=np.zeros((run_params['num_data_sets'], model_true.dynamics_dim)),
+    model_true.sample(init_mean=np.zeros((run_params['num_data_sets'], model_true.dynamics_dim * model_true.param_props['tau']['dynamics_weights'])),
                       num_time=run_params['num_time'],
                       num_data_sets=run_params['num_data_sets'],
                       nan_freq=run_params['nan_freq'],
