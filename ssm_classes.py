@@ -429,99 +429,6 @@ class Lgssm:
 
         return ll, filtered_means, filtered_covs, smoothed_means, smoothed_covs, smoothed_crosses
 
-    def e_step(self, emissions, inputs, init_mean, init_cov):
-        num_data_sets, num_timesteps = emissions.shape[:2]
-
-        # Run the smoother to get posterior expectations
-        ll, filtered_means, filtered_covs, smoothed_means, smoothed_covs, smoothed_crosses = \
-            self.lgssm_smoother(emissions, inputs, init_mean, init_cov)
-
-        # shorthand
-        Ex = smoothed_means
-        Exp = smoothed_means[:, :-1, :]
-        Exn = smoothed_means[:, 1:, :]
-        Vx = smoothed_covs
-        Vxp = smoothed_covs[:, :-1, :, :]
-        Vxn = smoothed_covs[:, 1:, :, :]
-        Expxn = smoothed_crosses
-
-        # Append bias to the input
-        inputs = torch.cat((inputs, torch.ones((num_data_sets, num_timesteps, 1))), dim=2)
-        up = inputs[:, :-1, :]
-        u = inputs
-        y = emissions
-        y = torch.where(torch.isnan(y), 0, y)
-
-        # expected sufficient statistics for the initial tfd.Distribution
-        Ex0 = smoothed_means[:, 0, :]
-        Ex0x0T = smoothed_covs[:, 0, :, :] + Ex0[:, :, None] @ Ex0[:, None, :]
-        init_stats = (Ex0, Ex0x0T, torch.tensor(1, dtype=self.dtype, device=self.device))
-
-        # expected sufficient statistics for the dynamics tfd.Distribution
-        # let zp[t] = [x[t], u[t]] for t = 0...T-2
-        # let xn[t] = x[t+1]          for t = 0...T-2
-        m11 = utils.batch_trans(Exp) @ Exp
-        m12 = utils.batch_trans(Exp) @ up
-        m21 = utils.batch_trans(up) @ Exp
-        m22 = utils.batch_trans(up) @ up
-        sum_zpzpT = utils.block([[m11, m12], [m21, m22]])
-        sum_zpzpT[:, :self.dynamics_dim, :self.dynamics_dim] += Vxp.sum(1)
-        sum_zpxnT = utils.block([[Expxn.sum(1)], [utils.batch_trans(up) @ Exn]])
-        sum_xnxnT = Vxn.sum(1) + utils.batch_trans(Exn) @ Exn
-        dynamics_stats = (sum_zpzpT, sum_zpxnT, sum_xnxnT, torch.tensor(num_timesteps - 1, device=self.device, dtype=self.dtype))
-
-        # more expected sufficient statistics for the emissions
-        # let z[t] = [x[t], u[t]] for t = 0...T-1
-        n11 = utils.batch_trans(Ex) @ Ex
-        n12 = utils.batch_trans(Ex) @ u
-        n21 = utils.batch_trans(u) @ Ex
-        n22 = utils.batch_trans(u) @ u
-        sum_zzT = utils.block([[n11, n12], [n21, n22]])
-        sum_zzT[:, :self.dynamics_dim, :self.dynamics_dim] += Vx.sum(1)
-        sum_zyT = utils.block([[utils.batch_trans(Ex) @ y], [utils.batch_trans(u) @ y]])
-        sum_yyT = utils.batch_trans(y) @ y
-        emission_stats = (sum_zzT, sum_zyT, sum_yyT, torch.tensor(num_timesteps, device=self.device, dtype=self.dtype))
-
-        return ll, init_stats, dynamics_stats, emission_stats
-
-    def m_step(self, init_stats, dynamics_stats, emission_stats):
-        def fit_linear_regression(ExxT, ExyT, EyyT, N):
-            # Solve a linear regression given sufficient statistics
-            W = torch.linalg.solve(ExxT, ExyT).T
-
-            Sigma = (EyyT - W @ ExyT - ExyT.T @ W.T + W @ ExxT @ W.T) / N
-            return W, Sigma
-
-        # Sum the statistics across all batches
-        init_stats = [i.sum(0) for i in init_stats]
-        dynamics_stats = [i.sum(0) for i in dynamics_stats]
-        emission_stats = [i.sum(0) for i in emission_stats]
-
-        # Perform MLE estimation jointly
-        sum_x0, sum_x0x0T, N = init_stats
-        S = (sum_x0x0T - torch.outer(sum_x0, sum_x0)) / N
-        m = sum_x0 / N
-
-        FB, Q = fit_linear_regression(*dynamics_stats)
-        A = FB[:, :self.dynamics_dim]
-        B, b = (FB[:, self.dynamics_dim:-1], FB[:, -1])
-
-        HD, R = fit_linear_regression(*emission_stats)
-        H = HD[:, :self.dynamics_dim]
-        D, d = (HD[:, self.dynamics_dim:-1], HD[:, -1])
-
-        self.dynamics_weights = A
-        self.dynamics_input_weights = B
-        self.dynamics_offset = b
-        self.dynamics_cov = Q
-
-        self.emissions_weights = H
-        self.emissions_input_weights = D
-        self.emissions_offset = d
-        self.emissions_cov = R
-
-        return
-
     def em_step_pillow(self, emissions, inputs, init_mean, init_cov):
         # mm = runMstep_LDSgaussian(yy,uu,mm,zzmu,zzcov,zzcov_d1,optsEM)
         #
@@ -678,13 +585,9 @@ class Lgssm:
     def fit_gd(self, emissions_list, input_list, init_mean=None, init_cov=None, learning_rate=1e-2, num_steps=50):
         """ This function will fit the model using gradient descent on the entire data set
         """
-        self.dynamics_weights.requires_grad = True
-        self.dynamics_input_weights.requires_grad = True
-        self.dynamics_cov.requires_grad = True
-
-        self.emissions_weights.requires_grad = True
-        self.emissions_input_weights.requires_grad = True
-        self.emissions_cov.requires_grad = True
+        for k in self.param_props['update'].keys():
+            if self.param_props['update']:
+                setattr(self, k, True)
 
         emissions, inputs = self.standardize_inputs(emissions_list, input_list)
 
@@ -703,29 +606,10 @@ class Lgssm:
         # initialize the optimizer with the parameters we're going to optimize
         # TODO: could change this so update uses the variable name and we just use getattr to append these in a loop
         model_params = []
-        if self.param_props['update']['dynamics_weights']:
-            self.dynamics_weights.requires_grad = True
-            model_params.append(self.dynamics_weights)
-
-        if self.param_props['update']['dynamics_input_weights']:
-            self.dynamics_input_weights.requires_grad = True
-            model_params.append(self.dynamics_input_weights)
-
-        if self.param_props['update']['dynamics_cov']:
-            self.dynamics_cov.requires_grad = True
-            model_params.append(self.dynamics_cov)
-
-        if self.param_props['update']['emissions_weights']:
-            self.emissions_weights.requires_grad = True
-            model_params.append(self.emissions_weights)
-
-        if self.param_props['update']['emissions_input_weights']:
-            self.emissions_input_weights.requires_grad = True
-            model_params.append(self.emissions_input_weights)
-
-        if self.param_props['update']['emissions_cov']:
-            self.emissions_cov.requires_grad = True
-            model_params.append(self.emissions_cov)
+        for k in self.param_props['update'].keys():
+            if self.param_props['update'][k]:
+                setattr(self, k, True)
+                model_params.append(getattr(self, k))
 
         optimizer = torch.optim.Adam(model_params, lr=learning_rate)
         log_likelihood_out = []
@@ -749,12 +633,9 @@ class Lgssm:
         self.log_likelihood = log_likelihood_out
         self.train_time = time_out
 
-        self.dynamics_weights.requires_grad = False
-        self.dynamics_input_weights.requires_grad = False
-        self.dynamics_cov.requires_grad = False
-        self.emissions_weights.requires_grad = False
-        self.emissions_input_weights.requires_grad = False
-        self.emissions_cov.requires_grad = False
+        for k in self.param_props['update'].keys():
+            if self.param_props['update']:
+                setattr(self, k, False)
 
         return
 

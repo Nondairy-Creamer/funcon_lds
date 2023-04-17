@@ -26,10 +26,6 @@ data_dict = \
                       nan_freq=run_params['nan_freq'],
                       rng=rng)
 
-# data_dict['emissions'][0][:, 0] = np.nan
-# data_dict['emissions'][1][:, -1] = np.nan
-# data_dict['inputs'][0][:, -1] = 0
-
 emissions = data_dict['emissions']
 inputs = data_dict['inputs']
 latents_true = data_dict['latents']
@@ -40,8 +36,8 @@ init_cov_true = data_dict['init_cov']
 model_trained = Lgssm(run_params['dynamics_dim'], run_params['emissions_dim'], run_params['input_dim'],
                       dtype=dtype, device=device, verbose=run_params['verbose'], param_props=run_params['param_props'])
 
-model_trained.emissions_weights = torch.eye(model_true.dynamics_dim, device=model_trained.device, dtype=model_trained.dtype)
-model_trained.emissions_input_weights = torch.zeros((model_true.dynamics_dim, model_true.emissions_dim), device=device, dtype=dtype)
+model_trained.emissions_weights = torch.eye(model_trained.dynamics_dim, device=model_trained.device, dtype=model_trained.dtype)
+model_trained.emissions_input_weights = torch.zeros((model_trained.dynamics_dim, model_trained.emissions_dim), device=device, dtype=dtype)
 
 # save the data
 data_dict['params_init'] = model_trained.get_params()
