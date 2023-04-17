@@ -36,7 +36,7 @@ A = model_synth_true.dynamics_weights.detach().numpy()
 # for tau=1,...,L is signif larger than 0
 # X_t = sum_1^L A_tau*X(t-tau) + noise(t)
 
-num_lags = 3
+num_lags = 5
 num_time, num_neurons = emissions.shape
 # y_target is the time series we are trying to predict from A_hat @ y_history
 # y_target should start at t=0+num_lags
@@ -55,18 +55,21 @@ for p in range(1, num_lags+1):
         y_history = np.concatenate((y_history, emissions[p:, :]), axis=1)
 
 # A_hat = np.linalg.solve(y_history, y_target).T
-# linalg.solve doesn't work because y_history is not square --> use least squares instead
+# -> linalg.solve doesn't work because y_history is not square --> use least squares instead
 # q, r = np.linalg.qr(y_history)
 # p = np.dot(q.T, y_target)
 # a_hat = np.dot(np.linalg.inv(r), p)
 
-# a_hat is each A_hat matrix for each lag
+# a_hat is a col vector of each A_hat_p matrix for each lag p -> need to transpose each A_hat_p
 a_hat = np.linalg.lstsq(y_history, y_target, rcond=None)[0]
+for p in range(num_lags):
+    a_hat[p*num_neurons:p*num_neurons+num_neurons, :] = a_hat[p*num_neurons:p*num_neurons+num_neurons, :].T
 
 y_hat = y_history @ a_hat
 print(a_hat)
 print(y_hat)
 mse = np.mean((y_target - y_hat) ** 2)
+print(mse)
 
 fig, axs = plt.subplots(1, 2)
 A_pos = axs[0].imshow(A)
