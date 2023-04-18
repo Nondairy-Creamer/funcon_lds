@@ -21,12 +21,9 @@ param_props:
     dynamics_cov: full
     emissions_cov: full
 
-  tau:
-    dynamics_weights: 1
-    dynamics_input_weights: 1
-
 # gradient descent parameters
 # choices are: gradient_descent and batch_sgd
+num_lags: 3
 fit_type: em
 num_grad_steps: 10
 learning_rate: 0.1

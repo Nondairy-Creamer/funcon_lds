@@ -12,15 +12,16 @@ dtype = getattr(torch, run_params['dtype'])
 rng = np.random.default_rng(run_params['random_seed'])
 
 model_true = Lgssm(run_params['dynamics_dim'], run_params['emissions_dim'], run_params['input_dim'],
-                   dtype=dtype, device=device, param_props=run_params['param_props'])
+                   dtype=dtype, device=device, param_props=run_params['param_props'],
+                   num_lags=run_params['num_lags'])
 # randomize the parameters (defaults are nonrandom)
 model_true.randomize_weights(rng=rng)
-model_true.emissions_weights = torch.eye(model_true.dynamics_dim, device=device, dtype=dtype)
-model_true.emissions_input_weights = torch.zeros((model_true.dynamics_dim, model_true.emissions_dim), device=device, dtype=dtype)
+model_true.emissions_weights = torch.block_diag(*([torch.eye(model_true.emissions_dim, model_true.dynamics_dim, device=device, dtype=dtype)] * run_params['num_lags']))
+model_true.emissions_input_weights = torch.zeros((model_true.emissions_dim_full, model_true.input_dim_full), device=device, dtype=dtype)
 
 # sample from the randomized model
 data_dict = \
-    model_true.sample(init_mean=np.zeros((run_params['num_data_sets'], model_true.dynamics_dim * model_true.param_props['tau']['dynamics_weights'])),
+    model_true.sample(init_mean=np.zeros((run_params['num_data_sets'], model_true.dynamics_dim_full)),
                       num_time=run_params['num_time'],
                       num_data_sets=run_params['num_data_sets'],
                       nan_freq=run_params['nan_freq'],
@@ -38,10 +39,11 @@ init_cov_true = data_dict['init_cov']
 
 # make a new model to fit to the random model
 model_trained = Lgssm(run_params['dynamics_dim'], run_params['emissions_dim'], run_params['input_dim'],
-                      dtype=dtype, device=device, verbose=run_params['verbose'], param_props=run_params['param_props'])
+                      dtype=dtype, device=device, verbose=run_params['verbose'], param_props=run_params['param_props'],
+                      num_lags=run_params['num_lags'])
 
-model_trained.emissions_weights = torch.eye(model_true.dynamics_dim, device=model_trained.device, dtype=model_trained.dtype)
-model_trained.emissions_input_weights = torch.zeros((model_true.dynamics_dim, model_true.emissions_dim), device=device, dtype=dtype)
+model_true.emissions_weights = torch.block_diag(*([torch.eye(model_true.emissions_dim, model_true.dynamics_dim, device=device, dtype=dtype)] * run_params['num_lags']))
+model_true.emissions_input_weights = torch.zeros((model_true.emissions_dim_full, model_true.input_dim_full), device=device, dtype=dtype)
 
 # save the data
 data_dict['params_init'] = model_trained.get_params()
@@ -56,21 +58,8 @@ pickle.dump(data_dict, save_file)
 save_file.close()
 
 # train the model
-if run_params['fit_type'] == 'gd':
-    model_trained.fit_gd(emissions, inputs, init_mean=init_mean_true, init_cov=init_cov_true,
-                         learning_rate=run_params['learning_rate'],
-                         num_steps=run_params['num_grad_steps'])
-
-elif run_params['fit_type'] == 'em':
-    model_trained.fit_em(emissions, inputs, init_mean=init_mean_true, init_cov=init_cov_true,
-                         num_steps=run_params['num_grad_steps'])
-
-elif run_params['fit_type'] == 'none':
-    # do nothing
-    a=1
-
-else:
-    raise ValueError('Fit type not recognized')
+model_trained.fit_em(emissions, inputs, init_mean=init_mean_true, init_cov=init_cov_true,
+                     num_steps=run_params['num_grad_steps'])
 
 # save the model
 model_true.save(path=run_params['model_save_folder'] + '/model_true.pkl')
