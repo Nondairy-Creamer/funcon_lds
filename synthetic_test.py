@@ -16,8 +16,8 @@ model_true = Lgssm(run_params['dynamics_dim'], run_params['emissions_dim'], run_
                    num_lags=run_params['num_lags'])
 # randomize the parameters (defaults are nonrandom)
 model_true.randomize_weights(rng=rng)
-model_true.emissions_weights = torch.block_diag(*([torch.eye(model_true.emissions_dim, model_true.dynamics_dim, device=device, dtype=dtype)] * run_params['num_lags']))
-model_true.emissions_input_weights = torch.zeros((model_true.emissions_dim_full, model_true.input_dim_full), device=device, dtype=dtype)
+model_true.emissions_weights = torch.eye(model_true.emissions_dim, model_true.dynamics_dim_full, device=device, dtype=dtype)
+model_true.emissions_input_weights = torch.zeros((model_true.emissions_dim, model_true.input_dim_full), device=device, dtype=dtype)
 
 # sample from the randomized model
 data_dict = \
@@ -26,10 +26,6 @@ data_dict = \
                       num_data_sets=run_params['num_data_sets'],
                       nan_freq=run_params['nan_freq'],
                       rng=rng)
-
-# data_dict['emissions'][0][:, 0] = np.nan
-# data_dict['emissions'][1][:, -1] = np.nan
-# data_dict['inputs'][0][:, -1] = 0
 
 emissions = data_dict['emissions']
 inputs = data_dict['inputs']
@@ -42,8 +38,8 @@ model_trained = Lgssm(run_params['dynamics_dim'], run_params['emissions_dim'], r
                       dtype=dtype, device=device, verbose=run_params['verbose'], param_props=run_params['param_props'],
                       num_lags=run_params['num_lags'])
 
-model_true.emissions_weights = torch.block_diag(*([torch.eye(model_true.emissions_dim, model_true.dynamics_dim, device=device, dtype=dtype)] * run_params['num_lags']))
-model_true.emissions_input_weights = torch.zeros((model_true.emissions_dim_full, model_true.input_dim_full), device=device, dtype=dtype)
+model_true.emissions_weights = torch.eye(model_true.emissions_dim, model_true.dynamics_dim_full, device=device, dtype=dtype)
+model_true.emissions_input_weights = torch.zeros((model_true.emissions_dim, model_true.input_dim_full), device=device, dtype=dtype)
 
 # save the data
 data_dict['params_init'] = model_trained.get_params()

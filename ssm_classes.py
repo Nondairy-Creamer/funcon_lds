@@ -64,7 +64,11 @@ class Lgssm:
                 self.param_props[k].update(param_props[k])
 
         # initialize dynamics weights
+        tau = self.num_lags / 3
+        const = np.exp(1 / tau) / (np.exp(1 / tau) - 1)
+        time_decay = np.exp(-np.arange(self.num_lags) / tau) / const
         self.dynamics_weights_init = 0.9 * np.tile(np.eye(self.dynamics_dim), (self.num_lags, 1, 1))
+        self.dynamics_weights_init = self.dynamics_weights_init * time_decay[:, None, None]
         self.dynamics_cov_init = np.eye(self.dynamics_dim)
         self.dynamics_input_weights_init = np.zeros((self.num_lags, self.dynamics_dim, self.input_dim))
         self.dynamics_offset_init = np.zeros(self.dynamics_dim)
@@ -86,6 +90,9 @@ class Lgssm:
 
     def randomize_weights(self, max_eig_allowed=0.8, init_std=1.0, rng=np.random.default_rng()):
         # randomize dynamics weights
+        tau = self.num_lags / 3
+        const = np.exp(1/tau) / (np.exp(1/tau) - 1)
+        time_decay = np.exp(-np.arange(self.num_lags) / tau) / const
         self.dynamics_weights_init = rng.standard_normal((self.num_lags, self.dynamics_dim, self.dynamics_dim))
         eig_vals, eig_vects = np.linalg.eig(self.dynamics_weights_init)
         eig_vals = eig_vals / np.max(np.abs(eig_vals)) * max_eig_allowed
@@ -95,6 +102,7 @@ class Lgssm:
         for i in range(self.num_lags):
             eig_vals_mat[i, :, :] = np.diag(eig_vals[i, :])
         self.dynamics_weights_init = np.real(eig_vects @ np.linalg.solve(np.transpose(eig_vects, (0, 2, 1)), eig_vals_mat))
+        self.dynamics_weights_init = self.dynamics_weights_init * time_decay[:, None, None]
 
         if self.param_props['shape']['dynamics_input_weights'] == 'diag':
             dynamics_input_weights_init_diag = init_std * rng.standard_normal((self.num_lags, self.dynamics_dim))
@@ -191,13 +199,13 @@ class Lgssm:
             init_cov[:, :self.dynamics_dim, :self.dynamics_dim] = init_cov_block
 
         latents = np.zeros((num_data_sets, num_time, self.dynamics_dim_full))
-        emissions = np.zeros((num_data_sets, num_time, self.emissions_dim_full))
+        emissions = np.zeros((num_data_sets, num_time, self.emissions_dim))
         inputs = rng.standard_normal((num_data_sets, num_time + self.num_lags - 1, self.input_dim))
         inputs = self._get_lagged_data(inputs, self.num_lags)
 
         # get the initial observations
         dynamics_noise = rng.multivariate_normal(np.zeros(self.dynamics_dim_full), self.dynamics_cov, size=(num_data_sets, num_time))
-        emissions_noise = rng.multivariate_normal(np.zeros(self.emissions_dim_full), self.emissions_cov, size=(num_data_sets, num_time))
+        emissions_noise = rng.multivariate_normal(np.zeros(self.emissions_dim), self.emissions_cov, size=(num_data_sets, num_time))
         dynamics_inputs = (self.dynamics_input_weights @ inputs[:, :, :, None])[:, :, :, 0]
         emissions_inputs = (self.emissions_input_weights @ inputs[:, :, :, None])[:, :, :, 0]
         latent_init = np.zeros((num_data_sets, self.dynamics_dim_full))
@@ -228,8 +236,7 @@ class Lgssm:
                                   emissions_noise[:, t, :]
 
         # add in nans
-        nan_mask = rng.random((num_data_sets, num_time + self.num_lags - 1, self.emissions_dim)) <= nan_freq
-        nan_mask = self._get_lagged_data(nan_mask, self.num_lags)
+        nan_mask = rng.random((num_data_sets, num_time, self.emissions_dim)) <= nan_freq
         emissions[nan_mask] = np.nan
 
         latents = [i for i in latents]
@@ -523,12 +530,12 @@ class Lgssm:
         self.dynamics_weights_init = self._get_lagged_weights(self.dynamics_weights_init)
         self.dynamics_input_weights_init = self._get_lagged_weights(self.dynamics_input_weights_init, fill='zeros')
         self.dynamics_offset_init = self._pad_zeros(self.dynamics_offset_init, self.num_lags, axis=0)
-        self.dynamics_cov_init = scipy.linalg.block_diag(*([self.dynamics_cov_init] * self.num_lags))
+        dci_block = self.dynamics_cov_init
+        self.dynamics_cov_init = np.eye(self.dynamics_dim_full) / self.nan_fill
+        self.dynamics_cov_init[:self.dynamics_dim, :self.dynamics_dim] = dci_block
 
-        self.emissions_weights_init = scipy.linalg.block_diag(*([self.emissions_weights_init] * self.num_lags))
-        self.emissions_input_weights_init = scipy.linalg.block_diag(*([self.emissions_input_weights_init] * self.num_lags))
-        self.emissions_offset_init = np.concatenate([self.emissions_offset_init] * self.num_lags, axis=0)
-        self.emissions_cov_init = scipy.linalg.block_diag(*([self.emissions_cov_init] * self.num_lags))
+        self.emissions_weights_init = self._pad_zeros(self.emissions_weights_init, self.num_lags, axis=1)
+        self.emissions_input_weights_init = self._pad_zeros(self.emissions_input_weights_init, self.num_lags, axis=1)
 
     @staticmethod
     def estimate_init_mean(emissions):
@@ -554,16 +561,17 @@ class Lgssm:
         max_time = np.max(data_set_time)
         num_data_sets = len(emissions_list)
         num_neurons = emissions_list[0].shape[1]
+        num_inputs = input_list[0].shape[1]
 
         emissions = torch.empty((num_data_sets, max_time, num_neurons), device=device, dtype=dtype)
         emissions[:] = torch.nan
-        input = torch.zeros((num_data_sets, max_time, num_neurons), device=device, dtype=dtype)
+        inputs = torch.zeros((num_data_sets, max_time, num_inputs), device=device, dtype=dtype)
 
         for d in range(num_data_sets):
             emissions[d, :data_set_time[d], :] = emissions_list[d]
-            input[d, :data_set_time[d], :] = input_list[d]
+            inputs[d, :data_set_time[d], :] = input_list[d]
 
-        return emissions, input
+        return emissions, inputs
 
     @staticmethod
     def _get_lagged_data(data, lags):
