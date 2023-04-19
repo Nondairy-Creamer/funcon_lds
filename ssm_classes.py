@@ -101,7 +101,7 @@ class Lgssm:
         eig_vals_mat = np.zeros((self.num_lags, self.dynamics_dim, self.dynamics_dim), dtype=np.cdouble)
         for i in range(self.num_lags):
             eig_vals_mat[i, :, :] = np.diag(eig_vals[i, :])
-        self.dynamics_weights_init = np.real(eig_vects @ np.linalg.solve(np.transpose(eig_vects, (0, 2, 1)), eig_vals_mat))
+        self.dynamics_weights_init = np.real(eig_vects @ np.transpose(np.linalg.solve(np.transpose(eig_vects, (0, 2, 1)), eig_vals_mat), (0, 2, 1)))
         self.dynamics_weights_init = self.dynamics_weights_init * time_decay[:, None, None]
 
         if self.param_props['shape']['dynamics_input_weights'] == 'diag':
