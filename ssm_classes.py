@@ -111,6 +111,7 @@ class Lgssm:
                 self.dynamics_input_weights_init[i, :, :] = np.diag(dynamics_input_weights_init_diag[i, :])
         else:
             self.dynamics_input_weights_init = init_std * rng.standard_normal((self.num_lags, self.dynamics_dim, self.input_dim))
+        self.dynamics_input_weights_init = self.dynamics_input_weights_init * time_decay[:, None, None]
 
         self.dynamics_offset_init = np.zeros(self.dynamics_dim)
         self.dynamics_cov_init = init_std * rng.standard_normal((self.dynamics_dim, self.dynamics_dim))
