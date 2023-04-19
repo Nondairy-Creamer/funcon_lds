@@ -17,6 +17,8 @@ frac_neuron_coverage: 0.0
 # to reduce dataset size
 minimum_frac_measured: 0.0
 
+num_lags: 2
+
 param_props:
   update:
     dynamics_offset: False
@@ -34,7 +36,6 @@ dtype: float64
 
 # gradient descent parameters
 # choices are: gradient_descent and batch_sgd
-num_lags: 3
 fit_type: em
 num_grad_steps: 10
 learning_rate: 0.001

@@ -8,6 +8,7 @@ input_dim: 5
 num_time: 1000
 num_data_sets: 10
 nan_freq: 0.0
+num_lags: 1
 
 param_props:
   update:
@@ -23,7 +24,6 @@ param_props:
 
 # gradient descent parameters
 # choices are: gradient_descent and batch_sgd
-num_lags: 3
 fit_type: em
 num_grad_steps: 10
 learning_rate: 0.1
