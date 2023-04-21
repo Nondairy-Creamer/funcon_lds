@@ -17,6 +17,8 @@ frac_neuron_coverage: 0.0
 # to reduce dataset size
 minimum_frac_measured: 0.0
 
+num_lags: 2
+
 param_props:
   update:
     dynamics_offset: False
