@@ -4,6 +4,7 @@ import preprocessing as pp
 import plotting
 import pickle
 import numpy as np
+import time
 
 run_params = pp.get_params(param_name='params_synth')
 
@@ -19,6 +20,7 @@ model_true.randomize_weights(rng=rng)
 model_true.emissions_weights = torch.eye(model_true.emissions_dim, model_true.dynamics_dim_full, device=device, dtype=dtype)
 model_true.emissions_input_weights = torch.zeros((model_true.emissions_dim, model_true.input_dim_full), device=device, dtype=dtype)
 
+start = time.time()
 # sample from the randomized model
 data_dict = \
     model_true.sample(init_mean=np.zeros((run_params['num_data_sets'], model_true.dynamics_dim_full)),
@@ -26,6 +28,12 @@ data_dict = \
                       num_data_sets=run_params['num_data_sets'],
                       nan_freq=run_params['nan_freq'],
                       rng=rng)
+print('Time to sample:', time.time() - start, 's')
+
+# data_end = [500, 300, 1000, 900, 800]
+# for d in range(run_params['num_data_sets']):
+#     data_dict['emissions'][d][data_end[d]:, :] = np.nan
+#     data_dict['emissions'][d][:, d:d+3] = np.nan
 
 emissions = data_dict['emissions']
 inputs = data_dict['inputs']
@@ -37,7 +45,7 @@ init_cov_true = data_dict['init_cov']
 model_trained = Lgssm(run_params['dynamics_dim'], run_params['emissions_dim'], run_params['input_dim'],
                       dtype=dtype, device=device, verbose=run_params['verbose'], param_props=run_params['param_props'],
                       num_lags=run_params['num_lags'])
-
+# model_trained.randomize_weights()
 model_true.emissions_weights = torch.eye(model_true.emissions_dim, model_true.dynamics_dim_full, device=device, dtype=dtype)
 model_true.emissions_input_weights = torch.zeros((model_true.emissions_dim, model_true.input_dim_full), device=device, dtype=dtype)
 
@@ -54,7 +62,9 @@ pickle.dump(data_dict, save_file)
 save_file.close()
 
 # train the model
-model_trained.fit_em(emissions, inputs, init_mean=init_mean_true, init_cov=init_cov_true,
+# model_trained.fit_em(emissions, inputs, init_mean=init_mean_true, init_cov=init_cov_true,
+#                      num_steps=run_params['num_grad_steps'])
+model_trained.fit_em(emissions, inputs,
                      num_steps=run_params['num_grad_steps'])
 
 # save the model

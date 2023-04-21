@@ -1,14 +1,14 @@
 device: cpu
-dtype: float64
+dtype: float32
 
 # model parameters
-dynamics_dim: 5
-emissions_dim: 5
-input_dim: 5
-num_time: 1000
-num_data_sets: 10
+dynamics_dim: 120
+emissions_dim: 120
+input_dim: 120
+num_time: 5000
+num_data_sets: 1
 nan_freq: 0.0
-num_lags: 1
+num_lags: 2
 
 param_props:
   update:

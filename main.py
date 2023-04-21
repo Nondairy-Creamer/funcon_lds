@@ -38,10 +38,10 @@ for bd in data_sets_to_remove:
     inputs_unaligned.pop(bd)
     stim_cell_ids.pop(bd)
 
-emissions_unaligned = emissions_unaligned[:2]
-cell_ids_unaligned = cell_ids_unaligned[:2]
-inputs_unaligned = inputs_unaligned[:2]
-stim_cell_ids = stim_cell_ids[:2]
+emissions_unaligned = emissions_unaligned[:5]
+cell_ids_unaligned = cell_ids_unaligned[:5]
+inputs_unaligned = inputs_unaligned[:5]
+stim_cell_ids = stim_cell_ids[:5]
 
 # choose a subset of the data sets to maximize the number of recordings * the number of neurons included
 cell_ids, emissions, best_runs, inputs = \
@@ -50,8 +50,12 @@ cell_ids, emissions, best_runs, inputs = \
                             minimum_freq=run_params['minimum_frac_measured'])
 
 num_data = len(emissions)
-num_epochs = int(np.ceil(run_params['num_grad_steps'] * run_params['batch_size'] / num_data))
 num_neurons = emissions[0].shape[1]
+
+has_stims = np.any(np.concatenate(inputs, axis=0), axis=0)
+inputs = [i[:, has_stims] for i in inputs]
+input_dim = np.sum(has_stims)
+inputs = [Lgssm._get_lagged_data(i, run_params['num_lags']) for i in inputs]
 
 # remove the beginning of the recording which contains artifacts and mean subtract
 for ri in range(num_data):
@@ -59,28 +63,16 @@ for ri in range(num_data):
     emissions[ri] = emissions[ri] - np.mean(emissions[ri], axis=0, keepdims=True)
     inputs[ri] = inputs[ri][run_params['index_start']:, :]
 
-# initialize a linear gaussian ssm model and train
-param_props = {'update': {'dynamics_offset': False,
-                          'emissions_weights': False,
-                          'emissions_offset': False,
-                          },
-               'shape': {'dynamics_input_weights': 'diag',
-                         'dynamics_cov': 'diag',
-                         'emissions_cov': 'diag'}}
+model_trained = Lgssm(num_neurons, num_neurons, input_dim, num_lags=run_params['num_lags'],
+                      dtype=dtype, device=device, verbose=run_params['verbose'], param_props=run_params['param_props'])
 
-model_trained = Lgssm(num_neurons, num_neurons, num_neurons,
-                      dtype=dtype, device=device, verbose=run_params['verbose'], param_props=param_props)
+model_trained.emissions_weights = torch.eye(model_trained.emissions_dim, model_trained.dynamics_dim_full, device=device, dtype=dtype)
+model_trained.emissions_input_weights = torch.zeros((model_trained.emissions_dim, model_trained.input_dim_full), device=device, dtype=dtype)
 
-model_trained.emissions_weights = torch.eye(model_trained.dynamics_dim,
-                                            device=model_trained.device,
-                                            dtype=model_trained.dtype)
-
-model_trained.fit_gd(emissions, inputs,
-                     learning_rate=run_params['learning_rate'],
+model_trained.fit_em(emissions, inputs,
                      num_steps=run_params['num_grad_steps'])
 
-if run_params['save_model']:
-    model_trained.save(path=run_params['model_save_folder'] + '/model_trained.pkl')
+model_trained.save(path=run_params['model_save_folder'] + '/model_trained.pkl')
 
 if run_params['plot_figures']:
     plotting.plot_model_params(model_trained)
