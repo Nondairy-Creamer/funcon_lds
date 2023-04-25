@@ -431,40 +431,40 @@ class Lgssm:
         #
         # log_likelihood = 0
         #
-        # def do_stuff(data):
-        #     emissions = data[0]
-        #     inputs = data[1]
-        #     init_mean = data[2]
-        #     init_cov = data[3]
-        #     ll, suff_stats = self.get_suff_stats(emissions, inputs, init_mean, init_cov)
-        #     # log_likelihood += ll
-        #     # Mz1_list.append(suff_stats['Mz1'])
-        #     # Mz2_list.append(suff_stats['Mz2'])
-        #     # Mz12_list.append(suff_stats['Mz12'])
-        #     # Mu1_list.append(suff_stats['Mu1'])
-        #     # Muz2_list.append(suff_stats['Muz2'])
-        #     # Muz21_list.append(suff_stats['Muz21'])
-        #     #
-        #     # Mzy_list.append(suff_stats['Mzy'])
-        #     # Muy_list.append(suff_stats['Muy'])
-        #     # Mz_list.append(suff_stats['Mz'])
-        #     # Mu2_list.append(suff_stats['Mu2'])
-        #     # Muz_list.append(suff_stats['Muz'])
-        #     # My_list.append(suff_stats['My'])
-        #
-        #     return ll, suff_stats
+        def do_stuff(data):
+            emissions = data[0]
+            inputs = data[1]
+            init_mean = data[2]
+            init_cov = data[3]
+            ll, suff_stats = self.get_suff_stats(emissions, inputs, init_mean, init_cov)
+            # log_likelihood += ll
+            # Mz1_list.append(suff_stats['Mz1'])
+            # Mz2_list.append(suff_stats['Mz2'])
+            # Mz12_list.append(suff_stats['Mz12'])
+            # Mu1_list.append(suff_stats['Mu1'])
+            # Muz2_list.append(suff_stats['Muz2'])
+            # Muz21_list.append(suff_stats['Muz21'])
+            #
+            # Mzy_list.append(suff_stats['Mzy'])
+            # Muy_list.append(suff_stats['Muy'])
+            # Mz_list.append(suff_stats['Mz'])
+            # Mu2_list.append(suff_stats['Mu2'])
+            # Muz_list.append(suff_stats['Muz'])
+            # My_list.append(suff_stats['My'])
 
-        # ll, suff_stats = do_stuff([emissions_list[0], inputs_list[0], init_mean_list[0], init_cov_list[0]])
-        # suff_stats = [suff_stats]
-        # log_likelihood = ll
+            return ll, suff_stats
+
+        ll, suff_stats = do_stuff([emissions_list[0], inputs_list[0], init_mean_list[0], init_cov_list[0]])
+        suff_stats = [suff_stats]
+        log_likelihood = ll
 
         # if __name__ == '__main__':
         #     pool = multiprocessing.Pool(4)
         #     ll, suff_stats = zip(*pool.map(do_stuff, zip(emissions_list, inputs_list, init_mean_list, init_cov_list)))
 
-        ll, suff_stats = self.get_suff_stats(emissions_list[0], inputs_list[0], init_mean_list[0], init_cov_list[0])
-        suff_stats = [suff_stats]
-        log_likelihood = ll
+        # ll, suff_stats = self.get_suff_stats(emissions_list[0], inputs_list[0], init_mean_list[0], init_cov_list[0])
+        # suff_stats = [suff_stats]
+        # log_likelihood = ll
 
         Mz1_list = [i['Mz1'] for i in suff_stats]
         Mz2_list = [i['Mz2'] for i in suff_stats]
