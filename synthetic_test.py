@@ -23,8 +23,7 @@ model_true.emissions_input_weights = torch.zeros((model_true.emissions_dim, mode
 start = time.time()
 # sample from the randomized model
 data_dict = \
-    model_true.sample(init_mean=np.zeros((run_params['num_data_sets'], model_true.dynamics_dim_full)),
-                      num_time=run_params['num_time'],
+    model_true.sample(num_time=run_params['num_time'],
                       num_data_sets=run_params['num_data_sets'],
                       nan_freq=run_params['nan_freq'],
                       rng=rng)
@@ -32,8 +31,8 @@ print('Time to sample:', time.time() - start, 's')
 
 # data_end = [500, 300, 1000, 900, 800]
 # for d in range(run_params['num_data_sets']):
-#     data_dict['emissions'][d][data_end[d]:, :] = np.nan
-#     data_dict['emissions'][d][:, d:d+3] = np.nan
+    # data_dict['emissions'][d][data_end[d]:, :] = np.nan
+    # data_dict['emissions'][d][:, d:d+3] = np.nan
 
 emissions = data_dict['emissions']
 inputs = data_dict['inputs']
@@ -79,9 +78,16 @@ init_mean_true_torch = [torch.tensor(i, dtype=dtype, device=device)[None, :] for
 init_cov_true_torch = [torch.tensor(i, dtype=dtype, device=device)[None, :, :] for i in init_cov_true]
 init_mean_true_torch = torch.cat(init_mean_true_torch, dim=0)
 init_cov_true_torch = torch.cat(init_cov_true_torch, dim=0)
+ll_true_params = 0
+ll_trained_params = 0
 
-ll_true_params = model_true.lgssm_filter(emissions_torch, inputs_torch, init_mean_true_torch,
-                                         init_cov_true_torch)[0].detach().cpu().numpy()
+for d in range(len(emissions_torch)):
+    emi_in = emissions_torch[d]
+    inp_in = inputs_torch[d]
+    im_in = init_mean_true_torch[d]
+    ic_in = init_cov_true_torch[d]
+    ll_true_params += model_true.lgssm_filter(emi_in, inp_in, im_in, ic_in)[0].detach().cpu().numpy()
+    ll_trained_params += model_trained.lgssm_filter(emi_in, inp_in, im_in, ic_in)[0].detach().cpu().numpy()
 
 # plotting
 if run_params['plot_figures']:
