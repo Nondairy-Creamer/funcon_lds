@@ -124,19 +124,19 @@ sio.savemat(save_folder, save_dict)
 
 
 ###### load data from python
-load_file = open('/home/mcreamer/Documents/python/funcon_lds/example_data/data.pkl', 'rb')
-data_in = pickle.load(load_file)
-
-yy = data_in['emissions'][0].T
-uu = data_in['inputs'][0].T
-mm0 = {'A': data_in['params_init']['dynamics']['weights'],
-       'B': data_in['params_init']['dynamics']['input_weights'],
-       'C': data_in['params_init']['emissions']['weights'],
-       'D': data_in['params_init']['emissions']['input_weights'],
-       'Q': data_in['params_init']['dynamics']['cov'],
-       'R': data_in['params_init']['emissions']['cov'],
-       'Q0': data_in['params_init']['init_cov'][0],
-       }
+# load_file = open('/home/mcreamer/Documents/python/funcon_lds/example_data/data.pkl', 'rb')
+# data_in = pickle.load(load_file)
+#
+# yy = data_in['emissions'][0].T
+# uu = data_in['inputs'][0].T
+# mm0 = {'A': data_in['params_init']['dynamics']['weights'],
+#        'B': data_in['params_init']['dynamics']['input_weights'],
+#        'C': data_in['params_init']['emissions']['weights'],
+#        'D': data_in['params_init']['emissions']['input_weights'],
+#        'Q': data_in['params_init']['dynamics']['cov'],
+#        'R': data_in['params_init']['emissions']['cov'],
+#        'Q0': data_in['params_init']['init_cov'][0],
+#        }
 
 import time
 start = time.time()

@@ -5,6 +5,7 @@ import preprocessing as pp
 
 model_true = None
 has_ground_truth = True
+
 if len(sys.argv) == 2:
     has_ground_truth = sys.argv[1]
 
