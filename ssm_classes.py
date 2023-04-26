@@ -3,7 +3,7 @@ import numpy as np
 import pickle
 import time
 import utilities as utils
-import multiprocessing
+from mpi4py import MPI
 
 
 class Lgssm:
@@ -259,37 +259,6 @@ class Lgssm:
 
         return data_dict
 
-    def fit_em(self, emissions_list, inputs_list, init_mean=None, init_cov=None, num_steps=10):
-        emissions, inputs = self.standardize_inputs(emissions_list, inputs_list)
-
-        if init_mean is None:
-            init_mean = self.estimate_init_mean(emissions)
-        else:
-            init_mean = [torch.tensor(i, device=self.device, dtype=self.dtype) for i in init_mean]
-
-        if init_cov is None:
-            init_cov = self.estimate_init_cov(emissions)
-        else:
-            init_cov = [torch.tensor(i, device=self.device, dtype=self.dtype) for i in init_cov]
-
-        log_likelihood_out = []
-        time_out = []
-
-        start = time.time()
-        for ep in range(num_steps):
-            ll = self.em_step_pillow(emissions, inputs, init_mean, init_cov)
-
-            log_likelihood_out.append(ll.detach().cpu().numpy())
-            time_out.append(time.time() - start)
-
-            if self.verbose:
-                print('Finished step ' + str(ep + 1) + '/' + str(num_steps))
-                print('log likelihood = ' + str(log_likelihood_out[-1]))
-                print('Time elapsed = ' + str(time_out[-1]))
-
-        self.log_likelihood = log_likelihood_out
-        self.train_time = time_out
-
     def lgssm_filter(self, emissions, inputs, init_mean, init_cov):
         """Run a Kalman filter to produce the marginal likelihood and filtered state estimates.
         adapted from Dynamax.
@@ -384,7 +353,16 @@ class Lgssm:
 
         return ll, filtered_means, filtered_covs, smoothed_means, smoothed_covs, smoothed_crosses
 
-    def em_step_pillow(self, emissions_list, inputs_list, init_mean_list, init_cov_list):
+    def parallel_suff_stats(self, data):
+        emissions = data[0]
+        inputs = data[1]
+        init_mean = data[2]
+        init_cov = data[3]
+        ll, suff_stats = self.get_suff_stats(emissions, inputs, init_mean, init_cov)
+
+        return ll, suff_stats
+
+    def em_step_pillow(self, emissions_list, inputs_list, init_mean_list, init_cov_list, is_parallel=False):
         # mm = runMstep_LDSgaussian(yy,uu,mm,zzmu,zzcov,zzcov_d1,optsEM)
         #
         # Run M-step updates for LDS-Gaussian model
@@ -413,140 +391,113 @@ class Lgssm:
         # =======
         #  mmnew - new model struct with updated parameters
 
+        comm = MPI.COMM_WORLD
+        rank = comm.Get_rank()
+
         nz = self.dynamics_dim_full  # number of latents
 
-        # Mz1_list = []
-        # Mz2_list = []
-        # Mz12_list = []
-        # Mu1_list = []
-        # Muz2_list = []
-        # Muz21_list = []
-        # Mzy_list = []
-        # Muy_list = []
-        # Mz_list = []
-        # Mu2_list = []
-        # Muz_list = []
-        # My_list = []
-        # nt = []
-        #
-        # log_likelihood = 0
-        #
-        def do_stuff(data):
-            emissions = data[0]
-            inputs = data[1]
-            init_mean = data[2]
-            init_cov = data[3]
-            ll, suff_stats = self.get_suff_stats(emissions, inputs, init_mean, init_cov)
-            # log_likelihood += ll
-            # Mz1_list.append(suff_stats['Mz1'])
-            # Mz2_list.append(suff_stats['Mz2'])
-            # Mz12_list.append(suff_stats['Mz12'])
-            # Mu1_list.append(suff_stats['Mu1'])
-            # Muz2_list.append(suff_stats['Muz2'])
-            # Muz21_list.append(suff_stats['Muz21'])
-            #
-            # Mzy_list.append(suff_stats['Mzy'])
-            # Muy_list.append(suff_stats['Muy'])
-            # Mz_list.append(suff_stats['Mz'])
-            # Mu2_list.append(suff_stats['Mu2'])
-            # Muz_list.append(suff_stats['Muz'])
-            # My_list.append(suff_stats['My'])
+        if rank == 0:
+            data_out = list(zip(emissions_list, inputs_list, init_mean_list, init_cov_list))
+        else:
+            data_out = None
 
-            return ll, suff_stats
+        if is_parallel:
+            data = comm.scatter(data_out, root=0)
 
-        ll, suff_stats = do_stuff([emissions_list[0], inputs_list[0], init_mean_list[0], init_cov_list[0]])
-        suff_stats = [suff_stats]
-        log_likelihood = ll
+            ll_suff_stats = self.parallel_suff_stats(data)
 
-        # if __name__ == '__main__':
-        #     pool = multiprocessing.Pool(4)
-        #     ll, suff_stats = zip(*pool.map(do_stuff, zip(emissions_list, inputs_list, init_mean_list, init_cov_list)))
+            ll_suff_stats = comm.gather(ll_suff_stats, root=0)
+        else:
+            ll_suff_stats = []
+            for d in data_out:
+                ll_suff_stats.append(self.parallel_suff_stats(d))
 
-        # ll, suff_stats = self.get_suff_stats(emissions_list[0], inputs_list[0], init_mean_list[0], init_cov_list[0])
-        # suff_stats = [suff_stats]
-        # log_likelihood = ll
+        if rank == 0:
+            log_likelihood = [i[0] for i in ll_suff_stats]
+            log_likelihood = torch.sum(torch.stack(log_likelihood))
+            suff_stats = [i[1] for i in ll_suff_stats]
 
-        Mz1_list = [i['Mz1'] for i in suff_stats]
-        Mz2_list = [i['Mz2'] for i in suff_stats]
-        Mz12_list = [i['Mz12'] for i in suff_stats]
-        Mu1_list = [i['Mu1'] for i in suff_stats]
-        Muz2_list = [i['Muz2'] for i in suff_stats]
-        Muz21_list = [i['Muz21'] for i in suff_stats]
-        Mzy_list = [i['Mzy'] for i in suff_stats]
-        Muy_list = [i['Muy'] for i in suff_stats]
-        Mz_list = [i['Mz'] for i in suff_stats]
-        Mu2_list = [i['Mu2'] for i in suff_stats]
-        Muz_list = [i['Muz'] for i in suff_stats]
-        My_list = [i['My'] for i in suff_stats]
+            Mz1_list = [i['Mz1'] for i in suff_stats]
+            Mz2_list = [i['Mz2'] for i in suff_stats]
+            Mz12_list = [i['Mz12'] for i in suff_stats]
+            Mu1_list = [i['Mu1'] for i in suff_stats]
+            Muz2_list = [i['Muz2'] for i in suff_stats]
+            Muz21_list = [i['Muz21'] for i in suff_stats]
+            Mzy_list = [i['Mzy'] for i in suff_stats]
+            Muy_list = [i['Muy'] for i in suff_stats]
+            Mz_list = [i['Mz'] for i in suff_stats]
+            Mu2_list = [i['Mu2'] for i in suff_stats]
+            Muz_list = [i['Muz'] for i in suff_stats]
+            My_list = [i['My'] for i in suff_stats]
 
-        Mz1 = torch.mean(torch.stack(Mz1_list), dim=0)
-        Mz2 = torch.mean(torch.stack(Mz2_list), dim=0)
-        Mz12 = torch.mean(torch.stack(Mz12_list), dim=0)
-        Mu1 = torch.mean(torch.stack(Mu1_list), dim=0)
-        Muz2 = torch.mean(torch.stack(Muz2_list), dim=0)
-        Muz21 = torch.mean(torch.stack(Muz21_list), dim=0)
-        Mzy = torch.mean(torch.stack(Mzy_list), dim=0)
-        Muy = torch.mean(torch.stack(Muy_list), dim=0)
-        Mz = torch.mean(torch.stack(Mz_list), dim=0)
-        Mu2 = torch.mean(torch.stack(Mu2_list), dim=0)
-        Muz = torch.mean(torch.stack(Muz_list), dim=0)
-        My = torch.mean(torch.stack(My_list), dim=0)
+            Mz1 = torch.mean(torch.stack(Mz1_list), dim=0)
+            Mz2 = torch.mean(torch.stack(Mz2_list), dim=0)
+            Mz12 = torch.mean(torch.stack(Mz12_list), dim=0)
+            Mu1 = torch.mean(torch.stack(Mu1_list), dim=0)
+            Muz2 = torch.mean(torch.stack(Muz2_list), dim=0)
+            Muz21 = torch.mean(torch.stack(Muz21_list), dim=0)
+            Mzy = torch.mean(torch.stack(Mzy_list), dim=0)
+            Muy = torch.mean(torch.stack(Muy_list), dim=0)
+            Mz = torch.mean(torch.stack(Mz_list), dim=0)
+            Mu2 = torch.mean(torch.stack(Mu2_list), dim=0)
+            Muz = torch.mean(torch.stack(Muz_list), dim=0)
+            My = torch.mean(torch.stack(My_list), dim=0)
 
-        # update dynamics matrix A & input matrix B
-        if self.param_props['update']['dynamics_weights'] and self.param_props['update']['dynamics_input_weights']:
-            # do a joint update for A and B
-            Mlin = torch.cat((Mz12, Muz2), dim=0)  # from linear terms
-            Mquad = utils.block(((Mz1, Muz21.T), (Muz21, Mu1)), dims=(1, 0))  # from quadratic terms
-            ABnew = torch.linalg.solve(Mquad.T, Mlin).T  # new A and B from regression
-            self.dynamics_weights = ABnew[:, :nz]  # new A
-            self.dynamics_input_weights = ABnew[:, nz:]  # new B
+            # update dynamics matrix A & input matrix B
+            if self.param_props['update']['dynamics_weights'] and self.param_props['update']['dynamics_input_weights']:
+                # do a joint update for A and B
+                Mlin = torch.cat((Mz12, Muz2), dim=0)  # from linear terms
+                Mquad = utils.block(((Mz1, Muz21.T), (Muz21, Mu1)), dims=(1, 0))  # from quadratic terms
+                ABnew = torch.linalg.solve(Mquad.T, Mlin).T  # new A and B from regression
+                self.dynamics_weights = ABnew[:, :nz]  # new A
+                self.dynamics_input_weights = ABnew[:, nz:]  # new B
 
-        elif self.param_props['update']['dynamics_weights']:  # update dynamics matrix A only
-            Anew = torch.linalg.solve(Mz1.T, Mz12 - Muz21.T @ self.dynamics_input_weights.T).T  # new A
-            self.dynamics_weights = Anew
+            elif self.param_props['update']['dynamics_weights']:  # update dynamics matrix A only
+                Anew = torch.linalg.solve(Mz1.T, Mz12 - Muz21.T @ self.dynamics_input_weights.T).T  # new A
+                self.dynamics_weights = Anew
 
-        elif self.param_props['update']['dynamics_input_weights']:  # update input matrix B only
-            Bnew = torch.linalg.solve(Mu1.T, Muz2 - Muz21 @ self.dynamics_weights.T).T  # new B
-            self.dynamics_input_weights = Bnew
+            elif self.param_props['update']['dynamics_input_weights']:  # update input matrix B only
+                Bnew = torch.linalg.solve(Mu1.T, Muz2 - Muz21 @ self.dynamics_weights.T).T  # new B
+                self.dynamics_input_weights = Bnew
 
-        # TODO: fix this, this is a hack to force diagonal
-        if self.param_props['shape']['dynamics_input_weights'] == 'diag':
-            for l in range(self.num_lags):
-                this_block = self.dynamics_input_weights[:self.dynamics_dim, self.input_dim*l:self.input_dim*(l+1)]
-                new_block = torch.zeros_like(this_block)
-                new_block[:self.input_dim, :] = torch.diag(torch.diag(this_block))
-                self.dynamics_input_weights[:self.dynamics_dim, self.input_dim*l:self.input_dim*(l+1)] = new_block
+            # TODO: fix this, this is a hack to force diagonal
+            if self.param_props['shape']['dynamics_input_weights'] == 'diag':
+                for l in range(self.num_lags):
+                    this_block = self.dynamics_input_weights[:self.dynamics_dim, self.input_dim*l:self.input_dim*(l+1)]
+                    new_block = torch.zeros_like(this_block)
+                    new_block[:self.input_dim, :] = torch.diag(torch.diag(this_block))
+                    self.dynamics_input_weights[:self.dynamics_dim, self.input_dim*l:self.input_dim*(l+1)] = new_block
 
-        # Update noise covariance Q
-        if self.param_props['update']['dynamics_cov']:
-            self.dynamics_cov = (Mz2 + self.dynamics_weights @ Mz1 @ self.dynamics_weights.T + self.dynamics_input_weights @ Mu1 @ self.dynamics_input_weights.T
-                                 - self.dynamics_weights @ Mz12 - Mz12.T @ self.dynamics_weights.T
-                                 - self.dynamics_input_weights @ Muz2 - Muz2.T @ self.dynamics_input_weights.T
-                                 + self.dynamics_weights @ Muz21.T @ self.dynamics_input_weights.T + self.dynamics_input_weights @ Muz21 @ self.dynamics_weights.T) #/ (nt - 1)
+            # Update noise covariance Q
+            if self.param_props['update']['dynamics_cov']:
+                self.dynamics_cov = (Mz2 + self.dynamics_weights @ Mz1 @ self.dynamics_weights.T + self.dynamics_input_weights @ Mu1 @ self.dynamics_input_weights.T
+                                     - self.dynamics_weights @ Mz12 - Mz12.T @ self.dynamics_weights.T
+                                     - self.dynamics_input_weights @ Muz2 - Muz2.T @ self.dynamics_input_weights.T
+                                     + self.dynamics_weights @ Muz21.T @ self.dynamics_input_weights.T + self.dynamics_input_weights @ Muz21 @ self.dynamics_weights.T) #/ (nt - 1)
 
-        # update obs matrix C & input matrix D
-        if self.param_props['update']['emissions_weights'] and self.param_props['update']['emissions_input_weights']:
-            # do a joint update to C and D
-            Mlin = torch.cat((Mzy, Muy), dim=0)  # from linear terms
-            Mquad = utils.block([[Mz, Muz.T], [Muz, Mu2]], dims=(1, 0))  # from quadratic terms
-            CDnew = torch.linalg.solve(Mquad.T, Mlin).T  # new A and B from regression
-            self.emissions_weights = CDnew[:, :nz]  # new A
-            self.emissions_input_weights = CDnew[:, nz:]  # new B
-        elif self.param_props['update']['emissions_weights']:  # update C only
-            Cnew = torch.linalg.solve(Mz.T, Mzy - Muz.T @ self.emissions_input_weights.T).T  # new A
-            self.emissions_weights = Cnew
-        elif self.param_props['update']['emissions_input_weights']:  # update D only
-            Dnew = torch.linalg.solve(Mu2.T, Muy - Muz @ self.emissions_weights.T).T  # new B
-            self.emissions_input_weights = Dnew
+            # update obs matrix C & input matrix D
+            if self.param_props['update']['emissions_weights'] and self.param_props['update']['emissions_input_weights']:
+                # do a joint update to C and D
+                Mlin = torch.cat((Mzy, Muy), dim=0)  # from linear terms
+                Mquad = utils.block([[Mz, Muz.T], [Muz, Mu2]], dims=(1, 0))  # from quadratic terms
+                CDnew = torch.linalg.solve(Mquad.T, Mlin).T  # new A and B from regression
+                self.emissions_weights = CDnew[:, :nz]  # new A
+                self.emissions_input_weights = CDnew[:, nz:]  # new B
+            elif self.param_props['update']['emissions_weights']:  # update C only
+                Cnew = torch.linalg.solve(Mz.T, Mzy - Muz.T @ self.emissions_input_weights.T).T  # new A
+                self.emissions_weights = Cnew
+            elif self.param_props['update']['emissions_input_weights']:  # update D only
+                Dnew = torch.linalg.solve(Mu2.T, Muy - Muz @ self.emissions_weights.T).T  # new B
+                self.emissions_input_weights = Dnew
 
-        # update obs noise covariance R
-        if self.param_props['update']['emissions_cov']:
-            self.emissions_cov = (My + self.emissions_weights @ Mz @ self.emissions_weights.T + self.emissions_input_weights @ Mu2 @ self.emissions_input_weights.T
-                                  - self.emissions_weights @ Mzy - Mzy.T @ self.emissions_weights.T
-                                  - self.emissions_input_weights @ Muy - Muy.T @ self.emissions_input_weights.T
-                                  + self.emissions_weights @ Muz.T @ self.emissions_input_weights.T + self.emissions_input_weights @ Muz @ self.emissions_weights.T)
+            # update obs noise covariance R
+            if self.param_props['update']['emissions_cov']:
+                self.emissions_cov = (My + self.emissions_weights @ Mz @ self.emissions_weights.T + self.emissions_input_weights @ Mu2 @ self.emissions_input_weights.T
+                                      - self.emissions_weights @ Mzy - Mzy.T @ self.emissions_weights.T
+                                      - self.emissions_input_weights @ Muy - Muy.T @ self.emissions_input_weights.T
+                                      + self.emissions_weights @ Muz.T @ self.emissions_input_weights.T + self.emissions_input_weights @ Muz @ self.emissions_weights.T)
 
-        return log_likelihood
+            return log_likelihood
 
     def get_suff_stats(self, emissions, inputs, init_mean, init_cov):
         nt = emissions.shape[0]
