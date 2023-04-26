@@ -38,11 +38,6 @@ if rank == 0:
                           rng=rng)
     print('Time to sample:', time.time() - start, 's')
 
-    # data_end = [500, 300, 1000, 900, 800]
-    # for d in range(run_params['num_data_sets']):
-        # data_dict['emissions'][d][data_end[d]:, :] = np.nan
-        # data_dict['emissions'][d][:, d:d+3] = np.nan
-
     emissions = data_dict['emissions']
     inputs = data_dict['inputs']
     latents_true = data_dict['latents']

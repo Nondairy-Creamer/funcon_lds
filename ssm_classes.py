@@ -448,9 +448,20 @@ class Lgssm:
                 # do a joint update for A and B
                 Mlin = torch.cat((Mz12, Muz2), dim=0)  # from linear terms
                 Mquad = utils.block(((Mz1, Muz21.T), (Muz21, Mu1)), dims=(1, 0))  # from quadratic terms
-                ABnew = torch.linalg.solve(Mquad.T, Mlin).T  # new A and B from regression
-                self.dynamics_weights = ABnew[:, :nz]  # new A
-                self.dynamics_input_weights = ABnew[:, nz:]  # new B
+
+                if self.param_props['shape']['dynamics_input_weights'] == 'diag':
+                    ABnew = utils.solve_half_diag(Mquad.T, Mlin[:, :self.dynamics_dim], self.num_lags).T  # new A and B from regression
+                else:
+                    ABnew = torch.linalg.solve(Mquad.T, Mlin[:, :self.dynamics_dim]).T  # new A and B from regression
+
+                # append the trivial parts of the weights from input lags
+                dynamics_eye_pad = torch.eye(self.dynamics_dim * (self.num_lags - 1), device=self.device, dtype=self.dtype)
+                dynamics_zeros_pad = torch.zeros((self.dynamics_dim * (self.num_lags - 1), self.dynamics_dim), device=self.device, dtype=self.dtype)
+                dynamics_pad = torch.cat((dynamics_eye_pad, dynamics_zeros_pad), dim=1)
+                dynamics_inputs_zeros_pad = torch.zeros((self.dynamics_dim * (self.num_lags - 1), self.dynamics_dim_full), device=self.device, dtype=self.dtype)
+
+                self.dynamics_weights = torch.cat((ABnew[:, :nz], dynamics_pad), dim=0)  # new A
+                self.dynamics_input_weights = torch.cat((ABnew[:, nz:], dynamics_inputs_zeros_pad), dim=0)  # new B
 
             elif self.param_props['update']['dynamics_weights']:  # update dynamics matrix A only
                 Anew = torch.linalg.solve(Mz1.T, Mz12 - Muz21.T @ self.dynamics_input_weights.T).T  # new A
@@ -459,14 +470,6 @@ class Lgssm:
             elif self.param_props['update']['dynamics_input_weights']:  # update input matrix B only
                 Bnew = torch.linalg.solve(Mu1.T, Muz2 - Muz21 @ self.dynamics_weights.T).T  # new B
                 self.dynamics_input_weights = Bnew
-
-            # TODO: fix this, this is a hack to force diagonal
-            if self.param_props['shape']['dynamics_input_weights'] == 'diag':
-                for l in range(self.num_lags):
-                    this_block = self.dynamics_input_weights[:self.dynamics_dim, self.input_dim*l:self.input_dim*(l+1)]
-                    new_block = torch.zeros_like(this_block)
-                    new_block[:self.input_dim, :] = torch.diag(torch.diag(this_block))
-                    self.dynamics_input_weights[:self.dynamics_dim, self.input_dim*l:self.input_dim*(l+1)] = new_block
 
             # Update noise covariance Q
             if self.param_props['update']['dynamics_cov']:

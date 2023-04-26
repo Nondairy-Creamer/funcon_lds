@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 import time
 from mpi4py import MPI
 
@@ -39,6 +40,49 @@ def estimate_cov(a):
     cov[torch.eye(a.shape[1], dtype=torch.bool)] = cov_diag
 
     return cov
+
+
+def solve_half_diag(A, b, num_lags):
+    # solves the linear equation b=Ax where x is a block column matrix where
+    # the first num_lags blocks are full, the rest are diagonal
+
+    num_dim = b.shape[1]
+    dtype = A.dtype
+    device = A.device
+    full_block = torch.ones((num_dim * num_lags, num_dim), device=device, dtype=dtype)
+    diag_block = torch.tile(torch.eye(num_dim, device=device, dtype=dtype), (num_lags, 1))
+    non_zero_mat = torch.cat((full_block, diag_block), dim=0)
+    x_hat = torch.zeros((A.shape[1], b.shape[1]), device=device, dtype=dtype)
+
+    for i in range(num_dim):
+        non_zero_loc = non_zero_mat[:, i] != 0
+
+        b_i = b[:, i]
+        A_nonzero = A[:, non_zero_loc]
+
+        x_hat[non_zero_loc, i] = torch.linalg.lstsq(A_nonzero, b_i, rcond=None)[0]
+
+    return x_hat
+
+
+def solve_half_diag_np(A, b):
+    # solves the linear equation b=Ax where x is a block matrix with the lower block diagonal
+    # attempt at diagonal fitting
+    num_dim = b.shape[1]
+    full_block = np.ones((num_dim, num_dim))
+    diag_block = np.eye(num_dim)
+    non_zero_mat = np.concatenate((full_block, diag_block), axis=0)
+    x_hat = np.zeros((A.shape[1], b.shape[1]))
+
+    for i in range(num_dim):
+        non_zero_loc = non_zero_mat[:, i] != 0
+
+        b_i = b[:, i]
+        A_nonzero = A[:, non_zero_loc]
+
+        x_hat[non_zero_loc, i] = np.linalg.lstsq(A_nonzero, b_i, rcond=None)[0]
+
+    return x_hat
 
 
 def fit_em(model, emissions_list, inputs_list, init_mean=None, init_cov=None, num_steps=10, is_parallel=False):
