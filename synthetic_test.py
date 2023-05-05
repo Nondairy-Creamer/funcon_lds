@@ -38,11 +38,16 @@ if rank == 0:
                           rng=rng)
     print('Time to sample:', time.time() - start, 's')
 
+    for d in range(len(data_dict['emissions'])):
+        nan_neuron = rng.random(data_dict['emissions'][d].shape[1]) < run_params['nan_neuron_freq']
+        data_dict['emissions'][d][:, nan_neuron] = np.nan
+
     emissions = data_dict['emissions']
     inputs = data_dict['inputs']
     latents_true = data_dict['latents']
     init_mean_true = data_dict['init_mean']
     init_cov_true = data_dict['init_cov']
+
 
     # make a new model to fit to the random model
     model_trained = Lgssm(run_params['dynamics_dim'], run_params['emissions_dim'], run_params['input_dim'],

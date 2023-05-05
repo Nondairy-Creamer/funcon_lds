@@ -42,20 +42,15 @@ def estimate_cov(a):
     return cov
 
 
-def solve_half_diag(A, b, num_lags):
-    # solves the linear equation b=Ax where x is a block column matrix where
-    # the first num_lags blocks are full, the rest are diagonal
+def solve_masked(A, b, mask):
+    # solves the linear equation b=Ax where x has 0's where mask == 0
 
-    num_dim = b.shape[1]
     dtype = A.dtype
     device = A.device
-    full_block = torch.ones((num_dim * num_lags, num_dim), device=device, dtype=dtype)
-    diag_block = torch.tile(torch.eye(num_dim, device=device, dtype=dtype), (num_lags, 1))
-    non_zero_mat = torch.cat((full_block, diag_block), dim=0)
     x_hat = torch.zeros((A.shape[1], b.shape[1]), device=device, dtype=dtype)
 
-    for i in range(num_dim):
-        non_zero_loc = non_zero_mat[:, i] != 0
+    for i in range(b.shape[1]):
+        non_zero_loc = mask[:, i] != 0
 
         b_i = b[:, i]
         A_nonzero = A[:, non_zero_loc]

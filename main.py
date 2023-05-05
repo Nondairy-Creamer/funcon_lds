@@ -3,6 +3,9 @@ import torch
 import preprocessing as pp
 from ssm_classes import Lgssm
 import plotting
+from mpi4py import MPI
+import utilities as utils
+
 
 from torch.profiler import profile, record_function, ProfilerActivity, schedule, tensorboard_trace_handler
 # from torch.utils.tensorboard import SummaryWriter
@@ -20,60 +23,76 @@ from torch.profiler import profile, record_function, ProfilerActivity, schedule,
 # V is diagonal
 # w_t, v_t are gaussian with 0 mean, and diagonal covariance
 
+comm = MPI.COMM_WORLD
+size = comm.Get_size()
+rank = comm.Get_rank()
+
 # get run parameters, yaml file contains descriptions of the parameters
 run_params = pp.get_params(param_name='params')
+is_parallel = size > 1
 
-device = run_params['device']
-dtype = getattr(torch, run_params['dtype'])
+if rank == 0:
+    device = run_params['device']
+    dtype = getattr(torch, run_params['dtype'])
 
-# load all the recordings
-emissions_unaligned, cell_ids_unaligned, q, q_labels, stim_cell_ids, inputs_unaligned = \
-    pp.load_data(run_params['data_path'])
+    # load all the recordings
+    emissions_unaligned, cell_ids_unaligned, q, q_labels, stim_cell_ids, inputs_unaligned = \
+        pp.load_data(run_params['data_path'])
 
-# remove recordings that are noisy
-data_sets_to_remove = np.sort(run_params['bad_data_sets'])[::-1]
-for bd in data_sets_to_remove:
-    emissions_unaligned.pop(bd)
-    cell_ids_unaligned.pop(bd)
-    inputs_unaligned.pop(bd)
-    stim_cell_ids.pop(bd)
+    # remove recordings that are noisy
+    data_sets_to_remove = np.sort(run_params['bad_data_sets'])[::-1]
+    for bd in data_sets_to_remove:
+        emissions_unaligned.pop(bd)
+        cell_ids_unaligned.pop(bd)
+        inputs_unaligned.pop(bd)
+        stim_cell_ids.pop(bd)
 
-emissions_unaligned = emissions_unaligned[:5]
-cell_ids_unaligned = cell_ids_unaligned[:5]
-inputs_unaligned = inputs_unaligned[:5]
-stim_cell_ids = stim_cell_ids[:5]
+    data_start = 0
+    data_end = 10
+    emissions_unaligned = emissions_unaligned[data_start:data_end]
+    cell_ids_unaligned = cell_ids_unaligned[data_start:data_end]
+    inputs_unaligned = inputs_unaligned[data_start:data_end]
+    stim_cell_ids = stim_cell_ids[data_start:data_end]
 
-# choose a subset of the data sets to maximize the number of recordings * the number of neurons included
-cell_ids, emissions, best_runs, inputs = \
-    pp.get_combined_dataset(emissions_unaligned, cell_ids_unaligned, stim_cell_ids, inputs_unaligned,
-                            frac_neuron_coverage=run_params['frac_neuron_coverage'],
-                            minimum_freq=run_params['minimum_frac_measured'])
+    # choose a subset of the data sets to maximize the number of recordings * the number of neurons included
+    cell_ids, emissions, best_runs, inputs = \
+        pp.get_combined_dataset(emissions_unaligned, cell_ids_unaligned, stim_cell_ids, inputs_unaligned,
+                                frac_neuron_coverage=run_params['frac_neuron_coverage'],
+                                minimum_freq=run_params['minimum_frac_measured'])
 
-num_data = len(emissions)
-num_neurons = emissions[0].shape[1]
+    num_data = len(emissions)
+    num_neurons = emissions[0].shape[1]
 
-has_stims = np.any(np.concatenate(inputs, axis=0), axis=0)
-inputs = [i[:, has_stims] for i in inputs]
-input_dim = np.sum(has_stims)
-inputs = [Lgssm._get_lagged_data(i, run_params['num_lags']) for i in inputs]
+    input_mask = torch.eye(num_neurons, device=device, dtype=dtype)
+    has_stims = np.any(np.concatenate(inputs, axis=0), axis=0)
+    inputs = [i[:, has_stims] for i in inputs]
+    input_mask = input_mask[:, has_stims]
+    input_dim = np.sum(has_stims)
+    run_params['param_props']['mask']['dynamics_input_weights'] = input_mask
+    inputs = [Lgssm._get_lagged_data(i, run_params['num_lags']) for i in inputs]
 
-# remove the beginning of the recording which contains artifacts and mean subtract
-for ri in range(num_data):
-    emissions[ri] = emissions[ri][run_params['index_start']:, :]
-    emissions[ri] = emissions[ri] - np.mean(emissions[ri], axis=0, keepdims=True)
-    inputs[ri] = inputs[ri][run_params['index_start']:, :]
+    # remove the beginning of the recording which contains artifacts and mean subtract
+    for ri in range(num_data):
+        emissions[ri] = emissions[ri][run_params['index_start']:, :]
+        emissions[ri] = emissions[ri] - np.mean(emissions[ri], axis=0, keepdims=True)
+        inputs[ri] = inputs[ri][run_params['index_start']:, :]
 
-model_trained = Lgssm(num_neurons, num_neurons, input_dim, num_lags=run_params['num_lags'],
-                      dtype=dtype, device=device, verbose=run_params['verbose'], param_props=run_params['param_props'])
+    model_trained = Lgssm(num_neurons, num_neurons, input_dim, num_lags=run_params['num_lags'],
+                          dtype=dtype, device=device, verbose=run_params['verbose'],
+                          param_props=run_params['param_props'])
 
-model_trained.emissions_weights = torch.eye(model_trained.emissions_dim, model_trained.dynamics_dim_full, device=device, dtype=dtype)
-model_trained.emissions_input_weights = torch.zeros((model_trained.emissions_dim, model_trained.input_dim_full), device=device, dtype=dtype)
+    model_trained.emissions_weights = torch.eye(model_trained.emissions_dim, model_trained.dynamics_dim_full, device=device, dtype=dtype)
+    model_trained.emissions_input_weights = torch.zeros((model_trained.emissions_dim, model_trained.input_dim_full), device=device, dtype=dtype)
+else:
+    emissions = None
+    inputs = None
+    model_trained = None
 
-model_trained.fit_em(emissions, inputs,
-                     num_steps=run_params['num_grad_steps'])
+model_trained = utils.fit_em(model_trained, emissions, inputs, num_steps=run_params['num_grad_steps'], is_parallel=is_parallel)
 
-model_trained.save(path=run_params['model_save_folder'] + '/model_trained.pkl')
+if rank == 0:
+    model_trained.save(path=run_params['model_save_folder'] + '/model_trained.pkl')
 
-if run_params['plot_figures']:
-    plotting.plot_model_params(model_trained)
+    if run_params['plot_figures']:
+        plotting.plot_model_params(model_trained)
 
