@@ -30,6 +30,7 @@ def plot_model_params(model_synth_trained, model_synth_true=None, ll_true_params
 
     for k in params_trained['trained'].keys():
         if model_synth_trained.param_props['update'][k]:
+        # if k[-6:] != 'offset':
             if k[-3:] == 'cov':
                 num_cols = model_synth_trained.dynamics_dim
             else:

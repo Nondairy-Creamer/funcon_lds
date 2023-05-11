@@ -43,7 +43,8 @@ else:
     A = np.real(u @ np.linalg.solve(u.T, np.diag(s)).T)  # reconstruct A
 
 # Set observation matrix C
-C = np.eye(nz)  # loading weights
+# C = np.eye(nz)  # loading weights
+C = 0.5 * rng.standard_normal((nz, nu))
 
 # Set input matrices B and D
 B = 0.5 * rng.standard_normal((nz, nu))  # weights from inputs to latents
@@ -82,7 +83,7 @@ yy, zz = mi.sampleLDSgauss(mmtrue, nT, uu, rng)[:2]  # sample from model
 ## Compute ML estimate for model params using EM
 #
 # Set options for EM
-optsEM = {'maxiter': 10,  # maximum # of iterations
+optsEM = {'maxiter': 20,  # maximum # of iterations
           'dlogptol': 1e-4,  # stopping tolerance
           'display': 10,  # display frequency
           # Specify which parameters to learn.  (Set to '0' or 'false' to NOT update).
@@ -91,7 +92,7 @@ optsEM = {'maxiter': 10,  # maximum # of iterations
                      'C': False,
                      'D': True,
                      'Q': True,
-                     'R': True,
+                     'R': False,
                      'Q0': True,
                      },
           }
@@ -123,20 +124,20 @@ save_dict = {'yy': yy,
 sio.savemat(save_folder, save_dict)
 
 
-###### load data from python
-# load_file = open('/home/mcreamer/Documents/python/funcon_lds/example_data/data.pkl', 'rb')
-# data_in = pickle.load(load_file)
-#
-# yy = data_in['emissions'][0].T
-# uu = data_in['inputs'][0].T
-# mm0 = {'A': data_in['params_init']['dynamics']['weights'],
-#        'B': data_in['params_init']['dynamics']['input_weights'],
-#        'C': data_in['params_init']['emissions']['weights'],
-#        'D': data_in['params_init']['emissions']['input_weights'],
-#        'Q': data_in['params_init']['dynamics']['cov'],
-#        'R': data_in['params_init']['emissions']['cov'],
-#        'Q0': data_in['params_init']['init_cov'][0],
-#        }
+##### load data from python
+load_file = open('/home/mcreamer/Documents/python/funcon_lds/example_data/data.pkl', 'rb')
+data_in = pickle.load(load_file)
+
+yy = data_in['emissions'][0].T
+uu = data_in['inputs'][0].T
+mm0 = {'A': data_in['params_init']['init']['dynamics_weights'],
+       'B': data_in['params_init']['init']['dynamics_input_weights'],
+       'C': data_in['params_init']['init']['emissions_weights'],
+       'D': data_in['params_init']['init']['emissions_input_weights'],
+       'Q': data_in['params_init']['init']['dynamics_cov'],
+       'R': data_in['params_init']['init']['emissions_cov'],
+       'Q0': data_in['params_init']['init_cov'][0],
+       }
 
 import time
 start = time.time()
@@ -156,6 +157,7 @@ plt.colorbar()
 plt.subplot(1, 2, 2)
 plt.imshow(mm1['A'])
 plt.colorbar()
+plt.title('dynamics weights')
 plt.show()
 
 plt.figure()
@@ -165,8 +167,28 @@ plt.colorbar()
 plt.subplot(1, 2, 2)
 plt.imshow(mm1['B'])
 plt.colorbar()
+plt.title('dynamics input weights')
 plt.show()
 
+plt.figure()
+plt.subplot(1, 2, 1)
+plt.imshow(mmtrue['C'])
+plt.colorbar()
+plt.subplot(1, 2, 2)
+plt.imshow(mm1['C'])
+plt.colorbar()
+plt.title('emission weights')
+plt.show()
+
+plt.figure()
+plt.subplot(1, 2, 1)
+plt.imshow(mmtrue['D'])
+plt.colorbar()
+plt.subplot(1, 2, 2)
+plt.imshow(mm1['D'])
+plt.colorbar()
+plt.title('emission input weights')
+plt.show()
 
 #
 # # Align fitted model with true model (so we can compare params)

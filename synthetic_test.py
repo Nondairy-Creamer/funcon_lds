@@ -7,6 +7,7 @@ import numpy as np
 import time
 from mpi4py import MPI
 import utilities as utils
+import scipy.io as sio
 
 
 comm = MPI.COMM_WORLD
@@ -21,26 +22,25 @@ if rank == 0:
     dtype = getattr(torch, run_params['dtype'])
     rng = np.random.default_rng(run_params['random_seed'])
 
+    # define the model, setting specific parameters
     model_true = Lgssm(run_params['dynamics_dim'], run_params['emissions_dim'], run_params['input_dim'],
                        dtype=dtype, device=device, param_props=run_params['param_props'],
                        num_lags=run_params['num_lags'])
-    # randomize the parameters (defaults are nonrandom)
     model_true.randomize_weights(rng=rng)
-    model_true.emissions_weights = torch.eye(model_true.emissions_dim, model_true.dynamics_dim_full, device=device, dtype=dtype)
-    model_true.emissions_input_weights = torch.zeros((model_true.emissions_dim, model_true.input_dim_full), device=device, dtype=dtype)
+    model_true.emissions_weights_init = np.eye(model_true.emissions_dim, model_true.dynamics_dim_full)
+    model_true.emissions_input_weights_init = np.zeros((model_true.emissions_dim, model_true.input_dim_full))
+    model_true.set_to_init()
 
     start = time.time()
     # sample from the randomized model
     data_dict = \
         model_true.sample(num_time=run_params['num_time'],
                           num_data_sets=run_params['num_data_sets'],
-                          nan_freq=run_params['nan_freq'],
+                          scattered_nan_freq=run_params['scattered_nan_freq'],
+                          lost_emission_freq=run_params['lost_emission_freq'],
+                          init_mean=np.zeros(run_params['dynamics_dim']),
                           rng=rng)
     print('Time to sample:', time.time() - start, 's')
-
-    for d in range(len(data_dict['emissions'])):
-        nan_neuron = rng.random(data_dict['emissions'][d].shape[1]) < run_params['nan_neuron_freq']
-        data_dict['emissions'][d][:, nan_neuron] = np.nan
 
     emissions = data_dict['emissions']
     inputs = data_dict['inputs']
@@ -48,14 +48,15 @@ if rank == 0:
     init_mean_true = data_dict['init_mean']
     init_cov_true = data_dict['init_cov']
 
-
     # make a new model to fit to the random model
     model_trained = Lgssm(run_params['dynamics_dim'], run_params['emissions_dim'], run_params['input_dim'],
                           dtype=dtype, device=device, verbose=run_params['verbose'], param_props=run_params['param_props'],
                           num_lags=run_params['num_lags'])
-    # model_trained.randomize_weights()
-    model_true.emissions_weights = torch.eye(model_true.emissions_dim, model_true.dynamics_dim_full, device=device, dtype=dtype)
-    model_true.emissions_input_weights = torch.zeros((model_true.emissions_dim, model_true.input_dim_full), device=device, dtype=dtype)
+    for k in model_trained.param_props['update'].keys():
+        if not model_trained.param_props['update'][k]:
+            init_key = k + '_init'
+            setattr(model_trained, init_key, getattr(model_true, init_key))
+    model_trained.set_to_init()
 
     # save the data
     data_dict['params_init'] = model_trained.get_params()
@@ -68,6 +69,9 @@ if rank == 0:
     save_file = open(run_params['synth_data_save_folder'] + '/data.pkl', 'wb')
     pickle.dump(data_dict, save_file)
     save_file.close()
+
+    sio.savemat(run_params['synth_data_save_folder'] + '/data.mat', data_dict)
+
 else:
     emissions = None
     inputs = None
