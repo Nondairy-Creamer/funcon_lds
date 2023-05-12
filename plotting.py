@@ -3,7 +3,13 @@ import numpy as np
 import matplotlib as mpl
 
 
-def plot_model_params(model_synth_trained, model_synth_true=None, ll_true_params=None):
+def plot_model_params(model_synth_trained, model_synth_true=None):
+    ll_true_params = None
+
+    if model_synth_true is not None:
+        params_true = model_synth_true.get_params()
+        ll_true_params = model_synth_true.log_likelihood[0]
+
     # Plots
     # Plot the log likelihood
     plt.figure()
@@ -24,12 +30,11 @@ def plot_model_params(model_synth_trained, model_synth_true=None, ll_true_params
     plt.ylabel('total_time')
     plt.tight_layout()
 
-    if model_synth_true is not None:
-        params_true = model_synth_true.get_params()
     params_trained = model_synth_trained.get_params()
 
     for k in params_trained['trained'].keys():
         if model_synth_trained.param_props['update'][k]:
+        # if k[-6:] != 'offset':
             if k[-3:] == 'cov':
                 num_cols = model_synth_trained.dynamics_dim
             else:

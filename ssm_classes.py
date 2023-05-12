@@ -1,9 +1,9 @@
 import torch
 import numpy as np
 import pickle
-import time
 import utilities as utils
 from mpi4py import MPI
+from scipy.interpolate import interp1d
 
 
 class Lgssm:
@@ -92,7 +92,7 @@ class Lgssm:
 
         self._pad_init_for_lags()
         # convert to tensors
-        self._set_to_init()
+        self.set_to_init()
 
     def save(self, path='trained_models/trained_model.pkl'):
         save_file = open(path, 'wb')
@@ -125,21 +125,28 @@ class Lgssm:
         self.dynamics_input_weights_init = self.dynamics_input_weights_init * time_decay[:, None, None]
 
         self.dynamics_offset_init = np.zeros(self.dynamics_dim)
-        self.dynamics_cov_init = init_std * rng.standard_normal((self.dynamics_dim, self.dynamics_dim))
-        self.dynamics_cov_init = self.dynamics_cov_init.T @ self.dynamics_cov_init / self.dynamics_dim + np.eye(self.dynamics_dim)
+
+        if self.param_props['shape']['dynamics_cov'] == 'diag':
+            self.dynamics_cov_init = np.diag(np.exp(init_std * rng.standard_normal(self.dynamics_dim)))
+        else:
+            self.dynamics_cov_init = init_std * rng.standard_normal((self.dynamics_dim, self.dynamics_dim))
+            self.dynamics_cov_init = self.dynamics_cov_init.T @ self.dynamics_cov_init / self.dynamics_dim + np.eye(self.dynamics_dim)
 
         # randomize emissions weights
         self.emissions_weights_init = init_std * rng.standard_normal((self.emissions_dim, self.dynamics_dim))
         self.emissions_input_weights_init = init_std * rng.standard_normal((self.emissions_dim, self.input_dim))
         self.emissions_offset_init = np.zeros(self.emissions_dim)
 
-        self.emissions_cov_init = init_std * rng.standard_normal((self.emissions_dim, self.emissions_dim))
-        self.emissions_cov_init = self.emissions_cov_init.T @ self.emissions_cov_init / self.emissions_dim + np.eye(self.emissions_dim)
+        if self.param_props['shape']['emissions_cov'] == 'diag':
+            self.emissions_cov_init = np.diag(np.exp(init_std * rng.standard_normal(self.dynamics_dim)))
+        else:
+            self.emissions_cov_init = init_std * rng.standard_normal((self.emissions_dim, self.emissions_dim))
+            self.emissions_cov_init = self.emissions_cov_init.T @ self.emissions_cov_init / self.emissions_dim + np.eye(self.emissions_dim)
 
         self._pad_init_for_lags()
-        self._set_to_init()
+        self.set_to_init()
 
-    def _set_to_init(self):
+    def set_to_init(self):
         self.dynamics_weights = torch.tensor(self.dynamics_weights_init, device=self.device, dtype=self.dtype)
         self.dynamics_input_weights = torch.tensor(self.dynamics_input_weights_init, device=self.device, dtype=self.dtype)
         self.dynamics_offset = torch.tensor(self.dynamics_offset_init, device=self.device, dtype=self.dtype)
@@ -197,14 +204,26 @@ class Lgssm:
         self.emissions_offset = self.emissions_offset.to(new_device)
         self.emissions_cov = self.emissions_cov.to(new_device)
 
-    def sample(self, num_time=100, init_mean=None, init_cov=None, num_data_sets=1,
-               nan_freq=0.0, rng=np.random.default_rng()):
+    def sample(self, num_time=100, init_mean=None, init_cov=None, num_data_sets=1, use_sparse_inputs=True,
+               scattered_nan_freq=0.0, lost_emission_freq=0.0, rng=np.random.default_rng()):
 
         latents_list = []
         inputs_list = []
         emissions_list = []
         init_mean_list = []
         init_cov_list = []
+
+        if use_sparse_inputs:
+            stim_time_scale = 50
+            stims_per_data_set = int(num_time / stim_time_scale)
+            num_stims = num_data_sets * stims_per_data_set
+            sparse_inputs_init = np.eye(self.input_dim)[rng.choice(self.input_dim, num_stims, replace=True)]
+
+            # upsample to full time
+            total_time = num_time * num_data_sets
+            sparse_inputs = np.zeros((total_time, self.emissions_dim))
+            sparse_inputs[::stim_time_scale, :] = sparse_inputs_init
+            sparse_inputs = np.split(sparse_inputs, num_data_sets)
 
         for d in range(num_data_sets):
             # generate a random initial mean and covariance
@@ -219,8 +238,13 @@ class Lgssm:
 
             latents = np.zeros((num_time, self.dynamics_dim_full))
             emissions = np.zeros((num_time, self.emissions_dim))
-            inputs = rng.standard_normal((num_time + self.num_lags - 1, self.input_dim))
-            inputs = self._get_lagged_data(inputs, self.num_lags, add_pad=False)
+
+            if use_sparse_inputs:
+                inputs = sparse_inputs[d]
+                inputs = self._get_lagged_data(inputs, self.num_lags, add_pad=True)
+            else:
+                inputs = rng.standard_normal((num_time + self.num_lags - 1, self.input_dim))
+                inputs = self._get_lagged_data(inputs, self.num_lags, add_pad=False)
 
             # get the initial observations
             dynamics_noise = rng.multivariate_normal(np.zeros(self.dynamics_dim_full), self.dynamics_cov, size=num_time)
@@ -251,15 +275,29 @@ class Lgssm:
                                    self.emissions_offset + \
                                    emissions_noise[t, :]
 
-            # add in nans
-            nan_mask = rng.random((num_time, self.emissions_dim)) <= nan_freq
-            emissions[nan_mask] = np.nan
-
             latents_list.append(latents)
             inputs_list.append(inputs)
             emissions_list.append(emissions)
             init_mean_list.append(init_mean)
             init_cov_list.append(init_cov)
+
+        # add in nans
+        scattered_nan_mask = rng.random((num_data_sets, num_time, self.emissions_dim)) <= scattered_nan_freq
+        lost_emission_mask = rng.random((num_data_sets, 1, self.emissions_dim)) < lost_emission_freq
+
+        # make sure each data set has at least one measurement and that all emissions were measured at least once
+        for d in range(num_data_sets):
+            if np.all(lost_emission_mask[d, :, :]):
+                lost_emission_mask[d, :, rng.integers(0, self.emissions_dim)] = False
+
+        for n in range(self.emissions_dim):
+            if np.all(lost_emission_mask[:, :, n]):
+                lost_emission_mask[:, :, n] = False
+
+        nan_mask = scattered_nan_mask | lost_emission_mask
+
+        for d in range(num_data_sets):
+            emissions_list[d][nan_mask[d, :, :]] = np.nan
 
         data_dict = {'latents': latents_list,
                      'inputs': inputs_list,
@@ -364,6 +402,20 @@ class Lgssm:
 
         return ll, filtered_means, filtered_covs, smoothed_means, smoothed_covs, smoothed_crosses
 
+    def get_ll(self, emissions, inputs, init_mean, init_cov):
+        # get the log-likelihood of the data
+        ll = 0
+
+        for d in range(len(emissions)):
+            emissions_torch = torch.tensor(emissions[d], dtype=self.dtype, device=self.device)
+            inputs_torch = torch.tensor(inputs[d], dtype=self.dtype, device=self.device)
+            init_mean_torch = torch.tensor(init_mean[d], dtype=self.dtype, device=self.device)
+            init_cov_torch = torch.tensor(init_cov[d], dtype=self.dtype, device=self.device)
+
+            ll += self.lgssm_filter(emissions_torch, inputs_torch, init_mean_torch, init_cov_torch)[0].detach().cpu().numpy()
+
+        return ll
+
     def parallel_suff_stats(self, data):
         emissions = data[0]
         inputs = data[1]
@@ -454,19 +506,30 @@ class Lgssm:
             Mu1 = torch.sum(torch.stack(Mu1_list), dim=0) / (total_time - len(emissions_list))
             Muz2 = torch.sum(torch.stack(Muz2_list), dim=0) / (total_time - len(emissions_list))
             Muz21 = torch.sum(torch.stack(Muz21_list), dim=0) / (total_time - len(emissions_list))
-            Mzy = torch.sum(torch.stack(Mzy_list), dim=0) / lte_total
-            Muy = torch.sum(torch.stack(Muy_list), dim=0) / ite_weights
-            My = torch.sum(torch.stack(My_list), dim=0) / ete_weights
+
             Mz = torch.sum(torch.stack(Mz_list), dim=0) / total_time
             Mu2 = torch.sum(torch.stack(Mu2_list), dim=0) / total_time
             Muz = torch.sum(torch.stack(Muz_list), dim=0) / total_time
 
+            # Mzy = torch.sum(torch.stack(Mzy_list), dim=0) / lte_total
+            # Muy = torch.sum(torch.stack(Muy_list), dim=0) / ite_weights
+            # My = torch.sum(torch.stack(My_list), dim=0) / ete_weights
+            Mzy = torch.sum(torch.stack(Mzy_list), dim=0) / total_time
+            Muy = torch.sum(torch.stack(Muy_list), dim=0) / total_time
+            My = torch.sum(torch.stack(My_list), dim=0) / total_time
+
             # You may not have measured a pair of neurons at the same time across any of the data sets
             # non_zero_non_diag = ete_weights != 0 & ~torch.eye(ete_weights.shape[0], device=self.device, dtype=torch.bool)
             # My[ete_weights == 0] = torch.mean(My[non_zero_non_diag])
-            My[ete_weights == 0] = 0
+            # My[ete_weights == 0] = 0
 
             # update dynamics matrix A & input matrix B
+            # append the trivial parts of the weights from input lags
+            dynamics_eye_pad = torch.eye(self.dynamics_dim * (self.num_lags - 1), device=self.device, dtype=self.dtype)
+            dynamics_zeros_pad = torch.zeros((self.dynamics_dim * (self.num_lags - 1), self.dynamics_dim), device=self.device, dtype=self.dtype)
+            dynamics_pad = torch.cat((dynamics_eye_pad, dynamics_zeros_pad), dim=1)
+            dynamics_inputs_zeros_pad = torch.zeros((self.dynamics_dim * (self.num_lags - 1), self.input_dim_full), device=self.device, dtype=self.dtype)
+
             if self.param_props['update']['dynamics_weights'] and self.param_props['update']['dynamics_input_weights']:
                 # do a joint update for A and B
                 Mlin = torch.cat((Mz12, Muz2), dim=0)  # from linear terms
@@ -485,23 +548,29 @@ class Lgssm:
                 else:
                     ABnew = torch.linalg.solve(Mquad.T, Mlin[:, :self.dynamics_dim]).T  # new A and B from regression
 
-                # append the trivial parts of the weights from input lags
-                dynamics_eye_pad = torch.eye(self.dynamics_dim * (self.num_lags - 1), device=self.device, dtype=self.dtype)
-                dynamics_zeros_pad = torch.zeros((self.dynamics_dim * (self.num_lags - 1), self.dynamics_dim), device=self.device, dtype=self.dtype)
-                dynamics_pad = torch.cat((dynamics_eye_pad, dynamics_zeros_pad), dim=1)
+                self.dynamics_weights = ABnew[:, :nz]  # new A
+                self.dynamics_input_weights = ABnew[:, nz:]
 
-                dynamics_inputs_zeros_pad = torch.zeros((self.dynamics_dim * (self.num_lags - 1), self.input_dim_full), device=self.device, dtype=self.dtype)
-
-                self.dynamics_weights = torch.cat((ABnew[:, :nz], dynamics_pad), dim=0)  # new A
-                self.dynamics_input_weights = torch.cat((ABnew[:, nz:], dynamics_inputs_zeros_pad), dim=0)  # new B
+                self.dynamics_weights = torch.cat((self.dynamics_weights, dynamics_pad), dim=0)  # new A
+                self.dynamics_input_weights = torch.cat((self.dynamics_input_weights, dynamics_inputs_zeros_pad), dim=0)  # new B
 
             elif self.param_props['update']['dynamics_weights']:  # update dynamics matrix A only
-                Anew = torch.linalg.solve(Mz1.T, Mz12 - Muz21.T @ self.dynamics_input_weights.T).T  # new A
-                self.dynamics_weights = Anew
+                self.dynamics_weights = torch.linalg.solve(Mz1.T, (Mz12 - Muz21.T @ self.dynamics_input_weights.T)[:, :self.dynamics_dim]).T  # new A
+                self.dynamics_weights = torch.cat((self.dynamics_weights, dynamics_pad), dim=0)  # new A
 
             elif self.param_props['update']['dynamics_input_weights']:  # update input matrix B only
-                Bnew = torch.linalg.solve(Mu1.T, Muz2 - Muz21 @ self.dynamics_weights.T).T  # new B
-                self.dynamics_input_weights = Bnew
+                if self.param_props['shape']['dynamics_input_weights'] == 'diag':
+                    if self.param_props['mask']['dynamics_input_weights'] is None:
+                        self.param_props['mask']['dynamics_input_weights'] = torch.eye(self.dynamics_dim, self.input_dim, device=self.device, dtype=torch.bool)
+
+                    # make the of which parameters to fit
+                    mask = torch.tile(self.param_props['mask']['dynamics_input_weights'].T, (self.num_lags, 1))
+
+                    self.dynamics_input_weights = utils.solve_masked(Mu1.T, (Muz2 - Muz21 @ self.dynamics_weights.T)[:, :self.dynamics_dim], mask).T  # new A and B from regression
+                else:
+                    self.dynamics_input_weights = torch.linalg.solve(Mu1.T, (Muz2 - Muz21 @ self.dynamics_weights.T)[:, :self.dynamics_dim]).T  # new B
+
+                self.dynamics_input_weights = torch.cat((self.dynamics_input_weights, dynamics_inputs_zeros_pad), dim=0)  # new B
 
             # Update noise covariance Q
             if self.param_props['update']['dynamics_cov']:
@@ -509,6 +578,11 @@ class Lgssm:
                                      - self.dynamics_weights @ Mz12 - Mz12.T @ self.dynamics_weights.T
                                      - self.dynamics_input_weights @ Muz2 - Muz2.T @ self.dynamics_input_weights.T
                                      + self.dynamics_weights @ Muz21.T @ self.dynamics_input_weights.T + self.dynamics_input_weights @ Muz21 @ self.dynamics_weights.T) #/ (nt - 1)
+
+                if self.param_props['shape']['dynamics_cov'] == 'diag':
+                    self.dynamics_cov = torch.diag(torch.diag(self.dynamics_cov))
+
+                self.dynamics_cov = 0.5 * (self.dynamics_cov + self.dynamics_cov.T)
 
             # update obs matrix C & input matrix D
             if self.param_props['update']['emissions_weights'] and self.param_props['update']['emissions_input_weights']:
@@ -532,6 +606,11 @@ class Lgssm:
                                       - self.emissions_input_weights @ Muy - Muy.T @ self.emissions_input_weights.T
                                       + self.emissions_weights @ Muz.T @ self.emissions_input_weights.T + self.emissions_input_weights @ Muz @ self.emissions_weights.T)
 
+                if self.param_props['shape']['emissions_cov'] == 'diag':
+                    self.emissions_cov = torch.diag(torch.diag(self.emissions_cov))
+
+                self.emissions_cov = 0.5 * (self.emissions_cov + self.emissions_cov.T)
+
             return log_likelihood
 
     def get_suff_stats(self, emissions, inputs, init_mean, init_cov):
@@ -540,7 +619,8 @@ class Lgssm:
         ll, filtered_means, filtered_covs, smoothed_means, smoothed_covs, smoothed_crosses = \
             self.lgssm_smoother(emissions, inputs, init_mean, init_cov)
 
-        y = torch.where(torch.isnan(emissions), 0, emissions)
+        # y = torch.where(torch.isnan(emissions), 0, emissions)
+        y = torch.where(torch.isnan(emissions), (self.emissions_weights @ smoothed_means.T).T, emissions)
 
         # =============== Update dynamics parameters ==============
         # Compute sufficient statistics for latents
@@ -555,8 +635,7 @@ class Lgssm:
 
         # =============== Update observation parameters ==============
         # Compute sufficient statistics
-        Mz_emis = smoothed_covs[-1, :, :] + smoothed_means[-1, :, None] * smoothed_means[-1, None,
-                                                                          :]  # re-use Mz1 if possible
+        Mz_emis = smoothed_covs[-1, :, :] + smoothed_means[-1, :, None] * smoothed_means[-1, None, :]  # re-use Mz1 if possible
         Mu_emis = inputs[0, :, None] * inputs[0, None, :]  # reuse Mu
         Muz_emis = inputs[0, :, None] * smoothed_means[0, None, :]  # reuse Muz
         Mzy = smoothed_means.T @ y  # E[zz@yy']
