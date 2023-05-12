@@ -38,7 +38,6 @@ if rank == 0:
                           num_data_sets=run_params['num_data_sets'],
                           scattered_nan_freq=run_params['scattered_nan_freq'],
                           lost_emission_freq=run_params['lost_emission_freq'],
-                          init_mean=np.zeros(run_params['dynamics_dim']),
                           rng=rng)
     print('Time to sample:', time.time() - start, 's')
 
@@ -47,6 +46,10 @@ if rank == 0:
     latents_true = data_dict['latents']
     init_mean_true = data_dict['init_mean']
     init_cov_true = data_dict['init_cov']
+
+    # get the log likelihood of the true data
+    ll_true_params = model_true.get_ll(emissions, inputs, init_mean_true, init_cov_true)
+    model_true.log_likelihood = [ll_true_params]
 
     # make a new model to fit to the random model
     model_trained = Lgssm(run_params['dynamics_dim'], run_params['emissions_dim'], run_params['input_dim'],
@@ -84,29 +87,7 @@ if rank == 0:
     model_true.save(path=run_params['model_save_folder'] + '/model_true.pkl')
     model_trained.save(path=run_params['model_save_folder'] + '/model_trained.pkl')
 
-    # get the log-likelihood of the data given the true parameters
-    # convert the emissions, inputs, init_mean, and init_cov into tensors
-    emissions_torch, inputs_torch = model_true.standardize_inputs(emissions, inputs)
-
-    init_mean_true_torch = [torch.tensor(i, dtype=dtype, device=device)[None, :] for i in init_mean_true]
-    init_cov_true_torch = [torch.tensor(i, dtype=dtype, device=device)[None, :, :] for i in init_cov_true]
-    init_mean_true_torch = torch.cat(init_mean_true_torch, dim=0)
-    init_cov_true_torch = torch.cat(init_cov_true_torch, dim=0)
-    ll_true_params = 0
-    ll_trained_params = 0
-
-    for d in range(len(emissions_torch)):
-        emi_in = emissions_torch[d]
-        inp_in = inputs_torch[d]
-        im_in = init_mean_true_torch[d]
-        ic_in = init_cov_true_torch[d]
-        ll_true_params += model_true.lgssm_filter(emi_in, inp_in, im_in, ic_in)[0].detach().cpu().numpy()
-        ll_trained_params += model_trained.lgssm_filter(emi_in, inp_in, im_in, ic_in)[0].detach().cpu().numpy()
-
-    print('True log-likelihood:', ll_true_params)
-    print('Trained log-likelihood:', ll_trained_params)
-
     # plotting
     if run_params['plot_figures']:
-        plotting.plot_model_params(model_trained, model_true, ll_true_params)
+        plotting.plot_model_params(model_trained, model_true)
 

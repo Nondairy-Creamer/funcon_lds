@@ -4,7 +4,7 @@ import pickle
 import preprocessing as pp
 
 model_true = None
-has_ground_truth = True
+has_ground_truth = False
 
 if len(sys.argv) == 2:
     has_ground_truth = sys.argv[1]
