@@ -4,20 +4,12 @@ import time
 from mpi4py import MPI
 
 
-def batch_Ax(A, x):
-    return (A @ x[:, :, None])[:, :, 0]
-
-
 def block(block_list, dims=(2, 1)):
     layer = []
     for i in block_list:
         layer.append(torch.cat(i, dim=dims[0]))
 
     return torch.cat(layer, dim=dims[1])
-
-
-def batch_trans(batch_matrix):
-    return torch.permute(batch_matrix, (0, 2, 1))
 
 
 def estimate_cov(a):
@@ -56,26 +48,6 @@ def solve_masked(A, b, mask):
         A_nonzero = A[:, non_zero_loc]
 
         x_hat[non_zero_loc, i] = torch.linalg.lstsq(A_nonzero, b_i, rcond=None)[0]
-
-    return x_hat
-
-
-def solve_half_diag_np(A, b):
-    # solves the linear equation b=Ax where x is a block matrix with the lower block diagonal
-    # attempt at diagonal fitting
-    num_dim = b.shape[1]
-    full_block = np.ones((num_dim, num_dim))
-    diag_block = np.eye(num_dim)
-    non_zero_mat = np.concatenate((full_block, diag_block), axis=0)
-    x_hat = np.zeros((A.shape[1], b.shape[1]))
-
-    for i in range(num_dim):
-        non_zero_loc = non_zero_mat[:, i] != 0
-
-        b_i = b[:, i]
-        A_nonzero = A[:, non_zero_loc]
-
-        x_hat[non_zero_loc, i] = np.linalg.lstsq(A_nonzero, b_i, rcond=None)[0]
 
     return x_hat
 
