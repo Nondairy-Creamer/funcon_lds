@@ -34,13 +34,13 @@ else:
         model_name = model_name[:-8]
     model_folder = Path(max_dir)
 
-model_trained_path = model_folder / (model_name + '.pkl')
+model_trained_path = model_folder / (model_name + '_trained.pkl')
 model_trained_file = open(model_trained_path, 'rb')
 model_trained = pickle.load(model_trained_file)
 model_trained_file.close()
 
 # check if a true model exists
-model_true_path = model_folder / (model_name + '_trained.pkl')
+model_true_path = model_folder / (model_name + '_true.pkl')
 
 if model_true_path.exists():
     dtype = model_trained.dtype
