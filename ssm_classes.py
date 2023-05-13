@@ -204,7 +204,7 @@ class Lgssm:
         self.emissions_offset = self.emissions_offset.to(new_device)
         self.emissions_cov = self.emissions_cov.to(new_device)
 
-    def sample(self, num_time=100, init_mean=None, init_cov=None, num_data_sets=1, input_time_scale=0.0,
+    def sample(self, num_time=100, init_mean=None, init_cov=None, num_data_sets=1, input_time_scale=0,
                scattered_nan_freq=0.0, lost_emission_freq=0.0, rng=np.random.default_rng()):
 
         latents_list = []

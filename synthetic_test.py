@@ -8,6 +8,7 @@ import time
 from mpi4py import MPI
 import utilities as utils
 import scipy.io as sio
+import os
 
 
 comm = MPI.COMM_WORLD
@@ -84,9 +85,14 @@ else:
 model_trained = utils.fit_em(model_trained, emissions, inputs, num_steps=run_params['num_train_steps'], is_parallel=is_parallel)
 
 if rank == 0:
+    if 'SLURM_JOB_ID' in os.environ:
+        slurm_tag = '_' + os.environ['SLURM_JOB_ID']
+    else:
+        slurm_tag = ''
+
     # save the model
-    model_true.save(path=run_params['model_save_folder'] + '/model_true.pkl')
-    model_trained.save(path=run_params['model_save_folder'] + '/model_trained.pkl')
+    model_true.save(path=run_params['model_save_folder'] + '/model_true' + slurm_tag + '.pkl')
+    model_trained.save(path=run_params['model_save_folder'] + '/model_trained' + slurm_tag + '.pkl')
 
     # plotting
     if run_params['plot_figures']:
