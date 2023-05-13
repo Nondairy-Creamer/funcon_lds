@@ -90,8 +90,8 @@ if rank == 0:
     else:
         slurm_tag = ''
 
-    true_model_save_path = run_params['model_save_folder'] + '/model_true' + slurm_tag + '.pkl'
-    trained_model_save_path = run_params['model_save_folder'] + '/model_trained' + slurm_tag + '.pkl'
+    true_model_save_path = run_params['model_save_folder'] + '/model' + slurm_tag + '_true.pkl'
+    trained_model_save_path = run_params['model_save_folder'] + '/model' + slurm_tag + '_trained.pkl'
 
     # save the model
     model_true.save(path=true_model_save_path)

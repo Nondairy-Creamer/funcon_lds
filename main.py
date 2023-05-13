@@ -95,14 +95,14 @@ if rank == 0:
     else:
         slurm_tag = ''
 
-    true_model_save_path = run_params['model_save_folder'] + '/model_true' + slurm_tag + '.pkl'
-    trained_model_save_path = run_params['model_save_folder'] + '/model_trained' + slurm_tag + '.pkl'
+    true_model_save_path = run_params['model_save_folder'] + '/model' + slurm_tag + '_true.pkl'
+    trained_model_save_path = run_params['model_save_folder'] + '/model' + slurm_tag + '_trained.pkl'
 
     # if there is an old "true" model delete it because it doesn't correspond to this trained model
     if os.path.exists(true_model_save_path):
         os.remove(true_model_save_path)
 
-    model_trained.save(path=run_params['model_save_folder'] + '/model_trained' + slurm_tag + '.pkl')
+    model_trained.save(path=trained_model_save_path)
 
     if run_params['plot_figures']:
         plotting.plot_model_params(model_trained)
