@@ -496,10 +496,6 @@ class Lgssm:
 
             total_time = np.sum(nt)
 
-            lte_total = torch.sum(torch.stack([i['latent_to_emission'] for i in suff_stats]), dim=0)
-            ite_weights = torch.sum(torch.stack([i['input_to_emission'] for i in suff_stats]), dim=0)
-            ete_weights = torch.sum(torch.stack([i['emission_to_emission'] for i in suff_stats]), dim=0)
-
             Mz1 = torch.sum(torch.stack(Mz1_list), dim=0) / (total_time - len(emissions_list))
             Mz2 = torch.sum(torch.stack(Mz2_list), dim=0) / (total_time - len(emissions_list))
             Mz12 = torch.sum(torch.stack(Mz12_list), dim=0) / (total_time - len(emissions_list))
@@ -511,17 +507,9 @@ class Lgssm:
             Mu2 = torch.sum(torch.stack(Mu2_list), dim=0) / total_time
             Muz = torch.sum(torch.stack(Muz_list), dim=0) / total_time
 
-            # Mzy = torch.sum(torch.stack(Mzy_list), dim=0) / lte_total
-            # Muy = torch.sum(torch.stack(Muy_list), dim=0) / ite_weights
-            # My = torch.sum(torch.stack(My_list), dim=0) / ete_weights
             Mzy = torch.sum(torch.stack(Mzy_list), dim=0) / total_time
             Muy = torch.sum(torch.stack(Muy_list), dim=0) / total_time
             My = torch.sum(torch.stack(My_list), dim=0) / total_time
-
-            # You may not have measured a pair of neurons at the same time across any of the data sets
-            # non_zero_non_diag = ete_weights != 0 & ~torch.eye(ete_weights.shape[0], device=self.device, dtype=torch.bool)
-            # My[ete_weights == 0] = torch.mean(My[non_zero_non_diag])
-            # My[ete_weights == 0] = 0
 
             # update dynamics matrix A & input matrix B
             # append the trivial parts of the weights from input lags
@@ -646,20 +634,6 @@ class Lgssm:
         Mu2 = Mu1 + Mu_emis
         Muz = Muz2 + Muz_emis
 
-        # # get number of nan time points
-        latent_to_emission = torch.zeros((self.dynamics_dim_full, self.dynamics_dim), device=self.device, dtype=self.dtype)
-        input_to_emission = torch.zeros((self.input_dim_full, self.dynamics_dim), device=self.device, dtype=self.dtype)
-        emission_to_emission = torch.zeros((self.dynamics_dim, self.dynamics_dim), device=self.device, dtype=self.dtype)
-        for j in range(self.dynamics_dim):
-            for i in range(self.dynamics_dim_full):
-                latent_to_emission[i, j] = torch.sum(~(torch.isnan(smoothed_means[:, i]) | torch.isnan(emissions[:, j])))
-
-            for i in range(self.input_dim_full):
-                input_to_emission[i, j] = torch.sum(~(torch.isnan(inputs[:, i]) | torch.isnan(emissions[:, j])))
-
-            for i in range(self.dynamics_dim):
-                emission_to_emission[i, j] = torch.sum(~(torch.isnan(emissions[:, i]) | torch.isnan(emissions[:, j])))
-
         suff_stats = {'Mz1': Mz1,
                       'Mz2': Mz2,
                       'Mz12': Mz12,
@@ -675,9 +649,6 @@ class Lgssm:
                       'Muz': Muz,
 
                       'nt': nt,
-                      'latent_to_emission': latent_to_emission,
-                      'input_to_emission': input_to_emission,
-                      'emission_to_emission': emission_to_emission,
                       }
 
         return ll, suff_stats
