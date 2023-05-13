@@ -5,6 +5,7 @@ from ssm_classes import Lgssm
 import plotting
 from mpi4py import MPI
 import utilities as utils
+import os
 
 
 from torch.profiler import profile, record_function, ProfilerActivity, schedule, tensorboard_trace_handler
@@ -89,7 +90,19 @@ else:
 model_trained = utils.fit_em(model_trained, emissions, inputs, num_steps=run_params['num_train_steps'], is_parallel=is_parallel)
 
 if rank == 0:
-    model_trained.save(path=run_params['model_save_folder'] + '/model_trained.pkl')
+    if 'SLURM_JOB_ID' in os.environ:
+        slurm_tag = '_' + os.environ['SLURM_JOB_ID']
+    else:
+        slurm_tag = ''
+
+    true_model_save_path = run_params['model_save_folder'] + '/model_true' + slurm_tag + '.pkl'
+    trained_model_save_path = run_params['model_save_folder'] + '/model_trained' + slurm_tag + '.pkl'
+
+    # if there is an old "true" model delete it because it doesn't correspond to this trained model
+    if os.path.exists(true_model_save_path):
+        os.remove(true_model_save_path)
+
+    model_trained.save(path=run_params['model_save_folder'] + '/model_trained' + slurm_tag + '.pkl')
 
     if run_params['plot_figures']:
         plotting.plot_model_params(model_trained)

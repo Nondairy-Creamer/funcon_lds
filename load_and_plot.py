@@ -1,29 +1,51 @@
 import sys
 import plotting
 import pickle
-import preprocessing as pp
+import os
+from pathlib import Path
+
 
 model_true = None
 has_ground_truth = False
 
 if len(sys.argv) == 2:
-    has_ground_truth = sys.argv[1]
+    model_path = Path(sys.argv[1])
+    model_folder = model_path.parent
+    model_name = model_path.stem
 
-if has_ground_truth:
-    run_params = pp.get_params(param_name='params_synth')
 else:
-    run_params = pp.get_params(param_name='params')
+    # search for the most recently generated model
+    max_mtime = 0
+    max_file = ''
+    max_dir = ''
+    search_dir = 'trained_models'
 
-model_trained_path = run_params['model_save_folder'] + '/model_trained.pkl'
+    for dirname, subdirs, files in os.walk(search_dir):
+        for fname in files:
+            full_path = os.path.join(dirname, fname)
+            mtime = os.stat(full_path).st_mtime
+            if mtime > max_mtime:
+                max_mtime = mtime
+                max_dir = dirname
+                max_file = fname
+
+    model_name = Path(max_file).stem
+    if model_name[-8:] == '_trained':
+        model_name = model_name[:-8]
+    model_folder = Path(max_dir)
+
+model_trained_path = model_folder / (model_name + '.pkl')
 model_trained_file = open(model_trained_path, 'rb')
 model_trained = pickle.load(model_trained_file)
 model_trained_file.close()
 
-if has_ground_truth:
+# check if a true model exists
+model_true_path = model_folder / (model_name + '_trained.pkl')
+
+if model_true_path.exists():
     dtype = model_trained.dtype
     device = model_trained.device
 
-    model_true_path = run_params['model_save_folder'] + '/model_true.pkl'
     model_true_file = open(model_true_path, 'rb')
     model_true = pickle.load(model_true_file)
     model_true_file.close()

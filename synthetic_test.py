@@ -90,9 +90,12 @@ if rank == 0:
     else:
         slurm_tag = ''
 
+    true_model_save_path = run_params['model_save_folder'] + '/model_true' + slurm_tag + '.pkl'
+    trained_model_save_path = run_params['model_save_folder'] + '/model_trained' + slurm_tag + '.pkl'
+
     # save the model
-    model_true.save(path=run_params['model_save_folder'] + '/model_true' + slurm_tag + '.pkl')
-    model_trained.save(path=run_params['model_save_folder'] + '/model_trained' + slurm_tag + '.pkl')
+    model_true.save(path=true_model_save_path)
+    model_trained.save(path=trained_model_save_path)
 
     # plotting
     if run_params['plot_figures']:
