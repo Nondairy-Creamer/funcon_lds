@@ -41,11 +41,11 @@ class Lgssm:
 
         self.param_props = {'update': {'dynamics_weights': True,
                                        'dynamics_input_weights': True,
-                                       'dynamics_offset': True,
+                                       'dynamics_offset': False,
                                        'dynamics_cov': True,
                                        'emissions_weights': True,
                                        'emissions_input_weights': True,
-                                       'emissions_offset': True,
+                                       'emissions_offset': False,
                                        'emissions_cov': True,
                                        },
 
@@ -204,7 +204,7 @@ class Lgssm:
         self.emissions_offset = self.emissions_offset.to(new_device)
         self.emissions_cov = self.emissions_cov.to(new_device)
 
-    def sample(self, num_time=100, init_mean=None, init_cov=None, num_data_sets=1, use_sparse_inputs=True,
+    def sample(self, num_time=100, init_mean=None, init_cov=None, num_data_sets=1, input_time_scale=0.0,
                scattered_nan_freq=0.0, lost_emission_freq=0.0, rng=np.random.default_rng()):
 
         latents_list = []
@@ -213,16 +213,15 @@ class Lgssm:
         init_mean_list = []
         init_cov_list = []
 
-        if use_sparse_inputs:
-            stim_time_scale = 50
-            stims_per_data_set = int(num_time / stim_time_scale)
+        if input_time_scale != 0:
+            stims_per_data_set = int(num_time / input_time_scale)
             num_stims = num_data_sets * stims_per_data_set
             sparse_inputs_init = np.eye(self.input_dim)[rng.choice(self.input_dim, num_stims, replace=True)]
 
             # upsample to full time
             total_time = num_time * num_data_sets
             sparse_inputs = np.zeros((total_time, self.emissions_dim))
-            sparse_inputs[::stim_time_scale, :] = sparse_inputs_init
+            sparse_inputs[::input_time_scale, :] = sparse_inputs_init
             sparse_inputs = np.split(sparse_inputs, num_data_sets)
 
         for d in range(num_data_sets):
@@ -239,7 +238,7 @@ class Lgssm:
             latents = np.zeros((num_time, self.dynamics_dim_full))
             emissions = np.zeros((num_time, self.emissions_dim))
 
-            if use_sparse_inputs:
+            if input_time_scale != 0:
                 inputs = sparse_inputs[d]
                 inputs = self._get_lagged_data(inputs, self.num_lags, add_pad=True)
             else:

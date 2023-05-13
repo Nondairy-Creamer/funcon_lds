@@ -1,4 +1,4 @@
-data_path: C:\Users\mcreamer\Documents\data_sets\funcon
+data_path: /home/mcreamer/Documents/data_sets/fun_con/
 # some data sets are unreliable, remove them
 bad_data_sets: [0, 4, 6, 10, 11, 15, 17, 24, 35, 37, 45]
 
@@ -15,35 +15,38 @@ frac_neuron_coverage: 0.0
 # for a neuron to be included in the dataset, it must be in at least this fraction of the recordings
 # this is not a principled threshold, (you could have 90 bad recordings and 10 good ones), but it's a quick heuristic
 # to reduce dataset size
-minimum_frac_measured: 0.0
-
-num_lags: 2
+minimum_frac_measured: 0.3
 
 param_props:
   update:
+    dynamics_weights: True
+    dynamics_input_weights: True
     dynamics_offset: False
+    dynamics_cov: True
     emissions_weights: False
     emissions_input_weights: False
     emissions_offset: False
+    emissions_cov: True
 
   shape:
     dynamics_input_weights: diag
     dynamics_cov: full
     emissions_cov: full
 
+  mask:
+    dynamics_input_weights: Null
+
 device: cpu
 dtype: float64
 
 # gradient descent parameters
 # choices are: gradient_descent and batch_sgd
+num_lags: 4
 fit_type: em
-num_grad_steps: 10
-learning_rate: 0.001
+num_train_steps: 150
 verbose: True
-random_seed: null
 
-plot_figures: False
-save_model: True
+plot_figures: True
 model_save_folder: trained_models
 
 

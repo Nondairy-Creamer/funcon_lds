@@ -47,12 +47,10 @@ if rank == 0:
         inputs_unaligned.pop(bd)
         stim_cell_ids.pop(bd)
 
-    data_start = 0
-    data_end = 10
-    emissions_unaligned = emissions_unaligned[data_start:data_end]
-    cell_ids_unaligned = cell_ids_unaligned[data_start:data_end]
-    inputs_unaligned = inputs_unaligned[data_start:data_end]
-    stim_cell_ids = stim_cell_ids[data_start:data_end]
+    emissions_unaligned = emissions_unaligned[:run_params['num_data_sets']]
+    cell_ids_unaligned = cell_ids_unaligned[:run_params['num_data_sets']]
+    inputs_unaligned = inputs_unaligned[:run_params['num_data_sets']]
+    stim_cell_ids = stim_cell_ids[:run_params['num_data_sets']]
 
     # choose a subset of the data sets to maximize the number of recordings * the number of neurons included
     cell_ids, emissions, best_runs, inputs = \
@@ -88,7 +86,7 @@ else:
     inputs = None
     model_trained = None
 
-model_trained = utils.fit_em(model_trained, emissions, inputs, num_steps=run_params['num_grad_steps'], is_parallel=is_parallel)
+model_trained = utils.fit_em(model_trained, emissions, inputs, num_steps=run_params['num_train_steps'], is_parallel=is_parallel)
 
 if rank == 0:
     model_trained.save(path=run_params['model_save_folder'] + '/model_trained.pkl')

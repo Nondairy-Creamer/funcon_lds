@@ -38,6 +38,7 @@ if rank == 0:
                           num_data_sets=run_params['num_data_sets'],
                           scattered_nan_freq=run_params['scattered_nan_freq'],
                           lost_emission_freq=run_params['lost_emission_freq'],
+                          input_time_scale=run_params['input_time_scale'],
                           rng=rng)
     print('Time to sample:', time.time() - start, 's')
 
@@ -80,7 +81,7 @@ else:
     inputs = None
     model_trained = None
 
-model_trained = utils.fit_em(model_trained, emissions, inputs, num_steps=run_params['num_grad_steps'], is_parallel=is_parallel)
+model_trained = utils.fit_em(model_trained, emissions, inputs, num_steps=run_params['num_train_steps'], is_parallel=is_parallel)
 
 if rank == 0:
     # save the model
