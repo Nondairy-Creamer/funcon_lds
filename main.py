@@ -47,6 +47,13 @@ if rank == 0:
         inputs_unaligned.pop(bd)
         stim_cell_ids.pop(bd)
 
+    data_start = 0
+    data_end = 10
+    emissions_unaligned = emissions_unaligned[data_start:data_end]
+    cell_ids_unaligned = cell_ids_unaligned[data_start:data_end]
+    inputs_unaligned = inputs_unaligned[data_start:data_end]
+    stim_cell_ids = stim_cell_ids[data_start:data_end]
+
     # choose a subset of the data sets to maximize the number of recordings * the number of neurons included
     cell_ids, emissions, best_runs, inputs = \
         pp.get_combined_dataset(emissions_unaligned, cell_ids_unaligned, stim_cell_ids, inputs_unaligned,
