@@ -543,7 +543,7 @@ class Lgssm:
 
                 # check the largest eigenvalue of the dynamics matrix
                 abs_eigs = torch.abs(torch.linalg.eigvals(self.dynamics_weights))
-                if abs_eigs >= 1:
+                if torch.max(abs_eigs) >= 1:
                     warnings.warn('Largest eigenvalue of the dynamics matrix is:' + str(abs_eigs))
 
             elif self.param_props['update']['dynamics_weights']:  # update dynamics matrix A only
@@ -574,7 +574,7 @@ class Lgssm:
                 if self.param_props['shape']['dynamics_cov'] == 'diag':
                     self.dynamics_cov = torch.diag(torch.diag(self.dynamics_cov))
 
-                self.dynamics_cov = 0.5 * (self.dynamics_cov + self.dynamics_cov.T)
+                self.dynamics_cov = 0.5 * self.dynamics_cov + 0.5 * self.dynamics_cov.T
 
             # update obs matrix C & input matrix D
             if self.param_props['update']['emissions_weights'] and self.param_props['update']['emissions_input_weights']:
@@ -601,7 +601,7 @@ class Lgssm:
                 if self.param_props['shape']['emissions_cov'] == 'diag':
                     self.emissions_cov = torch.diag(torch.diag(self.emissions_cov))
 
-                self.emissions_cov = 0.5 * (self.emissions_cov + self.emissions_cov.T)
+                self.emissions_cov = 0.5 * self.emissions_cov + 0.5 * self.emissions_cov.T
 
             return log_likelihood
 
