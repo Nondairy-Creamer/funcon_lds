@@ -542,9 +542,9 @@ class Lgssm:
                 self.dynamics_input_weights = torch.cat((self.dynamics_input_weights, dynamics_inputs_zeros_pad), dim=0)  # new B
 
                 # check the largest eigenvalue of the dynamics matrix
-                abs_eigs = torch.abs(torch.linalg.eigvals(self.dynamics_weights))
-                if torch.max(abs_eigs) >= 1:
-                    warnings.warn('Largest eigenvalue of the dynamics matrix is:' + str(abs_eigs))
+                max_abs_eig = torch.max(torch.abs(torch.linalg.eigvals(self.dynamics_weights)))
+                if max_abs_eig >= 1:
+                    warnings.warn('Largest eigenvalue of the dynamics matrix is:' + str(max_abs_eig))
 
             elif self.param_props['update']['dynamics_weights']:  # update dynamics matrix A only
                 self.dynamics_weights = torch.linalg.solve(Mz1.T, (Mz12 - Muz21.T @ self.dynamics_input_weights.T)[:, :self.dynamics_dim]).T  # new A
@@ -602,6 +602,12 @@ class Lgssm:
                     self.emissions_cov = torch.diag(torch.diag(self.emissions_cov))
 
                 self.emissions_cov = 0.5 * self.emissions_cov + 0.5 * self.emissions_cov.T
+
+            if not torch.all(self.dynamics_cov == self.dynamics_cov.T):
+                warnings.warn('dynamics_cov is not symmetric')
+
+            if not torch.all(self.emissions_cov == self.emissions_cov.T):
+                warnings.warn('emissions_cov is not symmetric')
 
             return log_likelihood
 
