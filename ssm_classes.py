@@ -424,7 +424,7 @@ class Lgssm:
 
         return ll, suff_stats
 
-    def em_step_pillow(self, emissions_list, inputs_list, init_mean_list, init_cov_list, is_parallel=False):
+    def em_step(self, emissions_list, inputs_list, init_mean_list, init_cov_list, is_parallel=False):
         # mm = runMstep_LDSgaussian(yy,uu,mm,zzmu,zzcov,zzcov_d1,optsEM)
         #
         # Run M-step updates for LDS-Gaussian model
@@ -540,6 +540,11 @@ class Lgssm:
 
                 self.dynamics_weights = torch.cat((self.dynamics_weights, dynamics_pad), dim=0)  # new A
                 self.dynamics_input_weights = torch.cat((self.dynamics_input_weights, dynamics_inputs_zeros_pad), dim=0)  # new B
+
+                # check the largest eigenvalue of the dynamics matrix
+                abs_eigs = torch.abs(torch.linalg.eigvals(self.dynamics_weights))
+                if abs_eigs >= 1:
+                    print('WARNING: Largest eigenvalue of the dynamics matrix is:', abs_eigs)
 
             elif self.param_props['update']['dynamics_weights']:  # update dynamics matrix A only
                 self.dynamics_weights = torch.linalg.solve(Mz1.T, (Mz12 - Muz21.T @ self.dynamics_input_weights.T)[:, :self.dynamics_dim]).T  # new A

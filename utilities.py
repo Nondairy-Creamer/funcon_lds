@@ -79,7 +79,7 @@ def fit_em(model, emissions_list, inputs_list, init_mean=None, init_cov=None, nu
         if is_parallel:
             model = comm.bcast(model, root=0)
 
-        ll = model.em_step_pillow(emissions, inputs, init_mean, init_cov, is_parallel=is_parallel)
+        ll = model.em_step(emissions, inputs, init_mean, init_cov, is_parallel=is_parallel)
 
         if ll is None:
             continue
