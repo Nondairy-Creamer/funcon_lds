@@ -3,7 +3,7 @@ import numpy as np
 import pickle
 import utilities as utils
 from mpi4py import MPI
-from scipy.interpolate import interp1d
+import warnings
 
 
 class Lgssm:
@@ -544,7 +544,7 @@ class Lgssm:
                 # check the largest eigenvalue of the dynamics matrix
                 abs_eigs = torch.abs(torch.linalg.eigvals(self.dynamics_weights))
                 if abs_eigs >= 1:
-                    print('WARNING: Largest eigenvalue of the dynamics matrix is:', abs_eigs)
+                    warnings.warn('Largest eigenvalue of the dynamics matrix is:' + str(abs_eigs))
 
             elif self.param_props['update']['dynamics_weights']:  # update dynamics matrix A only
                 self.dynamics_weights = torch.linalg.solve(Mz1.T, (Mz12 - Muz21.T @ self.dynamics_input_weights.T)[:, :self.dynamics_dim]).T  # new A
