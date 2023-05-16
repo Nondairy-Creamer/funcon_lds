@@ -2,15 +2,16 @@ device: cpu
 dtype: float64
 
 # data parameters
-dynamics_dim: 80
-emissions_dim: 80
-input_dim: 80
-num_time: 5000
-num_data_sets: 56
+dynamics_dim: 5
+emissions_dim: 5
+input_dim: 5
+num_time: 1000
+num_data_sets: 1
 scattered_nan_freq: 0.0
-lost_emission_freq: 0.5
-num_lags: 4
-input_time_scale: 50
+lost_emission_freq: 0.0
+dynamics_lags: 1
+dynamics_input_lags: 1
+input_time_scale: 0
 
 # initialize a linear gaussian ssm model
 param_props:
@@ -33,7 +34,7 @@ param_props:
     dynamics_input_weights: Null
 
 # training parameters
-num_train_steps: 40
+num_train_steps: 20
 verbose: True
 random_seed: 0
 

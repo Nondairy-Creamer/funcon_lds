@@ -43,9 +43,10 @@ dtype: float64
 
 # gradient descent parameters
 # choices are: gradient_descent and batch_sgd
-num_lags: 4
+dynamics_lags: 2
+dynamics_input_lags: 4
 fit_type: em
-num_train_steps: 150
+num_train_steps: 50
 verbose: True
 
 plot_figures: True
