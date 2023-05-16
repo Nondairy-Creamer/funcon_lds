@@ -26,7 +26,7 @@ if rank == 0:
     # define the model, setting specific parameters
     model_true = Lgssm(run_params['dynamics_dim'], run_params['emissions_dim'], run_params['input_dim'],
                        dtype=dtype, device=device, param_props=run_params['param_props'],
-                       num_lags=run_params['num_lags'])
+                       dynamics_lags=run_params['dynamics_lags'], dynamics_input_lags=run_params['dynamics_input_lags'])
     model_true.randomize_weights(rng=rng)
     model_true.emissions_weights_init = np.eye(model_true.emissions_dim, model_true.dynamics_dim_full)
     model_true.emissions_input_weights_init = np.zeros((model_true.emissions_dim, model_true.input_dim_full))
@@ -56,7 +56,7 @@ if rank == 0:
     # make a new model to fit to the random model
     model_trained = Lgssm(run_params['dynamics_dim'], run_params['emissions_dim'], run_params['input_dim'],
                           dtype=dtype, device=device, verbose=run_params['verbose'], param_props=run_params['param_props'],
-                          num_lags=run_params['num_lags'])
+                          dynamics_lags=run_params['dynamics_lags'], dynamics_input_lags=run_params['dynamics_input_lags'])
     for k in model_trained.param_props['update'].keys():
         if not model_trained.param_props['update'][k]:
             init_key = k + '_init'
