@@ -68,7 +68,7 @@ if rank == 0:
     input_mask = input_mask[:, has_stims]
     input_dim = np.sum(has_stims)
     run_params['param_props']['mask']['dynamics_input_weights'] = input_mask
-    inputs = [Lgssm._get_lagged_data(i, run_params['num_lags']) for i in inputs]
+    inputs = [Lgssm._get_lagged_data(i, run_params['dynamics_input_lags']) for i in inputs]
 
     # remove the beginning of the recording which contains artifacts and mean subtract
     for ri in range(num_data):
@@ -76,7 +76,9 @@ if rank == 0:
         emissions[ri] = emissions[ri] - np.mean(emissions[ri], axis=0, keepdims=True)
         inputs[ri] = inputs[ri][run_params['index_start']:, :]
 
-    model_trained = Lgssm(num_neurons, num_neurons, input_dim, num_lags=run_params['num_lags'],
+    model_trained = Lgssm(num_neurons, num_neurons, input_dim,
+                          dynamics_lags=run_params['dynamics_lags'],
+                          dynamics_input_lags=run_params['dynamics_input_lags'],
                           dtype=dtype, device=device, verbose=run_params['verbose'],
                           param_props=run_params['param_props'])
 
