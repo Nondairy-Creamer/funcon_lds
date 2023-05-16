@@ -101,9 +101,9 @@ class Lgssm:
 
     def randomize_weights(self, max_eig_allowed=0.8, init_std=1.0, rng=np.random.default_rng()):
         # randomize dynamics weights
-        tau = self.dynamics_lags / 3
-        const = (np.exp(3) - 1) * np.exp(1 / tau - 3) / (np.exp(1 / tau) - 1)
-        time_decay = np.exp(-np.arange(self.dynamics_lags) / tau) / const
+        dynamics_tau = self.dynamics_lags / 3
+        dynamics_const = (np.exp(3) - 1) * np.exp(1 / dynamics_tau - 3) / (np.exp(1 / dynamics_tau) - 1)
+        dynamics_time_decay = np.exp(-np.arange(self.dynamics_lags) / dynamics_tau) / dynamics_const
         self.dynamics_weights_init = rng.standard_normal((self.dynamics_lags, self.dynamics_dim, self.dynamics_dim))
         eig_vals, eig_vects = np.linalg.eig(self.dynamics_weights_init)
         eig_vals = eig_vals / np.max(np.abs(eig_vals)) * max_eig_allowed
@@ -113,8 +113,11 @@ class Lgssm:
         for i in range(self.dynamics_lags):
             eig_vals_mat[i, :, :] = np.diag(eig_vals[i, :])
         self.dynamics_weights_init = np.real(eig_vects @ np.transpose(np.linalg.solve(np.transpose(eig_vects, (0, 2, 1)), eig_vals_mat), (0, 2, 1)))
-        self.dynamics_weights_init = self.dynamics_weights_init * time_decay[:, None, None]
+        self.dynamics_weights_init = self.dynamics_weights_init * dynamics_time_decay[:, None, None]
 
+        dynamics_input_tau = self.dynamics_input_lags / 3
+        dynamics_input_const = (np.exp(3) - 1) * np.exp(1 / dynamics_input_tau - 3) / (np.exp(1 / dynamics_input_tau) - 1)
+        dynamics_input_time_decay = np.exp(-np.arange(self.dynamics_input_lags) / dynamics_input_tau) / dynamics_input_const
         if self.param_props['shape']['dynamics_input_weights'] == 'diag':
             dynamics_input_weights_init_diag = init_std * rng.standard_normal((self.dynamics_input_lags, self.input_dim))
             self.dynamics_input_weights_init = np.zeros((self.dynamics_input_lags, self.dynamics_dim, self.input_dim))
@@ -122,7 +125,7 @@ class Lgssm:
                 self.dynamics_input_weights_init[i, :self.input_dim, :] = np.diag(dynamics_input_weights_init_diag[i, :])
         else:
             self.dynamics_input_weights_init = init_std * rng.standard_normal((self.dynamics_input_lags, self.dynamics_dim, self.input_dim))
-        self.dynamics_input_weights_init = self.dynamics_input_weights_init * time_decay[:, None, None]
+        self.dynamics_input_weights_init = self.dynamics_input_weights_init * dynamics_input_time_decay[:, None, None]
 
         self.dynamics_offset_init = np.zeros(self.dynamics_dim)
 
@@ -515,7 +518,7 @@ class Lgssm:
             dynamics_eye_pad = torch.eye(self.dynamics_dim * (self.dynamics_lags - 1), device=self.device, dtype=self.dtype)
             dynamics_zeros_pad = torch.zeros((self.dynamics_dim * (self.dynamics_lags - 1), self.dynamics_dim), device=self.device, dtype=self.dtype)
             dynamics_pad = torch.cat((dynamics_eye_pad, dynamics_zeros_pad), dim=1)
-            dynamics_inputs_zeros_pad = torch.zeros((self.dynamics_dim * (self.dynamics_input_lags - 1), self.input_dim_full), device=self.device, dtype=self.dtype)
+            dynamics_inputs_zeros_pad = torch.zeros((self.dynamics_dim * (self.dynamics_lags - 1), self.input_dim_full), device=self.device, dtype=self.dtype)
 
             if self.param_props['update']['dynamics_weights'] and self.param_props['update']['dynamics_input_weights']:
                 # do a joint update for A and B
@@ -528,7 +531,7 @@ class Lgssm:
 
                     # make the of which parameters to fit
                     full_block = torch.ones((self.dynamics_dim_full, self.dynamics_dim), device=self.device, dtype=self.dtype)
-                    diag_block = torch.tile(self.param_props['mask']['dynamics_input_weights'].T, (self.dynamics_lags, 1))
+                    diag_block = torch.tile(self.param_props['mask']['dynamics_input_weights'].T, (self.dynamics_input_lags, 1))
                     mask = torch.cat((full_block, diag_block), dim=0)
 
                     ABnew = utils.solve_masked(Mquad.T, Mlin[:, :self.dynamics_dim], mask).T  # new A and B from regression
@@ -664,8 +667,8 @@ class Lgssm:
         return ll, suff_stats
 
     def _pad_init_for_lags(self):
-        self.dynamics_weights_init = self._get_lagged_weights(self.dynamics_weights_init, fill='eye')
-        self.dynamics_input_weights_init = self._get_lagged_weights(self.dynamics_input_weights_init, fill='zeros')
+        self.dynamics_weights_init = self._get_lagged_weights(self.dynamics_weights_init, self.dynamics_lags, fill='eye')
+        self.dynamics_input_weights_init = self._get_lagged_weights(self.dynamics_input_weights_init, self.dynamics_lags, fill='zeros')
         self.dynamics_offset_init = self._pad_zeros(self.dynamics_offset_init, self.dynamics_lags, axis=0)
         dci_block = self.dynamics_cov_init
         self.dynamics_cov_init = np.eye(self.dynamics_dim_full) / self.nan_fill
@@ -731,7 +734,7 @@ class Lgssm:
         return lagged_data
 
     @staticmethod
-    def _get_lagged_weights(weights, fill='eye'):
+    def _get_lagged_weights(weights, lags_out, fill='eye'):
         if type(weights) is np.ndarray:
             cat_fun = np.concatenate
             split_fun = np.split
@@ -749,9 +752,9 @@ class Lgssm:
         lagged_weights = cat_fun(split_fun(weights, split_num, 0), 2)[0, :, :]
 
         if fill == 'eye':
-            fill_mat = eye_fun(lagged_weights.shape[0] * (num_lags - 1), lagged_weights.shape[1])
+            fill_mat = eye_fun(lagged_weights.shape[0] * (lags_out - 1), lagged_weights.shape[1])
         elif fill == 'zeros':
-            fill_mat = zeros_fun((lagged_weights.shape[0] * (num_lags - 1), lagged_weights.shape[1]))
+            fill_mat = zeros_fun((lagged_weights.shape[0] * (lags_out - 1), lagged_weights.shape[1]))
         else:
             raise Exception('fill value not recognized')
 
