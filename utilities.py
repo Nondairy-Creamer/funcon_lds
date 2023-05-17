@@ -34,6 +34,24 @@ def estimate_cov(a):
     return cov
 
 
+def individual_scatter(data, root):
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+
+    if rank == root:
+        item = None
+
+        for i, attr in enumerate(data):
+            if i == 0:
+                item = attr
+            else:
+                comm.send(attr, dest=i)
+    else:
+        item = comm.recv(source=0)
+
+    return item
+
+
 def solve_masked(A, b, mask):
     # solves the linear equation b=Ax where x has 0's where mask == 0
 

@@ -467,7 +467,7 @@ class Lgssm:
             data_out = None
 
         if is_parallel:
-            data = comm.scatter(data_out, root=0)
+            data = utils.individual_scatter(data_out, root=0)
 
             ll_suff_stats = self.parallel_suff_stats(data)
 
