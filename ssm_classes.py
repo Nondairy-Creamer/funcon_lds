@@ -471,7 +471,8 @@ class Lgssm:
 
             ll_suff_stats = self.parallel_suff_stats(data)
 
-            ll_suff_stats = utils.individual_gather(ll_suff_stats, root=0)
+            # ll_suff_stats = utils.individual_gather(ll_suff_stats, root=0)
+            ll_suff_stats = comm.gather(ll_suff_stats, root=0)
         else:
             ll_suff_stats = []
             for d in data_out:
