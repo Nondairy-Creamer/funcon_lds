@@ -1,7 +1,24 @@
 import torch
-import numpy as np
 import time
 from mpi4py import MPI
+import os
+import numpy as np
+
+
+def save_model_slurm(model, save_folder):
+    if 'SLURM_JOB_ID' in os.environ:
+        slurm_tag = '_' + os.environ['SLURM_JOB_ID']
+    else:
+        slurm_tag = ''
+
+    true_model_save_path = save_folder + '/model' + slurm_tag + '_true.pkl'
+    trained_model_save_path = save_folder + '/model' + slurm_tag + '_trained.pkl'
+
+    # if there is an old "true" model delete it because it doesn't correspond to this trained model
+    if os.path.exists(true_model_save_path):
+        os.remove(true_model_save_path)
+
+    model.save(path=trained_model_save_path)
 
 
 def block(block_list, dims=(2, 1)):
@@ -90,7 +107,8 @@ def solve_masked(A, b, mask):
     return x_hat
 
 
-def fit_em(model, emissions_list, inputs_list, init_mean=None, init_cov=None, num_steps=10, is_parallel=False):
+def fit_em(model, emissions_list, inputs_list, init_mean=None, init_cov=None, num_steps=10, is_parallel=False,
+           save_folder='trained_models'):
     comm = MPI.COMM_WORLD
 
     if emissions_list is not None:
@@ -122,6 +140,14 @@ def fit_em(model, emissions_list, inputs_list, init_mean=None, init_cov=None, nu
         if ll is None:
             continue
 
+        if 'SLURM_JOB_ID' in os.environ:
+            slurm_tag = '_' + os.environ['SLURM_JOB_ID']
+        else:
+            slurm_tag = ''
+
+        trained_model_save_path = save_folder + '/model' + slurm_tag + '_trained.pkl'
+        model.save(path=trained_model_save_path)
+
         log_likelihood_out.append(ll.detach().cpu().numpy())
         time_out.append(time.time() - start)
 
@@ -130,8 +156,8 @@ def fit_em(model, emissions_list, inputs_list, init_mean=None, init_cov=None, nu
             print('log likelihood = ' + str(log_likelihood_out[-1]))
             print('Time elapsed = ' + str(time_out[-1]))
 
-    model.log_likelihood = log_likelihood_out
-    model.train_time = time_out
+        model.log_likelihood = log_likelihood_out
+        model.train_time = time_out
 
     return model
 

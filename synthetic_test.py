@@ -82,7 +82,8 @@ else:
     inputs = None
     model_trained = None
 
-model_trained = utils.fit_em(model_trained, emissions, inputs, num_steps=run_params['num_train_steps'], is_parallel=is_parallel)
+model_trained = utils.fit_em(model_trained, emissions, inputs, num_steps=run_params['num_train_steps'],
+                             is_parallel=is_parallel, save_folder=run_params['model_save_folder'])
 
 if rank == 0:
     if 'SLURM_JOB_ID' in os.environ:
