@@ -34,7 +34,7 @@ def estimate_cov(a):
     return cov
 
 
-def individual_scatter(data, root):
+def individual_scatter(data, root=0):
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
 
@@ -47,7 +47,27 @@ def individual_scatter(data, root):
             else:
                 comm.send(attr, dest=i)
     else:
-        item = comm.recv(source=0)
+        item = comm.recv(source=root)
+
+    return item
+
+
+def individual_gather(data, root=0):
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+    size = comm.Get_size()
+
+    item = []
+
+    if rank == root:
+        for i in range(size):
+            if i == root:
+                item.append(data)
+            else:
+                item.append(comm.recv(source=i))
+
+    else:
+        comm.send(data, dest=root)
 
     return item
 
