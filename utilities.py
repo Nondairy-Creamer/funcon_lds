@@ -154,7 +154,7 @@ def fit_em(model, emissions_list, inputs_list, init_mean=None, init_cov=None, nu
             trained_model_save_path = save_folder + '/model' + slurm_tag + '_trained.pkl'
 
             if os.path.exists(trained_model_save_path):
-                old_model_path = save_folder + '/previous_model' + slurm_tag + '_trained.pkl'
+                old_model_path = save_folder + '/model' + slurm_tag + '_previous_trained.pkl'
                 os.replace(trained_model_save_path, old_model_path)
 
             model.save(path=trained_model_save_path)
