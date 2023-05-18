@@ -4,6 +4,7 @@ import pickle
 import utilities as utils
 from mpi4py import MPI
 import warnings
+from sklearn import linear_model
 
 
 class Lgssm:
@@ -535,9 +536,18 @@ class Lgssm:
                     diag_block = torch.tile(self.param_props['mask']['dynamics_input_weights'].T, (self.dynamics_input_lags, 1))
                     mask = torch.cat((full_block, diag_block), dim=0)
 
-                    ABnew = utils.solve_masked(Mquad.T, Mlin[:, :self.dynamics_dim], mask).T  # new A and B from regression
+                    ABnew = utils.solve_masked_ridge(Mquad.T, Mlin[:, :self.dynamics_dim], mask).T  # new A and B from regression
                 else:
-                    ABnew = torch.linalg.solve(Mquad.T, Mlin[:, :self.dynamics_dim]).T  # new A and B from regression
+                    Mquad_np = Mquad.detach().cpu().numpy()
+                    Mlin_np = Mlin.detach().cpu().numpy()
+                    ridge_model = linear_model.BayesianRidge(fit_intercept=False)
+
+                    ABnew_np = np.zeros((self.dynamics_dim, Mquad_np.shape[0]))
+                    for dd in range(self.dynamics_dim):
+                        ridge_model.fit(Mquad_np.T, Mlin_np[:, dd])
+                        ABnew_np[dd, :] = ridge_model.coef_
+
+                    ABnew = torch.tensor(ABnew_np, device=self.device, dtype=self.dtype)
 
                 self.dynamics_weights = ABnew[:, :nz]  # new A
                 self.dynamics_input_weights = ABnew[:, nz:]

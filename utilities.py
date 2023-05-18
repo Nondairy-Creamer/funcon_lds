@@ -2,6 +2,7 @@ import torch
 import time
 from mpi4py import MPI
 import os
+from sklearn import linear_model
 import numpy as np
 
 
@@ -107,6 +108,32 @@ def solve_masked(A, b, mask):
     return x_hat
 
 
+def solve_masked_ridge(A_torch, b_torch, mask_torch):
+    # solves the linear equation b=Ax where x has 0's where mask == 0
+
+    A = A_torch.detach().cpu().numpy()
+    b = b_torch.detach().cpu().numpy()
+    mask = mask_torch.cpu().numpy()
+
+    dtype = A_torch.dtype
+    device = A_torch.device
+    x_hat = np.zeros((A.shape[1], b.shape[1]))
+
+    for i in range(b.shape[1]):
+        non_zero_loc = mask[:, i] != 0
+
+        b_i = b[:, i]
+        A_nonzero = A[:, non_zero_loc]
+
+        ridge_model = linear_model.BayesianRidge(fit_intercept=False)
+        ridge_model.fit(A_nonzero, b_i)
+        x_hat[non_zero_loc, i] = ridge_model.coef_
+
+    x_hat_torch = torch.tensor(x_hat, device=device, dtype=dtype)
+
+    return x_hat_torch
+
+
 def fit_em(model, emissions_list, inputs_list, init_mean=None, init_cov=None, num_steps=10, is_parallel=False,
            save_folder='trained_models', save_every=10):
     comm = MPI.COMM_WORLD
@@ -155,7 +182,7 @@ def fit_em(model, emissions_list, inputs_list, init_mean=None, init_cov=None, nu
 
             if os.path.exists(trained_model_save_path):
                 old_model_path = save_folder + '/previous_model' + slurm_tag + '_trained.pkl'
-                os.rename(trained_model_save_path, old_model_path)
+                os.replace(trained_model_save_path, old_model_path)
 
             model.save(path=trained_model_save_path)
 
