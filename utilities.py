@@ -108,7 +108,7 @@ def solve_masked(A, b, mask):
 
 
 def fit_em(model, emissions_list, inputs_list, init_mean=None, init_cov=None, num_steps=10, is_parallel=False,
-           save_folder='trained_models'):
+           save_folder='trained_models', save_every=10):
     comm = MPI.COMM_WORLD
 
     if emissions_list is not None:
@@ -145,19 +145,19 @@ def fit_em(model, emissions_list, inputs_list, init_mean=None, init_cov=None, nu
         else:
             slurm_tag = ''
 
-        trained_model_save_path = save_folder + '/model' + slurm_tag + '_trained.pkl'
-        model.save(path=trained_model_save_path)
-
         log_likelihood_out.append(ll.detach().cpu().numpy())
         time_out.append(time.time() - start)
+        model.log_likelihood = log_likelihood_out
+        model.train_time = time_out
+
+        if np.mod(ep, save_every) == 0:
+            trained_model_save_path = save_folder + '/model' + slurm_tag + '_trained.pkl'
+            model.save(path=trained_model_save_path)
 
         if model.verbose:
             print('Finished step ' + str(ep + 1) + '/' + str(num_steps))
             print('log likelihood = ' + str(log_likelihood_out[-1]))
             print('Time elapsed = ' + str(time_out[-1]))
-
-        model.log_likelihood = log_likelihood_out
-        model.train_time = time_out
 
     return model
 
