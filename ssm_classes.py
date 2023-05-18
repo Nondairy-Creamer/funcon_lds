@@ -26,7 +26,7 @@ class Lgssm:
         self.verbose = verbose
         self.log_likelihood = None
         self.train_time = None
-        self.nan_fill = nan_fill
+        self.epsilon = nan_fill
 
         # define the weights here, but set them to tensor versions of the intial values with _set_to_init()
         self.dynamics_weights = None
@@ -235,7 +235,7 @@ class Lgssm:
             if init_cov is None:
                 init_cov_block = rng.standard_normal((self.dynamics_dim, self.dynamics_dim))
                 init_cov_block = init_cov_block.T @ init_cov_block / self.dynamics_dim
-                init_cov = np.eye(self.dynamics_dim_full) / self.nan_fill
+                init_cov = np.eye(self.dynamics_dim_full) / self.epsilon
                 init_cov[:self.dynamics_dim, :self.dynamics_dim] = init_cov_block
 
             latents = np.zeros((num_time, self.dynamics_dim_full))
@@ -313,7 +313,7 @@ class Lgssm:
     def lgssm_filter(self, emissions, inputs, init_mean, init_cov):
         """Run a Kalman filter to produce the marginal likelihood and filtered state estimates.
         adapted from Dynamax.
-        This verison assumes diagonal input weights, diagonal noise covariance, no offsets, and identity emissions
+        This function can deal with missing data if the data is missing the entire time trace
         """
         num_timesteps = emissions.shape[0]
 
@@ -326,6 +326,7 @@ class Lgssm:
 
         filtered_means_list = []
         filtered_covs_list = []
+        cov_converged = False
 
         for t in range(num_timesteps):
             # Shorthand: get parameters and input for time index t
@@ -334,29 +335,44 @@ class Lgssm:
             # locate nans and set covariance at their location to a large number to marginalize over them
             nan_loc = torch.isnan(y)
             y = torch.where(nan_loc, 0, y)
-            R = torch.where(torch.diag(nan_loc), self.nan_fill, self.emissions_cov)
+            R = torch.where(torch.diag(nan_loc), self.epsilon, self.emissions_cov)
 
             # Predict the next state
             pred_mean = self.dynamics_weights @ filtered_mean + dynamics_inputs[t, :] + self.dynamics_offset
-            pred_cov = self.dynamics_weights @ filtered_cov @ self.dynamics_weights.T + self.dynamics_cov
+
+            if not cov_converged:
+                pred_cov = self.dynamics_weights @ filtered_cov @ self.dynamics_weights.T + self.dynamics_cov
 
             # Update the log likelihood
             ll_mu = self.emissions_weights @ pred_mean + emissions_inputs[t, :] + self.emissions_offset
-            ll_cov = self.emissions_weights @ pred_cov @ self.emissions_weights.T + R
+
+            if not cov_converged:
+                ll_cov = self.emissions_weights @ pred_cov @ self.emissions_weights.T + R
+                ll_cov_logdet = torch.linalg.slogdet(ll_cov)[1]
+                ll_cov_inv = torch.linalg.inv(ll_cov)
 
             # ll += torch.distributions.multivariate_normal.MultivariateNormal(ll_mu, ll_cov).log_prob(y)
             mean_diff = y - ll_mu
-            ll += -1/2 * (emissions.shape[1] * np.log(2*np.pi) + torch.linalg.slogdet(ll_cov)[1] +
-                          torch.dot(mean_diff, torch.linalg.solve(ll_cov, mean_diff)))
+            ll += -1/2 * (emissions.shape[1] * np.log(2*np.pi) + ll_cov_logdet +
+                          torch.dot(mean_diff, ll_cov_inv @ mean_diff))
 
-            # Condition on this emission
-            # Compute the Kalman gain
-            K = torch.linalg.solve(ll_cov, self.emissions_weights @ pred_cov).T
+            if not cov_converged:
+                # Condition on this emission
+                # Compute the Kalman gain
+                K = torch.linalg.solve(ll_cov, self.emissions_weights @ pred_cov).T
+                filtered_cov = pred_cov - K @ ll_cov @ K.T
 
-            filtered_cov = pred_cov - K @ ll_cov @ K.T
             filtered_mean = pred_mean + K @ mean_diff
 
-            filtered_covs_list.append(filtered_cov)
+            # check if covariance has converged
+            if not cov_converged and t > 0:
+                max_abs_diff_cov = torch.max(torch.abs(filtered_cov - filtered_covs_list[-1]))
+                if max_abs_diff_cov < self.epsilon:
+                    cov_converged = True
+
+            if not cov_converged:
+                filtered_covs_list.append(filtered_cov)
+
             filtered_means_list.append(filtered_mean)
 
         filtered_means = torch.stack(filtered_means_list)
@@ -672,7 +688,7 @@ class Lgssm:
         self.dynamics_input_weights_init = self._get_lagged_weights(self.dynamics_input_weights_init, self.dynamics_lags, fill='zeros')
         self.dynamics_offset_init = self._pad_zeros(self.dynamics_offset_init, self.dynamics_lags, axis=0)
         dci_block = self.dynamics_cov_init
-        self.dynamics_cov_init = np.eye(self.dynamics_dim_full) / self.nan_fill
+        self.dynamics_cov_init = np.eye(self.dynamics_dim_full) / self.epsilon
         self.dynamics_cov_init[:self.dynamics_dim, :self.dynamics_dim] = dci_block
 
         self.emissions_weights_init = self._pad_zeros(self.emissions_weights_init, self.dynamics_lags, axis=1)
@@ -699,7 +715,7 @@ class Lgssm:
             init_cov_block = utils.estimate_cov(i)
 
             # structure the init cov for lags
-            init_cov = torch.eye(self.dynamics_dim_full, device=self.device, dtype=self.dtype) / self.nan_fill
+            init_cov = torch.eye(self.dynamics_dim_full, device=self.device, dtype=self.dtype) / self.epsilon
             init_cov[:self.dynamics_dim, :self.dynamics_dim] = init_cov_block
 
             init_cov_list.append(init_cov)
