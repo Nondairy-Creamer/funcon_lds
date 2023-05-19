@@ -26,4 +26,19 @@ plt.imshow(model_params['trained']['dynamics_weights'][:model.dynamics_dim, :], 
 plt.clim([-1, 1])
 plt.colorbar()
 
+plt.figure()
+plt.imshow(model_params['trained']['dynamics_input_weights'][:model.dynamics_dim, :], cmap=colormap)
+plt.clim([-0.05, 0.05])
+plt.colorbar()
+
+plt.figure()
+plt.imshow(model_params['trained']['dynamics_cov'][:model.dynamics_dim, :model.dynamics_dim], cmap=colormap)
+plt.clim([-0.1, 0.1])
+plt.colorbar()
+
+plt.figure()
+plt.imshow(model_params['trained']['emissions_cov'][:model.dynamics_dim, :], cmap=colormap)
+plt.clim([-1, 1])
+plt.colorbar()
+
 plt.show()

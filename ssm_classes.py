@@ -327,6 +327,7 @@ class Lgssm:
         filtered_means_list = []
         filtered_covs_list = []
         cov_converged = False
+        converge_t = num_timesteps - 1
 
         for t in range(num_timesteps):
             # Shorthand: get parameters and input for time index t
@@ -359,7 +360,8 @@ class Lgssm:
             if not cov_converged:
                 # Condition on this emission
                 # Compute the Kalman gain
-                K = torch.linalg.solve(ll_cov, self.emissions_weights @ pred_cov).T
+                K = pred_cov.T @ self.emissions_weights.T @ ll_cov_inv
+                # K = torch.linalg.solve(ll_cov, self.emissions_weights @ pred_cov).T
                 filtered_cov = pred_cov - K @ ll_cov @ K.T
 
             filtered_mean = pred_mean + K @ mean_diff
@@ -369,6 +371,7 @@ class Lgssm:
                 max_abs_diff_cov = torch.max(torch.abs(filtered_cov - filtered_covs_list[-1]))
                 if max_abs_diff_cov < self.epsilon:
                     cov_converged = True
+                    converge_t = t - 1
 
             if not cov_converged:
                 filtered_covs_list.append(filtered_cov)
@@ -378,9 +381,23 @@ class Lgssm:
         filtered_means = torch.stack(filtered_means_list)
         filtered_covs = torch.stack(filtered_covs_list)
 
-        return ll, filtered_means, filtered_covs
+        return ll, filtered_means, filtered_covs, converge_t
 
     def lgssm_smoother(self, emissions, inputs, init_mean, init_cov):
+        ll, filtered_means, filtered_covs, converge_t = self.lgssm_filter(emissions, inputs, init_mean, init_cov)
+
+        # if converge_t < emissions.shape[0] / 2:
+        #     smoothed_means, smoothed_covs, smoothed_crosses = \
+        #         self.lgssm_smoother_fast(emissions, inputs, filtered_means, filtered_covs, converge_t)
+        # else:
+        pad_covs = torch.tile(filtered_covs[None, -1, :, :], (emissions.shape[0] - converge_t - 1, 1, 1))
+        filtered_covs = torch.cat((filtered_covs, pad_covs), dim=0)
+        smoothed_means, smoothed_covs, smoothed_crosses = \
+            self.lgssm_smoother_complete(emissions, inputs, filtered_means, filtered_covs)
+
+        return ll, filtered_means, filtered_covs, smoothed_means, smoothed_covs, smoothed_crosses
+
+    def lgssm_smoother_complete(self, emissions, inputs, filtered_means, filtered_covs):
         r"""Run forward-filtering, backward-smoother to compute expectations
         under the posterior distribution on latent states. Technically, this
         implements the Rauch-Tung-Striebel (RTS) smoother.
@@ -389,7 +406,6 @@ class Lgssm:
         num_timesteps = emissions.shape[0]
 
         # Run the Kalman filter
-        ll, filtered_means, filtered_covs = self.lgssm_filter(emissions, inputs, init_mean, init_cov)
         dynamics_inputs = inputs @ self.dynamics_input_weights.T
 
         smoothed_means = filtered_means.detach().clone()
@@ -418,7 +434,53 @@ class Lgssm:
             # TODO: ask why the second expression is not in jonathan's code
             smoothed_crosses[t, :, :] = G @ smoothed_cov_next #+ smoothed_means[:, t, :, None] * smoothed_mean_next[:, None, :]
 
-        return ll, filtered_means, filtered_covs, smoothed_means, smoothed_covs, smoothed_crosses
+        return smoothed_means, smoothed_covs, smoothed_crosses
+
+    def lgssm_smoother_fast(self, emissions, inputs, filtered_means, filtered_covs, converge_t):
+        r"""Run forward-filtering, backward-smoother to compute expectations
+        under the posterior distribution on latent states. Technically, this
+        implements the Rauch-Tung-Striebel (RTS) smoother.
+        Adopted from Dynamax
+        """
+        num_timesteps = emissions.shape[0]
+
+        # Run the Kalman filter
+        dynamics_inputs = inputs @ self.dynamics_input_weights.T
+
+        smoothed_means = filtered_means.detach().clone()
+        smoothed_covs = filtered_covs.detach().clone()
+        smoothed_crosses = filtered_covs[:-1, :, :].detach().clone()
+
+        cov_converged = False
+
+        # Run the smoother backward in time
+        for t in reversed(range(num_timesteps - 1)):
+            if t < converge_t or t > (num_timesteps - converge_t):
+                cov_converged = False
+            else:
+                cov_converged = True
+
+            # Unpack the input
+            filtered_mean = filtered_means[t, :]
+            filtered_cov = filtered_covs[t, :, :]
+            smoothed_cov_next = smoothed_covs[t + 1, :, :]
+            smoothed_mean_next = smoothed_means[t + 1, :]
+
+            # Compute the smoothed mean and covariance
+            pred_mean = self.dynamics_weights @ filtered_mean + dynamics_inputs[t+1, :] + self.dynamics_offset
+            pred_cov = self.dynamics_weights @ filtered_cov @ self.dynamics_weights.T + self.dynamics_cov
+
+            # This is like the Kalman gain but in reverse
+            # See Eq 8.11 of Saarka's "Bayesian Filtering and Smoothing"
+            G = torch.linalg.solve(pred_cov, self.dynamics_weights @ filtered_cov).T
+            smoothed_covs[t, :, :] = filtered_cov + G @ (smoothed_cov_next - pred_cov) @ G.T
+            smoothed_means[t, :] = filtered_mean + G @ (smoothed_mean_next - pred_mean)
+
+            # Compute the smoothed expectation of x_t x_{t+1}^T
+            # TODO: ask why the second expression is not in jonathan's code
+            smoothed_crosses[t, :, :] = G @ smoothed_cov_next #+ smoothed_means[:, t, :, None] * smoothed_mean_next[:, None, :]
+
+        return smoothed_means, smoothed_covs, smoothed_crosses
 
     def get_ll(self, emissions, inputs, init_mean, init_cov):
         # get the log-likelihood of the data
