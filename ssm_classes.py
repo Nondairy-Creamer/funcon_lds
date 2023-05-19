@@ -26,7 +26,7 @@ class Lgssm:
         self.verbose = verbose
         self.log_likelihood = None
         self.train_time = None
-        self.nan_fill = nan_fill
+        self.epsilon = nan_fill
 
         # define the weights here, but set them to tensor versions of the intial values with _set_to_init()
         self.dynamics_weights = None
@@ -235,7 +235,7 @@ class Lgssm:
             if init_cov is None:
                 init_cov_block = rng.standard_normal((self.dynamics_dim, self.dynamics_dim))
                 init_cov_block = init_cov_block.T @ init_cov_block / self.dynamics_dim
-                init_cov = np.eye(self.dynamics_dim_full) / self.nan_fill
+                init_cov = np.eye(self.dynamics_dim_full) / self.epsilon
                 init_cov[:self.dynamics_dim, :self.dynamics_dim] = init_cov_block
 
             latents = np.zeros((num_time, self.dynamics_dim_full))
@@ -313,7 +313,7 @@ class Lgssm:
     def lgssm_filter(self, emissions, inputs, init_mean, init_cov):
         """Run a Kalman filter to produce the marginal likelihood and filtered state estimates.
         adapted from Dynamax.
-        This verison assumes diagonal input weights, diagonal noise covariance, no offsets, and identity emissions
+        This function can deal with missing data if the data is missing the entire time trace
         """
         num_timesteps = emissions.shape[0]
 
@@ -326,6 +326,8 @@ class Lgssm:
 
         filtered_means_list = []
         filtered_covs_list = []
+        cov_converged = False
+        converge_t = num_timesteps - 1
 
         for t in range(num_timesteps):
             # Shorthand: get parameters and input for time index t
@@ -334,37 +336,68 @@ class Lgssm:
             # locate nans and set covariance at their location to a large number to marginalize over them
             nan_loc = torch.isnan(y)
             y = torch.where(nan_loc, 0, y)
-            R = torch.where(torch.diag(nan_loc), self.nan_fill, self.emissions_cov)
+            R = torch.where(torch.diag(nan_loc), self.epsilon, self.emissions_cov)
 
             # Predict the next state
             pred_mean = self.dynamics_weights @ filtered_mean + dynamics_inputs[t, :] + self.dynamics_offset
-            pred_cov = self.dynamics_weights @ filtered_cov @ self.dynamics_weights.T + self.dynamics_cov
+
+            if not cov_converged:
+                pred_cov = self.dynamics_weights @ filtered_cov @ self.dynamics_weights.T + self.dynamics_cov
 
             # Update the log likelihood
             ll_mu = self.emissions_weights @ pred_mean + emissions_inputs[t, :] + self.emissions_offset
-            ll_cov = self.emissions_weights @ pred_cov @ self.emissions_weights.T + R
+
+            if not cov_converged:
+                ll_cov = self.emissions_weights @ pred_cov @ self.emissions_weights.T + R
+                ll_cov_logdet = torch.linalg.slogdet(ll_cov)[1]
+                ll_cov_inv = torch.linalg.inv(ll_cov)
 
             # ll += torch.distributions.multivariate_normal.MultivariateNormal(ll_mu, ll_cov).log_prob(y)
             mean_diff = y - ll_mu
-            ll += -1/2 * (emissions.shape[1] * np.log(2*np.pi) + torch.linalg.slogdet(ll_cov)[1] +
-                          torch.dot(mean_diff, torch.linalg.solve(ll_cov, mean_diff)))
+            ll += -1/2 * (emissions.shape[1] * np.log(2*np.pi) + ll_cov_logdet +
+                          torch.dot(mean_diff, ll_cov_inv @ mean_diff))
 
-            # Condition on this emission
-            # Compute the Kalman gain
-            K = torch.linalg.solve(ll_cov, self.emissions_weights @ pred_cov).T
+            if not cov_converged:
+                # Condition on this emission
+                # Compute the Kalman gain
+                K = pred_cov.T @ self.emissions_weights.T @ ll_cov_inv
+                # K = torch.linalg.solve(ll_cov, self.emissions_weights @ pred_cov).T
+                filtered_cov = pred_cov - K @ ll_cov @ K.T
 
-            filtered_cov = pred_cov - K @ ll_cov @ K.T
             filtered_mean = pred_mean + K @ mean_diff
 
-            filtered_covs_list.append(filtered_cov)
+            # check if covariance has converged
+            if not cov_converged and t > 0:
+                max_abs_diff_cov = torch.max(torch.abs(filtered_cov - filtered_covs_list[-1]))
+                if max_abs_diff_cov < 1 / self.epsilon:
+                    cov_converged = True
+                    converge_t = t - 1
+
+            if not cov_converged:
+                filtered_covs_list.append(filtered_cov)
+
             filtered_means_list.append(filtered_mean)
 
         filtered_means = torch.stack(filtered_means_list)
         filtered_covs = torch.stack(filtered_covs_list)
 
-        return ll, filtered_means, filtered_covs
+        return ll, filtered_means, filtered_covs, converge_t
 
     def lgssm_smoother(self, emissions, inputs, init_mean, init_cov):
+        ll, filtered_means, filtered_covs, converge_t = self.lgssm_filter(emissions, inputs, init_mean, init_cov)
+
+        if converge_t < emissions.shape[0] / 2:
+            smoothed_means, smoothed_covs, smoothed_crosses = \
+                self.lgssm_smoother_fast(emissions, inputs, filtered_means, filtered_covs, converge_t)
+        else:
+            pad_covs = torch.tile(filtered_covs[None, -1, :, :], (emissions.shape[0] - converge_t - 1, 1, 1))
+            filtered_covs = torch.cat((filtered_covs, pad_covs), dim=0)
+            smoothed_means, smoothed_covs, smoothed_crosses = \
+                self.lgssm_smoother_complete(emissions, inputs, filtered_means, filtered_covs)
+
+        return ll, filtered_means, filtered_covs, smoothed_means, smoothed_covs, smoothed_crosses
+
+    def lgssm_smoother_complete(self, emissions, inputs, filtered_means, filtered_covs):
         r"""Run forward-filtering, backward-smoother to compute expectations
         under the posterior distribution on latent states. Technically, this
         implements the Rauch-Tung-Striebel (RTS) smoother.
@@ -373,7 +406,6 @@ class Lgssm:
         num_timesteps = emissions.shape[0]
 
         # Run the Kalman filter
-        ll, filtered_means, filtered_covs = self.lgssm_filter(emissions, inputs, init_mean, init_cov)
         dynamics_inputs = inputs @ self.dynamics_input_weights.T
 
         smoothed_means = filtered_means.detach().clone()
@@ -402,7 +434,93 @@ class Lgssm:
             # TODO: ask why the second expression is not in jonathan's code
             smoothed_crosses[t, :, :] = G @ smoothed_cov_next #+ smoothed_means[:, t, :, None] * smoothed_mean_next[:, None, :]
 
-        return ll, filtered_means, filtered_covs, smoothed_means, smoothed_covs, smoothed_crosses
+        return smoothed_means, smoothed_covs, smoothed_crosses
+
+    def lgssm_smoother_fast(self, emissions, inputs, filtered_means, filtered_covs, converge_t):
+        r"""Run forward-filtering, backward-smoother to compute expectations
+        under the posterior distribution on latent states. Technically, this
+        implements the Rauch-Tung-Striebel (RTS) smoother.
+        Adopted from Dynamax
+        """
+        # runs the kalman smooth in 3 dicrete chunks
+        # 1) at the end of the data where the smoothed covariance has not converged
+        # 2) in the middle of the data where both the filtered and smoothed covs have converged
+        #    so we don't need to keep recalculating the covariance and inverting it
+        # 3) at the beginning of the data where the filtered covariance and smoothed covariance have not converged
+
+        num_timesteps = emissions.shape[0]
+
+        # Run the Kalman filter
+        dynamics_inputs = inputs @ self.dynamics_input_weights.T
+
+        smoothed_means = filtered_means.detach().clone()
+        smoothed_covs_end = [filtered_covs[-1, :, :]]
+        smoothed_covs_beginning = []
+        smoothed_crosses_end = []
+        smoothed_crosses_beginning = []
+
+        # Run the smoother backward in time
+        # start with the en
+        for ti, t in enumerate(reversed(range(num_timesteps - converge_t, num_timesteps - 1))):
+            # Unpack the input
+            filtered_mean = filtered_means[t, :]
+            filtered_cov = filtered_covs[-1, :, :]
+            smoothed_cov_next = smoothed_covs_end[ti]
+            smoothed_mean_next = smoothed_means[t + 1, :]
+
+            # Compute the smoothed mean and covariance
+            pred_mean = self.dynamics_weights @ filtered_mean + dynamics_inputs[t+1, :] + self.dynamics_offset
+            pred_cov = self.dynamics_weights @ filtered_cov @ self.dynamics_weights.T + self.dynamics_cov
+
+            # This is like the Kalman gain but in reverse
+            # See Eq 8.11 of Saarka's "Bayesian Filtering and Smoothing"
+            G = torch.linalg.solve(pred_cov, self.dynamics_weights @ filtered_cov).T
+            smoothed_covs_end.append(filtered_cov + G @ (smoothed_cov_next - pred_cov) @ G.T)
+            smoothed_means[t, :] = filtered_mean + G @ (smoothed_mean_next - pred_mean)
+
+            # Compute the smoothed expectation of x_t x_{t+1}^T
+            smoothed_crosses_end.append(G @ smoothed_cov_next)
+
+        for t in reversed(range(converge_t, num_timesteps - converge_t)):
+            # Unpack the input
+            filtered_mean = filtered_means[t, :]
+            smoothed_mean_next = smoothed_means[t + 1, :]
+
+            # Compute the smoothed mean and covariance
+            pred_mean = self.dynamics_weights @ filtered_mean + dynamics_inputs[t+1, :] + self.dynamics_offset
+
+            # This is like the Kalman gain but in reverse
+            # See Eq 8.11 of Saarka's "Bayesian Filtering and Smoothing"
+            smoothed_means[t, :] = filtered_mean + G @ (smoothed_mean_next - pred_mean)
+
+        smoothed_covs_beginning.append(smoothed_covs_end[-1])
+
+        for ti, t in enumerate(reversed(range(0, converge_t))):
+            # Unpack the input
+            filtered_mean = filtered_means[t, :]
+            filtered_cov = filtered_covs[t, :, :]
+            smoothed_cov_next = smoothed_covs_beginning[ti]
+            smoothed_mean_next = smoothed_means[t + 1, :]
+
+            # Compute the smoothed mean and covariance
+            pred_mean = self.dynamics_weights @ filtered_mean + dynamics_inputs[t+1, :] + self.dynamics_offset
+            pred_cov = self.dynamics_weights @ filtered_cov @ self.dynamics_weights.T + self.dynamics_cov
+
+            # This is like the Kalman gain but in reverse
+            # See Eq 8.11 of Saarka's "Bayesian Filtering and Smoothing"
+            G = torch.linalg.solve(pred_cov, self.dynamics_weights @ filtered_cov).T
+            smoothed_covs_beginning.append(filtered_cov + G @ (smoothed_cov_next - pred_cov) @ G.T)
+            smoothed_means[t, :] = filtered_mean + G @ (smoothed_mean_next - pred_mean)
+
+            # Compute the smoothed expectation of x_t x_{t+1}^T
+            smoothed_crosses_beginning.append(G @ smoothed_cov_next)
+
+        smoothed_covs_beginning = torch.stack(smoothed_covs_beginning).flip(0)
+        smoothed_covs_end = torch.stack(smoothed_covs_end).flip(0)
+        smoothed_crosses_beginning = torch.stack(smoothed_crosses_beginning).flip(0)
+        smoothed_crosses_end = torch.stack(smoothed_crosses_end).flip(0)
+
+        return smoothed_means, (smoothed_covs_beginning, smoothed_covs_end), (smoothed_crosses_beginning, smoothed_crosses_end)
 
     def get_ll(self, emissions, inputs, init_mean, init_cov):
         # get the log-likelihood of the data
@@ -626,9 +744,12 @@ class Lgssm:
 
         # =============== Update dynamics parameters ==============
         # Compute sufficient statistics for latents
-        Mz1 = smoothed_covs[:-1, :, :].sum(0) + smoothed_means[:-1, :].T @ smoothed_means[:-1, :]  # E[zz@zz'] for 1 to T-1
-        Mz2 = smoothed_covs[1:, :, :].sum(0) + smoothed_means[1:, :].T @ smoothed_means[1:, :]  # E[zz@zz'] for 2 to T
-        Mz12 = smoothed_crosses.sum(0) + smoothed_means[:-1, :].T @ smoothed_means[1:, :]  # E[zz_t@zz_{t+1}'] (above-diag)
+        covs_summed = smoothed_covs[0][1:, :, :].sum(0) + smoothed_covs[1][:-1, :, :].sum(0) + smoothed_covs[0][-1, :, :] * (nt - 2 * smoothed_covs[0].shape[0])
+        crosses_summed = smoothed_crosses[0].sum(0) + smoothed_crosses[1].sum(0) + smoothed_crosses[0][-1, :, :] * (nt - 2 * smoothed_crosses[0].shape[0] - 1)
+
+        Mz1 = covs_summed + smoothed_covs[0][0, :, :] + smoothed_means[:-1, :].T @ smoothed_means[:-1, :]  # E[zz@zz'] for 1 to T-1
+        Mz2 = covs_summed + smoothed_covs[1][-1, :, :] + smoothed_means[1:, :].T @ smoothed_means[1:, :]  # E[zz@zz'] for 2 to T
+        Mz12 = crosses_summed + smoothed_means[:-1, :].T @ smoothed_means[1:, :]  # E[zz_t@zz_{t+1}'] (above-diag)
 
         # Compute sufficient statistics for inputs x latents
         Mu1 = inputs[1:, :].T @ inputs[1:, :]  # E[uu@uu'] for 2 to T
@@ -637,7 +758,7 @@ class Lgssm:
 
         # =============== Update observation parameters ==============
         # Compute sufficient statistics
-        Mz_emis = smoothed_covs[-1, :, :] + smoothed_means[-1, :, None] * smoothed_means[-1, None, :]  # re-use Mz1 if possible
+        Mz_emis = smoothed_covs[1][-1, :, :] + smoothed_means[-1, :, None] * smoothed_means[-1, None, :]  # re-use Mz1 if possible
         Mu_emis = inputs[0, :, None] * inputs[0, None, :]  # reuse Mu
         Muz_emis = inputs[0, :, None] * smoothed_means[0, None, :]  # reuse Muz
         Mzy = smoothed_means.T @ y  # E[zz@yy']
@@ -672,7 +793,7 @@ class Lgssm:
         self.dynamics_input_weights_init = self._get_lagged_weights(self.dynamics_input_weights_init, self.dynamics_lags, fill='zeros')
         self.dynamics_offset_init = self._pad_zeros(self.dynamics_offset_init, self.dynamics_lags, axis=0)
         dci_block = self.dynamics_cov_init
-        self.dynamics_cov_init = np.eye(self.dynamics_dim_full) / self.nan_fill
+        self.dynamics_cov_init = np.eye(self.dynamics_dim_full) / self.epsilon
         self.dynamics_cov_init[:self.dynamics_dim, :self.dynamics_dim] = dci_block
 
         self.emissions_weights_init = self._pad_zeros(self.emissions_weights_init, self.dynamics_lags, axis=1)
@@ -699,7 +820,7 @@ class Lgssm:
             init_cov_block = utils.estimate_cov(i)
 
             # structure the init cov for lags
-            init_cov = torch.eye(self.dynamics_dim_full, device=self.device, dtype=self.dtype) / self.nan_fill
+            init_cov = torch.eye(self.dynamics_dim_full, device=self.device, dtype=self.dtype) / self.epsilon
             init_cov[:self.dynamics_dim, :self.dynamics_dim] = init_cov_block
 
             init_cov_list.append(init_cov)

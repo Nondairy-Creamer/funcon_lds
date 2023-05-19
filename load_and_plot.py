@@ -32,8 +32,6 @@ else:
     model_name = Path(max_file).stem
     if model_name[-8:] == '_trained':
         model_name = model_name[:-8]
-    if model_name[-5:] == '_true':
-        model_name = model_name[:-5]
     model_folder = Path(max_dir)
 
 model_trained_path = model_folder / (model_name + '_trained.pkl')
