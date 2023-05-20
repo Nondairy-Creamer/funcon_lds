@@ -114,9 +114,9 @@ def load_data(fun_atlas_path):
         for c in range(recordings[-1].shape[1]):
             recordings[-1][:, c] = np.convolve(recordings[-1][:, c], filt, mode='full')[:recordings[-1].shape[0]]
 
-        # neuron_std = np.std(recordings[-1], axis=0)
-        # recordings[-1] = (recordings[-1] - np.mean(recordings[-1], axis=0)) / neuron_std
-        recordings[-1] = recordings[-1] / np.mean(recordings[-1], axis=0) - 1
+        neuron_std = np.std(recordings[-1], axis=0)
+        recordings[-1] = (recordings[-1] - np.mean(recordings[-1], axis=0)) / neuron_std
+        # recordings[-1] = recordings[-1] / np.mean(recordings[-1], axis=0) - 1
 
         # load stimulation data
         stim_atlas_inds = np.load(str(i.parent / 'stim_atlas_inds.npy'), allow_pickle=True)
