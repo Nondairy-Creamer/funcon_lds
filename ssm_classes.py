@@ -576,25 +576,42 @@ class Lgssm:
 
         comm = MPI.COMM_WORLD
         rank = comm.Get_rank()
+        size = comm.Get_size()
 
         nz = self.dynamics_dim_full  # number of latents
 
         if rank == 0:
             data_out = list(zip(emissions_list, inputs_list, init_mean_list, init_cov_list))
+            num_data = len(emissions_list)
+            chunk_size = int(np.ceil(num_data / size))
+            # split data out into a list of inputs
+            data_out = [data_out[i:i+chunk_size] for i in range(0, num_data, chunk_size)]
         else:
             data_out = None
 
         if is_parallel:
             data = utils.individual_scatter(data_out, root=0)
 
-            ll_suff_stats = self.parallel_suff_stats(data)
+            ll_suff_stats = []
+            for d in data:
+                ll_suff_stats.append(self.parallel_suff_stats(d))
 
             # ll_suff_stats = utils.individual_gather(ll_suff_stats, root=0)
             ll_suff_stats = comm.gather(ll_suff_stats, root=0)
+
+            if rank == 0:
+                ll_suff_stats_out = []
+                for i in ll_suff_stats:
+                    for j in i:
+                        ll_suff_stats_out.append(j)
+
+                ll_suff_stats = ll_suff_stats_out
+
         else:
             ll_suff_stats = []
-            for d in data_out:
-                ll_suff_stats.append(self.parallel_suff_stats(d))
+            for i in data_out:
+                for j in i:
+                    ll_suff_stats.append(self.parallel_suff_stats(j))
 
         if rank == 0:
             log_likelihood = [i[0] for i in ll_suff_stats]
