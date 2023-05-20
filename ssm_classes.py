@@ -744,11 +744,19 @@ class Lgssm:
 
         # =============== Update dynamics parameters ==============
         # Compute sufficient statistics for latents
-        covs_summed = smoothed_covs[0][1:, :, :].sum(0) + smoothed_covs[1][:-1, :, :].sum(0) + smoothed_covs[0][-1, :, :] * (nt - 2 * smoothed_covs[0].shape[0])
-        crosses_summed = smoothed_crosses[0].sum(0) + smoothed_crosses[1].sum(0) + smoothed_crosses[0][-1, :, :] * (nt - 2 * smoothed_crosses[0].shape[0] - 1)
+        if type(smoothed_covs) is tuple:
+            covs_summed = smoothed_covs[0][1:, :, :].sum(0) + smoothed_covs[1][:-1, :, :].sum(0) + smoothed_covs[0][-1, :, :] * (nt - 2 * smoothed_covs[0].shape[0])
+            crosses_summed = smoothed_crosses[0].sum(0) + smoothed_crosses[1].sum(0) + smoothed_crosses[0][-1, :, :] * (nt - 2 * smoothed_crosses[0].shape[0] - 1)
+            first_cov = smoothed_covs[0][0, :, :]
+            last_cov = smoothed_covs[1][-1, :, :]
+        else:
+            covs_summed = smoothed_covs[1:-1, :, :].sum(0)
+            crosses_summed = smoothed_crosses[1:-1, :, :].sum(0)
+            first_cov = smoothed_covs[0, :, :]
+            last_cov = smoothed_covs[-1, :, :]
 
-        Mz1 = covs_summed + smoothed_covs[0][0, :, :] + smoothed_means[:-1, :].T @ smoothed_means[:-1, :]  # E[zz@zz'] for 1 to T-1
-        Mz2 = covs_summed + smoothed_covs[1][-1, :, :] + smoothed_means[1:, :].T @ smoothed_means[1:, :]  # E[zz@zz'] for 2 to T
+        Mz1 = covs_summed + first_cov + smoothed_means[:-1, :].T @ smoothed_means[:-1, :]  # E[zz@zz'] for 1 to T-1
+        Mz2 = covs_summed + last_cov + smoothed_means[1:, :].T @ smoothed_means[1:, :]  # E[zz@zz'] for 2 to T
         Mz12 = crosses_summed + smoothed_means[:-1, :].T @ smoothed_means[1:, :]  # E[zz_t@zz_{t+1}'] (above-diag)
 
         # Compute sufficient statistics for inputs x latents
@@ -758,7 +766,7 @@ class Lgssm:
 
         # =============== Update observation parameters ==============
         # Compute sufficient statistics
-        Mz_emis = smoothed_covs[1][-1, :, :] + smoothed_means[-1, :, None] * smoothed_means[-1, None, :]  # re-use Mz1 if possible
+        Mz_emis = last_cov + smoothed_means[-1, :, None] * smoothed_means[-1, None, :]  # re-use Mz1 if possible
         Mu_emis = inputs[0, :, None] * inputs[0, None, :]  # reuse Mu
         Muz_emis = inputs[0, :, None] * smoothed_means[0, None, :]  # reuse Muz
         Mzy = smoothed_means.T @ y  # E[zz@yy']
