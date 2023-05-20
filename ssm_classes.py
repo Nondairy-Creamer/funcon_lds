@@ -596,8 +596,8 @@ class Lgssm:
             for d in data:
                 ll_suff_stats.append(self.parallel_suff_stats(d))
 
-            ll_suff_stats = utils.individual_gather(ll_suff_stats, root=0)
-            # ll_suff_stats = comm.gather(ll_suff_stats, root=0)
+            # ll_suff_stats = utils.individual_gather(ll_suff_stats, root=0)
+            ll_suff_stats = comm.gather(ll_suff_stats, root=0)
 
             if rank == 0:
                 ll_suff_stats_out = []
