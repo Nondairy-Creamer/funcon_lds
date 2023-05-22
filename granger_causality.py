@@ -66,10 +66,18 @@ A = model_true.dynamics_weights.detach().numpy()
 # for tau=1,...,L is signif larger than 0
 # X_t = sum_1^L A_tau*X(t-tau) + noise(t)
 num_lags = 5
+nan_list = []
 
 for d in range(num_data_sets):
     # num_time, neurons varies depending on the dataset
     num_time, num_neurons = emissions[d].shape
+
+    # need to delete columns with NaN neurons, but make a list of these indices to add them in as 0s in the end
+    nans = np.where(np.isnan(emissions[d][0, :]))
+    nan_list.append(nans)
+    good_emissions = emissions[d][:, ~np.isnan(emissions[d][0, :])]
+
+
     # y_target is the time series we are trying to predict from A_hat @ y_history
     # y_target should start at t=0+num_lags
     # y_target = np.zeros((num_time - num_lags, num_neurons))
@@ -78,13 +86,13 @@ for d in range(num_data_sets):
     y_history = np.zeros((num_time - num_lags, 0))
 
     # note this goes from time num_lags to T
-    y_target = emissions[d][num_lags:, :]
+    y_target = good_emissions[num_lags:, :]
 
     for p in reversed(range(num_lags)):
         if p - num_lags:
-            y_history = np.concatenate((y_history, emissions[p:p-num_lags, :]), axis=1)
+            y_history = np.concatenate((y_history, good_emissions[p:p-num_lags, :]), axis=1)
         else:
-            y_history = np.concatenate((y_history, emissions[p:, :]), axis=1)
+            y_history = np.concatenate((y_history, good_emissions[p:, :]), axis=1)
 
     # A_hat = np.linalg.solve(y_history, y_target).T
     # -> linalg.solve doesn't work because y_history is not square --> use least squares instead
@@ -93,24 +101,28 @@ for d in range(num_data_sets):
     # a_hat = np.dot(np.linalg.inv(r), p)
 
     # a_hat is a col vector of each A_hat_p matrix for each lag p -> need to transpose each A_hat_p
+    num_good_neurons = len(good_emissions[0, :])
+
     a_hat = np.linalg.lstsq(y_history, y_target, rcond=None)[0]
     for p in range(num_lags):
-        a_hat[p*num_neurons:p*num_neurons+num_neurons, :] = a_hat[p*num_neurons:p*num_neurons+num_neurons, :].T
+        a_hat[p*num_good_neurons:p*num_good_neurons+num_good_neurons, :] = \
+            a_hat[p*num_good_neurons:p*num_good_neurons+num_good_neurons, :].T
 
     y_hat = y_history @ a_hat
-    print(a_hat)
-    print(y_hat)
+    # print(a_hat)
+    # print(y_hat)
     mse = np.mean((y_target - y_hat) ** 2)
     print(mse)
 
-    fig, axs = plt.subplots(1, 2)
-    A_pos = axs[0].imshow(A)
-    a_hat_pos = axs[1].imshow(a_hat)
-    fig.colorbar(A_pos, ax=axs[0])
-    fig.colorbar(a_hat_pos, ax=axs[1])
+    plt.title('dataset %i GC for 5 lags' % d)
+    a_hat_pos = plt.imshow(a_hat)
+    plt.colorbar(a_hat_pos)
 
     plt.show()
 
+A_pos = plt.imshow(A)
+plt.colorbar(A_pos)
+plt.show()
 ######## multiple datasets --> think about making function for parts that stay the same
 # emissions is a d-long list of arrays, latents is a NxTxd array where d is num datasets
 # emissions_list = data_dict["emissions"][:]
