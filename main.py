@@ -1,8 +1,12 @@
 import numpy as np
 import torch
 import preprocessing as pp
-from ssm_classes import LgssmSimple
+from ssm_classes import Lgssm
 import plotting
+from mpi4py import MPI
+import utilities as utils
+import os
+
 
 from torch.profiler import profile, record_function, ProfilerActivity, schedule, tensorboard_trace_handler
 # from torch.utils.tensorboard import SummaryWriter
@@ -20,49 +24,89 @@ from torch.profiler import profile, record_function, ProfilerActivity, schedule,
 # V is diagonal
 # w_t, v_t are gaussian with 0 mean, and diagonal covariance
 
+comm = MPI.COMM_WORLD
+size = comm.Get_size()
+rank = comm.Get_rank()
+
 # get run parameters, yaml file contains descriptions of the parameters
-params = pp.get_params(param_name='params')
+run_params = pp.get_params(param_name='params')
+is_parallel = size > 1
 
-device = params['device']
-dtype = getattr(torch, params['dtype'])
+if rank == 0:
+    device = run_params['device']
+    dtype = getattr(torch, run_params['dtype'])
 
-# load all the recordings
-emissions_unaligned, cell_ids_unaligned, q, q_labels, stim_cell_ids, inputs_unaligned = \
-    pp.load_data(params['data_path'])
+    # load all the recordings
+    emissions_unaligned, cell_ids_unaligned, q, q_labels, stim_cell_ids, inputs_unaligned = \
+        pp.load_data(run_params['data_path'])
 
-# remove recordings that are noisy
-data_sets_to_remove = np.sort(params['bad_data_sets'])[::-1]
-for bd in data_sets_to_remove:
-    emissions_unaligned.pop(bd)
-    cell_ids_unaligned.pop(bd)
-    inputs_unaligned.pop(bd)
-    stim_cell_ids.pop(bd)
+    # remove recordings that are noisy
+    data_sets_to_remove = np.sort(run_params['bad_data_sets'])[::-1]
+    for bd in data_sets_to_remove:
+        emissions_unaligned.pop(bd)
+        cell_ids_unaligned.pop(bd)
+        inputs_unaligned.pop(bd)
+        stim_cell_ids.pop(bd)
 
-# choose a subset of the data sets to maximize the number of recordings * the number of neurons included
-cell_ids, emissions, best_runs, inputs = \
-    pp.get_combined_dataset(emissions_unaligned, cell_ids_unaligned, stim_cell_ids, inputs_unaligned,
-                            frac_neuron_coverage=params['frac_neuron_coverage'],
-                            minimum_freq=params['minimum_frac_measured'])
+    emissions_unaligned = emissions_unaligned[:run_params['num_data_sets']]
+    cell_ids_unaligned = cell_ids_unaligned[:run_params['num_data_sets']]
+    inputs_unaligned = inputs_unaligned[:run_params['num_data_sets']]
+    stim_cell_ids = stim_cell_ids[:run_params['num_data_sets']]
 
-num_data = len(emissions)
-num_epochs = int(np.ceil(params['num_grad_steps'] * params['batch_size'] / num_data))
+    # choose a subset of the data sets to maximize the number of recordings * the number of neurons included
+    cell_ids, emissions, best_runs, inputs = \
+        pp.get_combined_dataset(emissions_unaligned, cell_ids_unaligned, stim_cell_ids, inputs_unaligned,
+                                frac_neuron_coverage=run_params['frac_neuron_coverage'],
+                                minimum_freq=run_params['minimum_frac_measured'])
 
-# remove the beginning of the recording which contains artifacts and mean subtract
-for ri in range(num_data):
-    emissions[ri] = emissions[ri][params['index_start']:, :]
-    emissions[ri] = emissions[ri] - np.mean(emissions[ri], axis=0, keepdims=True)
-    inputs[ri] = inputs[ri][params['index_start']:, :]
+    num_data = len(emissions)
+    num_neurons = emissions[0].shape[1]
 
-# initialize and train model
-latent_dim = len(cell_ids)
-model_trained = LgssmSimple(latent_dim, dtype=dtype, device=device,
-                            verbose=params['verbose'])
-model_trained.fit_batch_sgd(emissions, inputs, learning_rate=params['learning_rate'],
-                            num_steps=params['num_grad_steps'], batch_size=params['batch_size'],
-                            num_splits=params['num_splits'])
+    input_mask = torch.eye(num_neurons, device=device, dtype=dtype)
+    has_stims = np.any(np.concatenate(inputs, axis=0), axis=0)
+    inputs = [i[:, has_stims] for i in inputs]
+    input_mask = input_mask[:, has_stims]
+    input_dim = np.sum(has_stims)
+    run_params['param_props']['mask']['dynamics_input_weights'] = input_mask
+    inputs = [Lgssm._get_lagged_data(i, run_params['dynamics_input_lags']) for i in inputs]
 
-if params['save_model']:
-    model_trained.save(path=params['model_save_folder'] + '/model_trained.pkl')
+    # remove the beginning of the recording which contains artifacts and mean subtract
+    for ri in range(num_data):
+        emissions[ri] = emissions[ri][run_params['index_start']:, :]
+        emissions[ri] = emissions[ri] - np.mean(emissions[ri], axis=0, keepdims=True)
+        inputs[ri] = inputs[ri][run_params['index_start']:, :]
 
-if params['plot_figures']:
-    plotting.trained_on_real(model_trained)
+    model_trained = Lgssm(num_neurons, num_neurons, input_dim,
+                          dynamics_lags=run_params['dynamics_lags'],
+                          dynamics_input_lags=run_params['dynamics_input_lags'],
+                          dtype=dtype, device=device, verbose=run_params['verbose'],
+                          param_props=run_params['param_props'])
+
+    model_trained.emissions_weights = torch.eye(model_trained.emissions_dim, model_trained.dynamics_dim_full, device=device, dtype=dtype)
+    model_trained.emissions_input_weights = torch.zeros((model_trained.emissions_dim, model_trained.input_dim_full), device=device, dtype=dtype)
+else:
+    emissions = None
+    inputs = None
+    model_trained = None
+
+model_trained = utils.fit_em(model_trained, emissions, inputs, num_steps=run_params['num_train_steps'],
+                             is_parallel=is_parallel, save_folder=run_params['model_save_folder'])
+
+if rank == 0:
+    if 'SLURM_JOB_ID' in os.environ:
+        slurm_tag = '_' + os.environ['SLURM_JOB_ID']
+    else:
+        slurm_tag = ''
+
+    true_model_save_path = run_params['model_save_folder'] + '/model' + slurm_tag + '_true.pkl'
+    trained_model_save_path = run_params['model_save_folder'] + '/model' + slurm_tag + '_trained.pkl'
+
+    # if there is an old "true" model delete it because it doesn't correspond to this trained model
+    if os.path.exists(true_model_save_path):
+        os.remove(true_model_save_path)
+
+    model_trained.save(path=trained_model_save_path)
+
+    if run_params['plot_figures']:
+        plotting.plot_model_params(model_trained)
+
