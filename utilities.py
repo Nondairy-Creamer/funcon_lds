@@ -3,6 +3,7 @@ import time
 from mpi4py import MPI
 import os
 import numpy as np
+import preprocessing as pp
 
 
 def save_model_slurm(model, save_folder):
@@ -165,4 +166,43 @@ def fit_em(model, emissions_list, inputs_list, init_mean=None, init_cov=None, nu
             print('Time elapsed = ' + str(time_out[-1]))
 
     return model
+
+
+def get_model_data(data_path, num_data_sets=None, bad_data_sets=[], frac_neuron_coverage=0.0, minimum_frac_measured=0.0,
+                   start_index=0):
+    # load all the recordings
+    emissions_unaligned, cell_ids_unaligned, q, q_labels, stim_cell_ids, inputs_unaligned = \
+        pp.load_data(data_path)
+
+    # remove recordings that are noisy
+    data_sets_to_remove = np.sort(bad_data_sets)[::-1]
+    for bd in data_sets_to_remove:
+        emissions_unaligned.pop(bd)
+        cell_ids_unaligned.pop(bd)
+        inputs_unaligned.pop(bd)
+        stim_cell_ids.pop(bd)
+
+    if num_data_sets is None:
+        num_data_sets = len(emissions_unaligned)
+
+    emissions_unaligned = emissions_unaligned[:num_data_sets]
+    cell_ids_unaligned = cell_ids_unaligned[:num_data_sets]
+    inputs_unaligned = inputs_unaligned[:num_data_sets]
+    stim_cell_ids = stim_cell_ids[:num_data_sets]
+
+    # choose a subset of the data sets to maximize the number of recordings * the number of neurons included
+    cell_ids, emissions, best_runs, inputs = \
+        pp.get_combined_dataset(emissions_unaligned, cell_ids_unaligned, stim_cell_ids, inputs_unaligned,
+                                frac_neuron_coverage=frac_neuron_coverage,
+                                minimum_freq=minimum_frac_measured)
+
+    num_data = len(emissions)
+
+    # remove the beginning of the recording which contains artifacts and mean subtract
+    for ri in range(num_data):
+        emissions[ri] = emissions[ri][start_index:, :]
+        emissions[ri] = emissions[ri] - np.mean(emissions[ri], axis=0, keepdims=True)
+        inputs[ri] = inputs[ri][start_index:, :]
+
+    return emissions, inputs, cell_ids
 

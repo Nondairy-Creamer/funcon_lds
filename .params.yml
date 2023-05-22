@@ -1,10 +1,10 @@
 data_path: /home/mcreamer/Documents/data_sets/fun_con/
 # some data sets are unreliable, remove them
-bad_data_sets: [0, 4, 6, 10, 11, 15, 17, 24, 35, 37, 45]
+bad_data_sets: []
 
 # the calcium dynamics always look strange at the start of a recording, possibly due to the laser being turned on
 # cut out the first ~15 seconds to let the system equilibrate
-index_start: 25
+start_index: 25
 
 # We want to take our data set of recordings and pick a subset of those recordings and neurons in order
 # to maximize the number of recordings * the number of neurons that appear in those recordings

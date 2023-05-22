@@ -36,45 +36,21 @@ if rank == 0:
     device = run_params['device']
     dtype = getattr(torch, run_params['dtype'])
 
-    # load all the recordings
-    emissions_unaligned, cell_ids_unaligned, q, q_labels, stim_cell_ids, inputs_unaligned = \
-        pp.load_data(run_params['data_path'])
-
-    # remove recordings that are noisy
-    data_sets_to_remove = np.sort(run_params['bad_data_sets'])[::-1]
-    for bd in data_sets_to_remove:
-        emissions_unaligned.pop(bd)
-        cell_ids_unaligned.pop(bd)
-        inputs_unaligned.pop(bd)
-        stim_cell_ids.pop(bd)
-
-    emissions_unaligned = emissions_unaligned[:run_params['num_data_sets']]
-    cell_ids_unaligned = cell_ids_unaligned[:run_params['num_data_sets']]
-    inputs_unaligned = inputs_unaligned[:run_params['num_data_sets']]
-    stim_cell_ids = stim_cell_ids[:run_params['num_data_sets']]
-
-    # choose a subset of the data sets to maximize the number of recordings * the number of neurons included
-    cell_ids, emissions, best_runs, inputs = \
-        pp.get_combined_dataset(emissions_unaligned, cell_ids_unaligned, stim_cell_ids, inputs_unaligned,
-                                frac_neuron_coverage=run_params['frac_neuron_coverage'],
-                                minimum_freq=run_params['minimum_frac_measured'])
-
-    num_data = len(emissions)
+    emissions, inputs, cell_ids = \
+        utils.get_model_data(run_params['data_path'], num_data_sets=run_params['num_data_sets'],
+                             bad_data_sets=run_params['bad_data_sets'],
+                             frac_neuron_coverage=run_params['frac_neuron_coverage'],
+                             minimum_frac_measured=run_params['minimum_frac_measured'],
+                             start_index=run_params['start_index'])
     num_neurons = emissions[0].shape[1]
+    inputs = [Lgssm._get_lagged_data(i, run_params['dynamics_input_lags']) for i in inputs]
 
-    input_mask = torch.eye(num_neurons, device=device, dtype=dtype)
+    input_mask = torch.eye(num_neurons, dtype=dtype, device=device)
     has_stims = np.any(np.concatenate(inputs, axis=0), axis=0)
     inputs = [i[:, has_stims] for i in inputs]
     input_mask = input_mask[:, has_stims]
-    input_dim = np.sum(has_stims)
     run_params['param_props']['mask']['dynamics_input_weights'] = input_mask
-    inputs = [Lgssm._get_lagged_data(i, run_params['dynamics_input_lags']) for i in inputs]
-
-    # remove the beginning of the recording which contains artifacts and mean subtract
-    for ri in range(num_data):
-        emissions[ri] = emissions[ri][run_params['index_start']:, :]
-        emissions[ri] = emissions[ri] - np.mean(emissions[ri], axis=0, keepdims=True)
-        inputs[ri] = inputs[ri][run_params['index_start']:, :]
+    input_dim = inputs[0].shape[1]
 
     model_trained = Lgssm(num_neurons, num_neurons, input_dim,
                           dynamics_lags=run_params['dynamics_lags'],
