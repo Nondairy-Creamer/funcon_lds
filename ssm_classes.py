@@ -207,7 +207,7 @@ class Lgssm:
         self.emissions_offset = self.emissions_offset.to(new_device)
         self.emissions_cov = self.emissions_cov.to(new_device)
 
-    def sample(self, num_time=100, init_mean=None, init_cov=None, num_data_sets=1, input_time_scale=0,
+    def sample(self, num_time=100, init_mean=None, init_cov=None, num_data_sets=1, input_time_scale=0, inputs=None,
                scattered_nan_freq=0.0, lost_emission_freq=0.0, rng=np.random.default_rng()):
 
         latents_list = []
@@ -241,12 +241,13 @@ class Lgssm:
             latents = np.zeros((num_time, self.dynamics_dim_full))
             emissions = np.zeros((num_time, self.emissions_dim))
 
-            if input_time_scale != 0:
-                inputs = sparse_inputs[d]
-                inputs = self._get_lagged_data(inputs, self.dynamics_input_lags, add_pad=True)
-            else:
-                inputs = rng.standard_normal((num_time + self.dynamics_input_lags - 1, self.input_dim))
-                inputs = self._get_lagged_data(inputs, self.dynamics_input_lags, add_pad=False)
+            if inputs is None:
+                if input_time_scale != 0:
+                    inputs = sparse_inputs[d]
+                else:
+                    inputs = rng.standard_normal((self.dynamics_input_lags, self.input_dim))
+
+            inputs = self._get_lagged_data(inputs, self.dynamics_input_lags, add_pad=True)
 
             # get the initial observations
             dynamics_noise = rng.multivariate_normal(np.zeros(self.dynamics_dim_full), self.dynamics_cov, size=num_time)
