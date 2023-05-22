@@ -107,12 +107,12 @@ def load_data(fun_atlas_path):
         labels[-1] = list(labels[-1][~nan_neurons])
         recordings[-1] = recordings[-1][:, ~nan_neurons]
 
-        tau = 2
-        t = np.arange(0, tau * 3, 0.5)
-        filt = np.exp(-t / tau)
-
-        for c in range(recordings[-1].shape[1]):
-            recordings[-1][:, c] = np.convolve(recordings[-1][:, c], filt, mode='full')[:recordings[-1].shape[0]]
+        # tau = 2
+        # t = np.arange(0, tau * 3, 0.5)
+        # filt = np.exp(-t / tau)
+        #
+        # for c in range(recordings[-1].shape[1]):
+        #     recordings[-1][:, c] = np.convolve(recordings[-1][:, c], filt, mode='full')[:recordings[-1].shape[0]]
 
         neuron_std = np.std(recordings[-1], axis=0)
         recordings[-1] = (recordings[-1] - np.mean(recordings[-1], axis=0)) / neuron_std
