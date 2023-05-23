@@ -68,7 +68,7 @@ def predict_from_model(data_folder, model_folder, model_name):
     model_file.close()
 
     emissions, inputs, cell_ids = iu.get_model_data(data_folder, num_data_sets=81, start_index=25)
-    inputs_lagged = [Lgssm._get_lagged_data(i, model.dynamics_input_lags) for i in inputs]
+    inputs_lagged = [Lgssm.get_lagged_data(i, model.dynamics_input_lags) for i in inputs]
 
     has_stims = np.any(np.concatenate(inputs, axis=0), axis=0)
     inputs = [i[:, has_stims] for i in inputs]

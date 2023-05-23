@@ -229,7 +229,7 @@ class Lgssm:
             else:
                 inputs_list = [rng.standard_normal((num_time, self.input_dim)) for i in range(num_data_sets)]
 
-        inputs_list = [self._get_lagged_data(i, self.dynamics_input_lags, add_pad=True) for i in inputs_list]
+        inputs_list = [self.get_lagged_data(i, self.dynamics_input_lags, add_pad=True) for i in inputs_list]
 
         for d in range(num_data_sets):
             # generate a random initial mean and covariance
@@ -849,7 +849,7 @@ class Lgssm:
         return init_cov_list
 
     @staticmethod
-    def _get_lagged_data(data, lags, add_pad=True):
+    def get_lagged_data(data, lags, add_pad=True):
         num_time, num_neurons = data.shape
 
         if type(data) is np.ndarray:

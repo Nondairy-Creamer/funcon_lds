@@ -77,6 +77,9 @@ def fit_em(model, emissions_list, inputs_list, init_mean=None, init_cov=None, nu
     if emissions_list is not None:
         emissions, inputs = model.standardize_inputs(emissions_list, inputs_list)
 
+        # lag the inputs if the model has lags
+        inputs = [model.get_lagged_data(i, model.dynamics_input_lags) for i in inputs]
+
         if init_mean is None:
             init_mean = model.estimate_init_mean(emissions)
         else:

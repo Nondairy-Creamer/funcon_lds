@@ -46,14 +46,16 @@ if rank == 0:
 
     # If you are considering multiple lags in the past, lag the inputs
     num_neurons = emissions[0].shape[1]
-    inputs = [Lgssm._get_lagged_data(i, run_params['dynamics_input_lags']) for i in inputs]
 
     # create a mask for the dynamics_input_weights. This allows us to fit dynamics weights that are diagonal
     input_mask = torch.eye(num_neurons, dtype=dtype, device=device)
+    # get rid of any inputs that never receive stimulation
     has_stims = np.any(np.concatenate(inputs, axis=0), axis=0)
     inputs = [i[:, has_stims] for i in inputs]
     input_mask = input_mask[:, has_stims]
+    # set the model properties so the model fits with this mask
     run_params['param_props']['mask']['dynamics_input_weights'] = input_mask
+    # get the input dimension after removing the neurons that were never stimulated
     input_dim = inputs[0].shape[1]
 
     # initialize the model and set model weights
