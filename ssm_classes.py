@@ -209,7 +209,6 @@ class Lgssm:
 
     def sample(self, num_time=100, init_mean=None, init_cov=None, num_data_sets=1, input_time_scale=0, inputs_list=None,
                scattered_nan_freq=0.0, lost_emission_freq=0.0, rng=np.random.default_rng()):
-
         latents_list = []
         emissions_list = []
         init_mean_list = []
@@ -229,7 +228,7 @@ class Lgssm:
             else:
                 inputs_list = [rng.standard_normal((num_time, self.input_dim)) for i in range(num_data_sets)]
 
-        inputs_list = [self.get_lagged_data(i, self.dynamics_input_lags, add_pad=True) for i in inputs_list]
+        inputs_lagged = [self.get_lagged_data(i, self.dynamics_input_lags, add_pad=True) for i in inputs_list]
 
         for d in range(num_data_sets):
             # generate a random initial mean and covariance
@@ -244,7 +243,7 @@ class Lgssm:
 
             latents = np.zeros((num_time, self.dynamics_dim_full))
             emissions = np.zeros((num_time, self.emissions_dim))
-            inputs = inputs_list[d]
+            inputs = inputs_lagged[d]
 
             # get the initial observations
             dynamics_noise = rng.multivariate_normal(np.zeros(self.dynamics_dim_full), self.dynamics_cov, size=num_time)
@@ -314,6 +313,9 @@ class Lgssm:
         """
         num_timesteps = emissions.shape[0]
 
+        if inputs.shape[1] < self.input_dim_full:
+            inputs = self.get_lagged_data(inputs, self.dynamics_input_lags)
+
         ll = torch.tensor(0, device=self.device, dtype=self.dtype)
         filtered_mean = init_mean
         filtered_cov = init_cov
@@ -381,6 +383,9 @@ class Lgssm:
         return ll, filtered_means, filtered_covs, converge_t
 
     def lgssm_smoother(self, emissions, inputs, init_mean, init_cov):
+        if inputs.shape[1] < self.input_dim_full:
+            inputs = self.get_lagged_data(inputs, self.dynamics_input_lags)
+
         ll, filtered_means, filtered_covs, converge_t = self.lgssm_filter(emissions, inputs, init_mean, init_cov)
 
         if converge_t < emissions.shape[0] / 2:
@@ -594,7 +599,6 @@ class Lgssm:
                 ll_suff_stats.append(self.parallel_suff_stats(d))
 
             ll_suff_stats = lu.individual_gather(ll_suff_stats, root=0)
-            # ll_suff_stats = comm.gather(ll_suff_stats, root=0)
 
             if rank == 0:
                 ll_suff_stats_out = []

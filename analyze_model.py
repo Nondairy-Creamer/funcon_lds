@@ -5,12 +5,13 @@ from matplotlib import pyplot as plt
 import matplotlib as mpl
 import inference_utilities as iu
 from ssm_classes import Lgssm
+from pathlib import Path
 
 
-def plot_model_params(model_folder, model_name):
+def plot_model_params(model_folder):
     colormap = mpl.colormaps['coolwarm']
 
-    model_path = model_folder + '/' + model_name
+    model_path = model_folder / 'model_trained.pkl'
 
     model_file = open(model_path, 'rb')
     model = pickle.load(model_file)
@@ -59,15 +60,21 @@ def plot_model_params(model_folder, model_name):
     plt.show()
 
 
-def predict_from_model(data_folder, model_folder, model_name):
-    model_path = model_folder + '/' + model_name
-
+def predict_from_model(model_folder):
+    model_path = model_folder / 'model_trained.pkl'
+    data_path = model_folder / 'data.pkl'
 
     model_file = open(model_path, 'rb')
     model = pickle.load(model_file)
     model_file.close()
 
-    emissions, inputs, cell_ids = iu.get_model_data(data_folder, num_data_sets=81, start_index=25)
+    data_file = open(data_path, 'rb')
+    data = pickle.load(data_file)
+    data_file.close()
+
+    emissions = data['emissions']
+    inputs = data['inputs']
+    cell_ids = data['cell_ids']
     inputs_lagged = [Lgssm.get_lagged_data(i, model.dynamics_input_lags) for i in inputs]
 
     has_stims = np.any(np.concatenate(inputs, axis=0), axis=0)
@@ -89,9 +96,8 @@ def predict_from_model(data_folder, model_folder, model_name):
     plt.show()
 
 
-data_folder = '/home/mcreamer/Documents/data_sets/fun_con'
-model_folder = '/home/mcreamer/Documents/data_sets/fun_con_models'
-model_name = 'model_48012469_trained.pkl'
+model_folder = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models')
+model_name = Path('local')
 
-predict_from_model(data_folder, model_folder, model_name)
-plot_model_params(model_folder, model_name)
+predict_from_model(model_folder / model_name)
+plot_model_params(model_folder / model_name)
