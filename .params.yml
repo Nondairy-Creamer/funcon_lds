@@ -15,7 +15,7 @@ frac_neuron_coverage: 0.0
 # for a neuron to be included in the dataset, it must be in at least this fraction of the recordings
 # this is not a principled threshold, (you could have 90 bad recordings and 10 good ones), but it's a quick heuristic
 # to reduce dataset size
-minimum_frac_measured: 0.3
+minimum_frac_measured: 0.0
 
 num_data_sets: 10
 
@@ -43,8 +43,8 @@ dtype: float64
 
 # gradient descent parameters
 # choices are: gradient_descent and batch_sgd
-dynamics_lags: 2
-dynamics_input_lags: 4
+dynamics_lags: 1
+dynamics_input_lags: 1
 fit_type: em
 num_train_steps: 50
 verbose: True
