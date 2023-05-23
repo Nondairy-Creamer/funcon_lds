@@ -6,8 +6,15 @@ import yaml
 import os
 import pickle
 
+# utilities for loading and saving the data
 
-def get_params(param_name='params'):
+
+def get_run_params(param_name='params'):
+    # load in the parameters for the run which dictate how many data sets to use,
+    # or how many time lags the model will fit etc
+    # first load in the defaults from the hidden files like .params.yml
+    # then load in the user updated version from params_update.yml
+
     with open('.' + param_name + '.yml', 'r') as file:
         params = yaml.safe_load(file)
 
@@ -20,9 +27,9 @@ def get_params(param_name='params'):
     return params
 
 
-def get_model_data(data_path, num_data_sets=None, bad_data_sets=[], frac_neuron_coverage=0.0, minimum_frac_measured=0.0,
+def get_model_data(data_path, num_data_sets=None, bad_data_sets=(), frac_neuron_coverage=0.0, minimum_frac_measured=0.0,
                    start_index=0):
-    # load all the recordings
+    # load all the recordings of neural activity
     emissions_unaligned, cell_ids_unaligned, q, q_labels, stim_cell_ids, inputs_unaligned = \
         load_data(data_path)
 
@@ -34,6 +41,7 @@ def get_model_data(data_path, num_data_sets=None, bad_data_sets=[], frac_neuron_
         inputs_unaligned.pop(bd)
         stim_cell_ids.pop(bd)
 
+    # truncate the number of recordings if you can't fit all of them at once due to memory constraints
     if num_data_sets is None:
         num_data_sets = len(emissions_unaligned)
 
@@ -69,6 +77,7 @@ def load_data(fun_atlas_path):
     stim_volume_inds = []
     stim_ids = []
 
+    # find all files in the folder that have francesco_green.npy
     for i in fun_atlas_path.rglob('francesco_green.npy'):
         recordings.append(np.load(str(i), allow_pickle=False))
         labels.append(np.load(str(i.parent / 'labels.npy'), allow_pickle=False))
@@ -120,6 +129,8 @@ def load_data(fun_atlas_path):
 
 
 def save_run(model_save_folder, model_trained, model_true=None, data=None, run_params=None):
+    # save the models, data, and parameters from the fitting procedure
+    # if run on SLURM get the slurm ID
     if 'SLURM_JOB_ID' in os.environ:
         slurm_tag = '_' + os.environ['SLURM_JOB_ID']
     else:

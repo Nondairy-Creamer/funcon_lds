@@ -16,7 +16,7 @@ def plot_model_params(model_folder, model_name):
     model = pickle.load(model_file)
     model_file.close()
 
-    model_params = model.get_params()
+    model_params = model.get_run_params()
     A_full = model_params['trained']['dynamics_weights'][:model.dynamics_dim, :]
     # A_full = A_full - np.eye(A_full.shape[0], A_full.shape[1])
     A = np.split(A_full, model.dynamics_lags, axis=1)

@@ -4,6 +4,7 @@ import matplotlib as mpl
 
 
 def plot_model_params(model_trained, model_true=None):
+    # Takes in a model and plots out all its parameters
     ll_true_params = None
 
     if model_true is not None:
@@ -32,9 +33,11 @@ def plot_model_params(model_trained, model_true=None):
 
     params_trained = model_trained.get_params()
 
+    # plot each of the model parameters
     for k in params_trained['trained'].keys():
         if model_trained.param_props['update'][k]:
-        # if k[-6:] != 'offset':
+            # if there are multiple lags, then only the top left block of the covariance has any trained parameters
+            # For the non covariance parameters (A, B) then the top row of blocks has trained parameters
             if k[-3:] == 'cov':
                 num_cols = model_trained.dynamics_dim
             else:
@@ -43,6 +46,7 @@ def plot_model_params(model_trained, model_true=None):
             param_init = params_trained['init'][k][:model_trained.dynamics_dim, :num_cols]
             param_trained = params_trained['trained'][k][:model_trained.dynamics_dim, :num_cols]
 
+            # for synthetic data we have a true model, get the true parameters here
             if model_true is not None:
                 param_true = params_true['trained'][k][:model_true.dynamics_dim, :num_cols]
             else:
@@ -52,6 +56,7 @@ def plot_model_params(model_trained, model_true=None):
 
 
 def plot_params(param_init, param_trained, param_true, title=''):
+    # plot a specific model parameter, usually called by plot_model_params
     colormap = mpl.colormaps['coolwarm']
 
     if param_true is not None:

@@ -14,7 +14,7 @@ comm = MPI.COMM_WORLD
 size = comm.Get_size()
 rank = comm.Get_rank()
 
-run_params = lu.get_params(param_name='params_synth')
+run_params = lu.get_run_params(param_name='params_synth')
 is_parallel = size > 1
 
 if rank == 0:

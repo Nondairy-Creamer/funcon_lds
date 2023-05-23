@@ -207,25 +207,29 @@ class Lgssm:
         self.emissions_offset = self.emissions_offset.to(new_device)
         self.emissions_cov = self.emissions_cov.to(new_device)
 
-    def sample(self, num_time=100, init_mean=None, init_cov=None, num_data_sets=1, input_time_scale=0, inputs=None,
+    def sample(self, num_time=100, init_mean=None, init_cov=None, num_data_sets=1, input_time_scale=0, inputs_list=None,
                scattered_nan_freq=0.0, lost_emission_freq=0.0, rng=np.random.default_rng()):
 
         latents_list = []
-        inputs_list = []
         emissions_list = []
         init_mean_list = []
         init_cov_list = []
 
-        if input_time_scale != 0:
-            stims_per_data_set = int(num_time / input_time_scale)
-            num_stims = num_data_sets * stims_per_data_set
-            sparse_inputs_init = np.eye(self.input_dim)[rng.choice(self.input_dim, num_stims, replace=True)]
+        if inputs_list is None:
+            if input_time_scale != 0:
+                stims_per_data_set = int(num_time / input_time_scale)
+                num_stims = num_data_sets * stims_per_data_set
+                sparse_inputs_init = np.eye(self.input_dim)[rng.choice(self.input_dim, num_stims, replace=True)]
 
-            # upsample to full time
-            total_time = num_time * num_data_sets
-            sparse_inputs = np.zeros((total_time, self.emissions_dim))
-            sparse_inputs[::input_time_scale, :] = sparse_inputs_init
-            sparse_inputs = np.split(sparse_inputs, num_data_sets)
+                # upsample to full time
+                total_time = num_time * num_data_sets
+                inputs_list = np.zeros((total_time, self.emissions_dim))
+                inputs_list[::input_time_scale, :] = sparse_inputs_init
+                inputs_list = np.split(inputs_list, num_data_sets)
+            else:
+                inputs_list = [rng.standard_normal((num_time, self.input_dim)) for i in range(num_data_sets)]
+
+        inputs_list = [self._get_lagged_data(i, self.dynamics_input_lags, add_pad=True) for i in inputs_list]
 
         for d in range(num_data_sets):
             # generate a random initial mean and covariance
@@ -240,14 +244,7 @@ class Lgssm:
 
             latents = np.zeros((num_time, self.dynamics_dim_full))
             emissions = np.zeros((num_time, self.emissions_dim))
-
-            if inputs is None:
-                if input_time_scale != 0:
-                    inputs = sparse_inputs[d]
-                else:
-                    inputs = rng.standard_normal((num_time, self.input_dim))
-
-            inputs = self._get_lagged_data(inputs, self.dynamics_input_lags, add_pad=True)
+            inputs = inputs_list[d]
 
             # get the initial observations
             dynamics_noise = rng.multivariate_normal(np.zeros(self.dynamics_dim_full), self.dynamics_cov, size=num_time)
@@ -279,7 +276,6 @@ class Lgssm:
                                    emissions_noise[t, :]
 
             latents_list.append(latents)
-            inputs_list.append(inputs)
             emissions_list.append(emissions)
             init_mean_list.append(init_mean)
             init_cov_list.append(init_cov)
@@ -839,7 +835,16 @@ class Lgssm:
         return init_mean_list
 
     def estimate_init_cov(self, emissions):
-        init_cov_list = [torch.eye(i.shape[1], device=self.device, dtype=self.dtype) for i in emissions]
+        init_cov_list = []
+
+        # In principle you can calculate something from emissions here
+        # but it's simpler to just set it to identity
+        for i in emissions:
+            init_cov_list.append(torch.eye(self.dynamics_dim_full,
+                                 device=self.device, dtype=self.dtype) * self.epsilon)
+
+            init_cov_list[-1][:self.dynamics_dim, :self.dynamics_dim] = \
+                torch.eye(self.dynamics_dim, device=self.device, dtype=self.dtype)
 
         return init_cov_list
 
