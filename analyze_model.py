@@ -3,7 +3,7 @@ import torch
 import pickle
 from matplotlib import pyplot as plt
 import matplotlib as mpl
-import utilities as utils
+import inference_utilities as iu
 from ssm_classes import Lgssm
 
 
@@ -67,7 +67,7 @@ def predict_from_model(data_folder, model_folder, model_name):
     model = pickle.load(model_file)
     model_file.close()
 
-    emissions, inputs, cell_ids = utils.get_model_data(data_folder, num_data_sets=81, start_index=25)
+    emissions, inputs, cell_ids = iu.get_model_data(data_folder, num_data_sets=81, start_index=25)
     inputs_lagged = [Lgssm._get_lagged_data(i, model.dynamics_input_lags) for i in inputs]
 
     has_stims = np.any(np.concatenate(inputs, axis=0), axis=0)

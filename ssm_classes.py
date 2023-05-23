@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 import pickle
-import utilities as utils
+import inference_utilities as lu
 from mpi4py import MPI
 import warnings
 
@@ -245,7 +245,7 @@ class Lgssm:
                 if input_time_scale != 0:
                     inputs = sparse_inputs[d]
                 else:
-                    inputs = rng.standard_normal((self.dynamics_input_lags, self.input_dim))
+                    inputs = rng.standard_normal((num_time, self.input_dim))
 
             inputs = self._get_lagged_data(inputs, self.dynamics_input_lags, add_pad=True)
 
@@ -591,13 +591,13 @@ class Lgssm:
             data_out = None
 
         if is_parallel:
-            data = utils.individual_scatter(data_out, root=0)
+            data = lu.individual_scatter(data_out, root=0)
 
             ll_suff_stats = []
             for d in data:
                 ll_suff_stats.append(self.parallel_suff_stats(d))
 
-            ll_suff_stats = utils.individual_gather(ll_suff_stats, root=0)
+            ll_suff_stats = lu.individual_gather(ll_suff_stats, root=0)
             # ll_suff_stats = comm.gather(ll_suff_stats, root=0)
 
             if rank == 0:
@@ -660,7 +660,7 @@ class Lgssm:
             if self.param_props['update']['dynamics_weights'] and self.param_props['update']['dynamics_input_weights']:
                 # do a joint update for A and B
                 Mlin = torch.cat((Mz12, Muz2), dim=0)  # from linear terms
-                Mquad = utils.block(((Mz1, Muz21.T), (Muz21, Mu1)), dims=(1, 0))  # from quadratic terms
+                Mquad = lu.block(((Mz1, Muz21.T), (Muz21, Mu1)), dims=(1, 0))  # from quadratic terms
 
                 if self.param_props['shape']['dynamics_input_weights'] == 'diag':
                     if self.param_props['mask']['dynamics_input_weights'] is None:
@@ -671,7 +671,7 @@ class Lgssm:
                     diag_block = torch.tile(self.param_props['mask']['dynamics_input_weights'].T, (self.dynamics_input_lags, 1))
                     mask = torch.cat((full_block, diag_block), dim=0)
 
-                    ABnew = utils.solve_masked(Mquad.T, Mlin[:, :self.dynamics_dim], mask).T  # new A and B from regression
+                    ABnew = lu.solve_masked(Mquad.T, Mlin[:, :self.dynamics_dim], mask).T  # new A and B from regression
                 else:
                     ABnew = torch.linalg.solve(Mquad.T, Mlin[:, :self.dynamics_dim]).T  # new A and B from regression
 
@@ -698,7 +698,7 @@ class Lgssm:
                     # make the of which parameters to fit
                     mask = torch.tile(self.param_props['mask']['dynamics_input_weights'].T, (self.dynamics_input_lags, 1))
 
-                    self.dynamics_input_weights = utils.solve_masked(Mu1.T, (Muz2 - Muz21 @ self.dynamics_weights.T)[:, :self.dynamics_dim], mask).T  # new A and B from regression
+                    self.dynamics_input_weights = lu.solve_masked(Mu1.T, (Muz2 - Muz21 @ self.dynamics_weights.T)[:, :self.dynamics_dim], mask).T  # new A and B from regression
                 else:
                     self.dynamics_input_weights = torch.linalg.solve(Mu1.T, (Muz2 - Muz21 @ self.dynamics_weights.T)[:, :self.dynamics_dim]).T  # new B
 
@@ -720,7 +720,7 @@ class Lgssm:
             if self.param_props['update']['emissions_weights'] and self.param_props['update']['emissions_input_weights']:
                 # do a joint update to C and D
                 Mlin = torch.cat((Mzy, Muy), dim=0)  # from linear terms
-                Mquad = utils.block([[Mz, Muz.T], [Muz, Mu2]], dims=(1, 0))  # from quadratic terms
+                Mquad = lu.block([[Mz, Muz.T], [Muz, Mu2]], dims=(1, 0))  # from quadratic terms
                 CDnew = torch.linalg.solve(Mquad.T, Mlin).T  # new A and B from regression
                 self.emissions_weights = CDnew[:, :nz]  # new A
                 self.emissions_input_weights = CDnew[:, nz:]  # new B
@@ -839,17 +839,7 @@ class Lgssm:
         return init_mean_list
 
     def estimate_init_cov(self, emissions):
-        # estimate the initial covariance of a data set as the data covariance over all time
-        init_cov_list = []
-
-        for i in emissions:
-            init_cov_block = utils.estimate_cov(i)
-
-            # structure the init cov for lags
-            init_cov = torch.eye(self.dynamics_dim_full, device=self.device, dtype=self.dtype) / self.epsilon
-            init_cov[:self.dynamics_dim, :self.dynamics_dim] = init_cov_block
-
-            init_cov_list.append(init_cov)
+        init_cov_list = [torch.eye(i.shape[1], device=self.device, dtype=self.dtype) for i in emissions]
 
         return init_cov_list
 

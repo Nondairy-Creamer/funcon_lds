@@ -1,11 +1,10 @@
 import numpy as np
 import torch
-import preprocessing as pp
-from ssm_classes import Lgssm
+import loading_utilities as lu
 import plotting
+from ssm_classes import Lgssm
 from mpi4py import MPI
-import utilities as utils
-import os
+import inference_utilities as iu
 
 
 from torch.profiler import profile, record_function, ProfilerActivity, schedule, tensorboard_trace_handler
@@ -27,24 +26,27 @@ from torch.profiler import profile, record_function, ProfilerActivity, schedule,
 comm = MPI.COMM_WORLD
 size = comm.Get_size()
 rank = comm.Get_rank()
+is_parallel = size > 1
 
 # get run parameters, yaml file contains descriptions of the parameters
-run_params = pp.get_params(param_name='params')
-is_parallel = size > 1
+run_params = lu.get_params(param_name='params')
 
 if rank == 0:
     device = run_params['device']
     dtype = getattr(torch, run_params['dtype'])
 
     emissions, inputs, cell_ids = \
-        utils.get_model_data(run_params['data_path'], num_data_sets=run_params['num_data_sets'],
-                             bad_data_sets=run_params['bad_data_sets'],
-                             frac_neuron_coverage=run_params['frac_neuron_coverage'],
-                             minimum_frac_measured=run_params['minimum_frac_measured'],
-                             start_index=run_params['start_index'])
+        lu.get_model_data(run_params['data_path'], num_data_sets=run_params['num_data_sets'],
+                          bad_data_sets=run_params['bad_data_sets'],
+                          frac_neuron_coverage=run_params['frac_neuron_coverage'],
+                          minimum_frac_measured=run_params['minimum_frac_measured'],
+                          start_index=run_params['start_index'])
+
+    # lag the inputs
     num_neurons = emissions[0].shape[1]
     inputs = [Lgssm._get_lagged_data(i, run_params['dynamics_input_lags']) for i in inputs]
 
+    # create a mask for the dynamics_input_weights
     input_mask = torch.eye(num_neurons, dtype=dtype, device=device)
     has_stims = np.any(np.concatenate(inputs, axis=0), axis=0)
     inputs = [i[:, has_stims] for i in inputs]
@@ -63,25 +65,15 @@ if rank == 0:
 else:
     emissions = None
     inputs = None
+    cell_ids = None
     model_trained = None
 
-model_trained = utils.fit_em(model_trained, emissions, inputs, num_steps=run_params['num_train_steps'],
-                             is_parallel=is_parallel, save_folder=run_params['model_save_folder'])
+model_trained = iu.fit_em(model_trained, emissions, inputs, num_steps=run_params['num_train_steps'],
+                          is_parallel=is_parallel, save_folder=run_params['model_save_folder'])
 
 if rank == 0:
-    if 'SLURM_JOB_ID' in os.environ:
-        slurm_tag = '_' + os.environ['SLURM_JOB_ID']
-    else:
-        slurm_tag = ''
-
-    true_model_save_path = run_params['model_save_folder'] + '/model' + slurm_tag + '_true.pkl'
-    trained_model_save_path = run_params['model_save_folder'] + '/model' + slurm_tag + '_trained.pkl'
-
-    # if there is an old "true" model delete it because it doesn't correspond to this trained model
-    if os.path.exists(true_model_save_path):
-        os.remove(true_model_save_path)
-
-    model_trained.save(path=trained_model_save_path)
+    lu.save_run(run_params['model_save_folder'], model_trained,
+                data={'emissions': emissions, 'inputs': inputs, 'cell_ids': cell_ids}, run_params=run_params)
 
     if run_params['plot_figures']:
         plotting.plot_model_params(model_trained)

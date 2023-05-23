@@ -1,21 +1,20 @@
 import torch
 from ssm_classes import Lgssm
-import preprocessing as pp
-import plotting
+import loading_utilities as lu
 import pickle
 import numpy as np
 import time
 from mpi4py import MPI
-import utilities as utils
+import inference_utilities as iu
 import scipy.io as sio
-import os
+import plotting
 
 
 comm = MPI.COMM_WORLD
 size = comm.Get_size()
 rank = comm.Get_rank()
 
-run_params = pp.get_params(param_name='params_synth')
+run_params = lu.get_params(param_name='params_synth')
 is_parallel = size > 1
 
 if rank == 0:
@@ -81,24 +80,15 @@ else:
     emissions = None
     inputs = None
     model_trained = None
+    model_true = None
 
-model_trained = utils.fit_em(model_trained, emissions, inputs, num_steps=run_params['num_train_steps'],
-                             is_parallel=is_parallel, save_folder=run_params['model_save_folder'])
+model_trained = iu.fit_em(model_trained, emissions, inputs, num_steps=run_params['num_train_steps'],
+                          is_parallel=is_parallel, save_folder=run_params['model_save_folder'])
 
 if rank == 0:
-    if 'SLURM_JOB_ID' in os.environ:
-        slurm_tag = '_' + os.environ['SLURM_JOB_ID']
-    else:
-        slurm_tag = ''
+    lu.save_run(run_params['model_save_folder'], model_trained, model_true=model_true,
+                data={'emissions': emissions, 'inputs': inputs, 'cell_ids': None}, run_params=run_params)
 
-    true_model_save_path = run_params['model_save_folder'] + '/model' + slurm_tag + '_true.pkl'
-    trained_model_save_path = run_params['model_save_folder'] + '/model' + slurm_tag + '_trained.pkl'
-
-    # save the model
-    model_true.save(path=true_model_save_path)
-    model_trained.save(path=trained_model_save_path)
-
-    # plotting
     if run_params['plot_figures']:
-        plotting.plot_model_params(model_trained, model_true)
+        plotting.plot_model_params(model_trained, model_true=model_true)
 

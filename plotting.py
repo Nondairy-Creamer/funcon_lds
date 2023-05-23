@@ -3,17 +3,17 @@ import numpy as np
 import matplotlib as mpl
 
 
-def plot_model_params(model_synth_trained, model_synth_true=None):
+def plot_model_params(model_trained, model_true=None):
     ll_true_params = None
 
-    if model_synth_true is not None:
-        params_true = model_synth_true.get_params()
-        ll_true_params = model_synth_true.log_likelihood[0]
+    if model_true is not None:
+        params_true = model_true.get_params()
+        ll_true_params = model_true.log_likelihood[0]
 
     # Plots
     # Plot the log likelihood
     plt.figure()
-    plt.plot(model_synth_trained.log_likelihood)
+    plt.plot(model_trained.log_likelihood)
 
     if ll_true_params is not None:
         plt.axhline(ll_true_params, color='k', linestyle=':', label="true")
@@ -25,26 +25,26 @@ def plot_model_params(model_synth_trained, model_synth_true=None):
 
     # plot the time to train the model
     plt.figure()
-    plt.plot(model_synth_trained.train_time)
+    plt.plot(model_trained.train_time)
     plt.xlabel('iterations')
     plt.ylabel('total_time')
     plt.tight_layout()
 
-    params_trained = model_synth_trained.get_params()
+    params_trained = model_trained.get_params()
 
     for k in params_trained['trained'].keys():
-        if model_synth_trained.param_props['update'][k]:
+        if model_trained.param_props['update'][k]:
         # if k[-6:] != 'offset':
             if k[-3:] == 'cov':
-                num_cols = model_synth_trained.dynamics_dim
+                num_cols = model_trained.dynamics_dim
             else:
                 num_cols = params_trained['init'][k].shape[1]
 
-            param_init = params_trained['init'][k][:model_synth_trained.dynamics_dim, :num_cols]
-            param_trained = params_trained['trained'][k][:model_synth_trained.dynamics_dim, :num_cols]
+            param_init = params_trained['init'][k][:model_trained.dynamics_dim, :num_cols]
+            param_trained = params_trained['trained'][k][:model_trained.dynamics_dim, :num_cols]
 
-            if model_synth_true is not None:
-                param_true = params_true['trained'][k][:model_synth_true.dynamics_dim, :num_cols]
+            if model_true is not None:
+                param_true = params_true['trained'][k][:model_true.dynamics_dim, :num_cols]
             else:
                 param_true = None
 

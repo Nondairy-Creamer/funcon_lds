@@ -11,7 +11,6 @@ has_ground_truth = False
 if len(sys.argv) == 2:
     model_path = Path(sys.argv[1])
     model_folder = model_path.parent
-    model_name = model_path.stem
 
 else:
     # search for the most recently generated model
@@ -29,18 +28,15 @@ else:
                 max_dir = dirname
                 max_file = fname
 
-    model_name = Path(max_file).stem
-    if model_name[-8:] == '_trained':
-        model_name = model_name[:-8]
     model_folder = Path(max_dir)
 
-model_trained_path = model_folder / (model_name + '_trained.pkl')
+model_trained_path = model_folder / 'model_trained.pkl'
 model_trained_file = open(model_trained_path, 'rb')
 model_trained = pickle.load(model_trained_file)
 model_trained_file.close()
 
 # check if a true model exists
-model_true_path = model_folder / (model_name + '_true.pkl')
+model_true_path = model_folder / 'model_true.pkl'
 
 if model_true_path.exists():
     dtype = model_trained.dtype
@@ -50,5 +46,5 @@ if model_true_path.exists():
     model_true = pickle.load(model_true_file)
     model_true_file.close()
 
-plotting.plot_model_params(model_trained, model_synth_true=model_true)
+plotting.plot_model_params(model_trained, model_true=model_true)
 
