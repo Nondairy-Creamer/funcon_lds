@@ -18,7 +18,7 @@ def plot_model_params(model_folder, model_name):
 
     model_params = model.get_params()
     A_full = model_params['trained']['dynamics_weights'][:model.dynamics_dim, :]
-    A_full = A_full - np.eye(A_full.shape[0], A_full.shape[1])
+    # A_full = A_full - np.eye(A_full.shape[0], A_full.shape[1])
     A = np.split(A_full, model.dynamics_lags, axis=1)
     cmax = np.max(np.abs(A_full))
 
@@ -67,11 +67,19 @@ def predict_from_model(data_folder, model_folder, model_name):
     model = pickle.load(model_file)
     model_file.close()
 
-    emissions, inputs, cell_ids = utils.get_model_data(data_folder, num_data_sets=None, start_index=25)
-    inputs = [Lgssm._get_lagged_data(i, model.dynamics_input_lags) for i in inputs]
+    emissions, inputs, cell_ids = utils.get_model_data(data_folder, num_data_sets=81, start_index=25)
+    inputs_lagged = [Lgssm._get_lagged_data(i, model.dynamics_input_lags) for i in inputs]
+
+    has_stims = np.any(np.concatenate(inputs, axis=0), axis=0)
+    inputs = [i[:, has_stims] for i in inputs]
+
+    num_emissions = emissions[0].shape[1]
+    num_inputs = inputs[0].shape[1]
+    model_dynamics_dim = model.dynamics_dim
+    model_input_dim = model.input_dim
 
     sample_time = 500
-    sampled_model = model.sample(sample_time, inputs=inputs[0][:sample_time, :])
+    sampled_model = model.sample(sample_time, inputs=inputs_lagged[0][:sample_time, :])
 
     plt.figure()
     plt.subplot(2, 1, 1)
@@ -83,7 +91,7 @@ def predict_from_model(data_folder, model_folder, model_name):
 
 data_folder = '/home/mcreamer/Documents/data_sets/fun_con'
 model_folder = '/home/mcreamer/Documents/data_sets/fun_con_models'
-model_name = 'model_47970081_trained.pkl'
+model_name = 'model_48012469_trained.pkl'
 
 predict_from_model(data_folder, model_folder, model_name)
 plot_model_params(model_folder, model_name)
