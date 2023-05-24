@@ -3,22 +3,7 @@ import time
 from mpi4py import MPI
 import os
 import numpy as np
-
-
-def save_model_slurm(model, save_folder):
-    if 'SLURM_JOB_ID' in os.environ:
-        slurm_tag = '_' + os.environ['SLURM_JOB_ID']
-    else:
-        slurm_tag = ''
-
-    true_model_save_path = save_folder + '/model' + slurm_tag + '_true.pkl'
-    trained_model_save_path = save_folder + '/model' + slurm_tag + '_trained.pkl'
-
-    # if there is an old "true" model delete it because it doesn't correspond to this trained model
-    if os.path.exists(true_model_save_path):
-        os.remove(true_model_save_path)
-
-    model.save(path=trained_model_save_path)
+import loading_utilities as lu
 
 
 def block(block_list, dims=(2, 1)):
@@ -27,28 +12,6 @@ def block(block_list, dims=(2, 1)):
         layer.append(torch.cat(i, dim=dims[0]))
 
     return torch.cat(layer, dim=dims[1])
-
-
-def estimate_cov(a):
-    def nan_matmul(a, b, impute_val=0):
-        a_no_nan = torch.where(torch.isnan(a), impute_val, a)
-        b_no_nan = torch.where(torch.isnan(b), impute_val, b)
-
-        return a_no_nan @ b_no_nan
-
-    a_mean_sub = a - torch.nanmean(a, dim=0, keepdim=True)
-    # estimate the covariance from the data in a
-    cov = nan_matmul(a_mean_sub.T, a_mean_sub) / a.shape[0]
-
-    # some columns will be all 0s due to missing data
-    # replace those diagonals with the mean covariance
-    cov_diag = torch.diag(cov)
-    cov_diag_mean = torch.mean(cov_diag[cov_diag != 0])
-    cov_diag = torch.where(cov_diag == 0, cov_diag_mean, cov_diag)
-
-    cov[torch.eye(a.shape[1], dtype=torch.bool)] = cov_diag
-
-    return cov
 
 
 def individual_scatter(data, root=0):
@@ -114,6 +77,9 @@ def fit_em(model, emissions_list, inputs_list, init_mean=None, init_cov=None, nu
     if emissions_list is not None:
         emissions, inputs = model.standardize_inputs(emissions_list, inputs_list)
 
+        # lag the inputs if the model has lags
+        inputs = [model.get_lagged_data(i, model.dynamics_input_lags) for i in inputs]
+
         if init_mean is None:
             init_mean = model.estimate_init_mean(emissions)
         else:
@@ -151,13 +117,7 @@ def fit_em(model, emissions_list, inputs_list, init_mean=None, init_cov=None, nu
         model.train_time = time_out
 
         if np.mod(ep, save_every) == 0:
-            trained_model_save_path = save_folder + '/model' + slurm_tag + '_trained.pkl'
-
-            if os.path.exists(trained_model_save_path):
-                old_model_path = save_folder + '/model' + slurm_tag + '_previous_trained.pkl'
-                os.replace(trained_model_save_path, old_model_path)
-
-            model.save(path=trained_model_save_path)
+            lu.save_run(save_folder, model)
 
         if model.verbose:
             print('Finished step ' + str(ep + 1) + '/' + str(num_steps))
@@ -165,4 +125,5 @@ def fit_em(model, emissions_list, inputs_list, init_mean=None, init_cov=None, nu
             print('Time elapsed = ' + str(time_out[-1]))
 
     return model
+
 

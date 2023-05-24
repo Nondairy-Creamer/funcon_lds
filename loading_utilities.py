@@ -3,9 +3,18 @@ import itertools as it
 import scipy.special as ss
 from pathlib import Path
 import yaml
+import os
+import pickle
+
+# utilities for loading and saving the data
 
 
-def get_params(param_name='params'):
+def get_run_params(param_name='params'):
+    # load in the parameters for the run which dictate how many data sets to use,
+    # or how many time lags the model will fit etc
+    # first load in the defaults from the hidden files like .params.yml
+    # then load in the user updated version from params_update.yml
+
     with open('.' + param_name + '.yml', 'r') as file:
         params = yaml.safe_load(file)
 
@@ -18,70 +27,44 @@ def get_params(param_name='params'):
     return params
 
 
-def pearson_correlation(a, b):
-    if a.ndim == 1:
-        a = a[:, None]
+def get_model_data(data_path, num_data_sets=None, bad_data_sets=(), frac_neuron_coverage=0.0, minimum_frac_measured=0.0,
+                   start_index=0):
+    # load all the recordings of neural activity
+    emissions_unaligned, cell_ids_unaligned, q, q_labels, stim_cell_ids, inputs_unaligned = \
+        load_data(data_path)
 
-    if b.ndim == 1:
-        b = b[:, None]
+    # remove recordings that are noisy
+    data_sets_to_remove = np.sort(bad_data_sets)[::-1]
+    for bd in data_sets_to_remove:
+        emissions_unaligned.pop(bd)
+        cell_ids_unaligned.pop(bd)
+        inputs_unaligned.pop(bd)
+        stim_cell_ids.pop(bd)
 
-    n_cols = a.shape[1]
+    # truncate the number of recordings if you can't fit all of them at once due to memory constraints
+    if num_data_sets is None:
+        num_data_sets = len(emissions_unaligned)
 
-    corr = np.zeros(n_cols)
-    for c in range(n_cols):
-        nan_loc = np.isnan(a[:, c]) | np.isnan(b[:, c])
-        a_no_nan = a[~nan_loc, c]
-        b_no_nan = b[~nan_loc, c]
-        a_prime = a_no_nan - np.mean(a_no_nan)
-        b_prime = b_no_nan - np.mean(b_no_nan)
+    emissions_unaligned = emissions_unaligned[:num_data_sets]
+    cell_ids_unaligned = cell_ids_unaligned[:num_data_sets]
+    inputs_unaligned = inputs_unaligned[:num_data_sets]
+    stim_cell_ids = stim_cell_ids[:num_data_sets]
 
-        corr[c] = np.mean(a_prime * b_prime) / np.std(a_prime) / np.std(b_prime)
+    # choose a subset of the data sets to maximize the number of recordings * the number of neurons included
+    cell_ids, emissions, best_runs, inputs = \
+        get_combined_dataset(emissions_unaligned, cell_ids_unaligned, stim_cell_ids, inputs_unaligned,
+                             frac_neuron_coverage=frac_neuron_coverage,
+                             minimum_freq=minimum_frac_measured)
 
-    return corr
+    num_data = len(emissions)
 
+    # remove the beginning of the recording which contains artifacts and mean subtract
+    for ri in range(num_data):
+        emissions[ri] = emissions[ri][start_index:, :]
+        emissions[ri] = emissions[ri] - np.mean(emissions[ri], axis=0, keepdims=True)
+        inputs[ri] = inputs[ri][start_index:, :]
 
-def get_design_matrix(data, hist_length, step_size, fit_derivative=False):
-    num_time, num_neurons = data.shape
-    shifts = range(hist_length, num_time-1, step_size)  # steps in the past to regress on
-    num_shifts = len(shifts)
-    num_weights = num_neurons * hist_length + 1  # add a weight for offset
-
-    # initialize the activity history matrix, with one column set to 1's to allow for an offset
-    activity_history = np.zeros((num_shifts, num_weights))
-    activity_history[:, -1] = 1
-    current_activity = np.zeros((num_shifts, num_neurons))
-
-    # get the history of each neuron at time t
-    for tau_i, tau in enumerate(shifts):
-        current_hist = np.flipud(data[tau - hist_length:tau, :])
-        # columnize the history so we can store it as a matrix
-        activity_history[tau_i, :-1] = current_hist.reshape(-1)
-
-        if fit_derivative:
-            current_activity[tau_i, :] = data[tau, :] - data[tau - 1, :]
-        else:
-            current_activity[tau_i, :] = data[tau, :]
-
-    return current_activity, activity_history
-
-
-def get_cross_val_sets(activity_current, activity_history, num_split=5):
-    # split the data into train / test sets
-    history_split = np.array_split(activity_history, num_split)
-    current_split = np.array_split(activity_current, num_split)
-
-    test_ind = np.ceil(num_split / 2).astype(int)
-    test_set = history_split[test_ind]
-    test_ans = current_split[test_ind]
-
-    train_set = history_split.copy()
-    train_ans = current_split.copy()
-    del train_set[test_ind]
-    del train_ans[test_ind]
-    train_set = np.concatenate(train_set, axis=0)
-    train_ans = np.concatenate(train_ans, axis=0)
-
-    return train_set, train_ans, test_set, test_ans
+    return emissions, inputs, cell_ids
 
 
 def load_data(fun_atlas_path):
@@ -94,6 +77,7 @@ def load_data(fun_atlas_path):
     stim_volume_inds = []
     stim_ids = []
 
+    # find all files in the folder that have francesco_green.npy
     for i in fun_atlas_path.rglob('francesco_green.npy'):
         recordings.append(np.load(str(i), allow_pickle=False))
         labels.append(np.load(str(i.parent / 'labels.npy'), allow_pickle=False))
@@ -142,6 +126,48 @@ def load_data(fun_atlas_path):
                 q_labels[l] = labels[ri][li]
 
     return recordings, labels, q, q_labels, stim_ids, stim_volume_inds
+
+
+def save_run(model_save_folder, model_trained, model_true=None, data=None, run_params=None, remove_old=False):
+    # save the models, data, and parameters from the fitting procedure
+    # if run on SLURM get the slurm ID
+    if 'SLURM_JOB_ID' in os.environ:
+        slurm_tag = os.environ['SLURM_JOB_ID']
+    else:
+        slurm_tag = 'local'
+
+    full_save_folder = Path(model_save_folder) / slurm_tag
+    true_model_save_path = full_save_folder / 'model_true.pkl'
+    trained_model_save_path = full_save_folder / 'model_trained.pkl'
+    data_save_path = full_save_folder / 'data.pkl'
+    params_save_path = full_save_folder / 'params.pkl'
+
+    if not full_save_folder.exists():
+        os.mkdir(full_save_folder)
+
+    # save the trained model
+    model_trained.save(path=trained_model_save_path)
+
+    # save the true model, if it exists
+    if model_true is not None:
+        model_true.save(path=true_model_save_path)
+    else:
+        if remove_old:
+            # if there is an old "true" model delete it because it doesn't correspond to this trained model
+            if os.path.exists(true_model_save_path):
+                os.remove(true_model_save_path)
+
+    # save the data
+    if data is not None:
+        data_file = open(data_save_path, 'wb')
+        pickle.dump(data, data_file)
+        data_file.close()
+
+    # save the input parameters
+    if run_params is not None:
+        params_file = open(params_save_path, 'wb')
+        pickle.dump(run_params, params_file)
+        params_file.close()
 
 
 def get_combined_dataset(neural_data, neuron_labels, stim_ids, stim_volume_inds,
