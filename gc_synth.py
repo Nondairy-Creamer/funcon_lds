@@ -7,68 +7,46 @@ from ssm_classes import Lgssm
 import preprocessing as pp
 import utilities as util
 
-params = pp.get_params(param_name='params')
-emissions_unaligned, cell_ids_unaligned, q, q_labels, stim_cell_ids, inputs_unaligned = \
-    pp.load_data(params['data_path'])
-rng = np.random.default_rng(params['random_seed'])
-
-# remove recordings that are noisy
-data_sets_to_remove = np.sort(params['bad_data_sets'])[::-1]
-for bd in data_sets_to_remove:
-    emissions_unaligned.pop(bd)
-    cell_ids_unaligned.pop(bd)
-    inputs_unaligned.pop(bd)
-    stim_cell_ids.pop(bd)
-
-cell_ids, emissions, best_runs, inputs = \
-    pp.get_combined_dataset(emissions_unaligned, cell_ids_unaligned, stim_cell_ids, inputs_unaligned,
-                            frac_neuron_coverage=params['frac_neuron_coverage'],
-                            minimum_freq=params['minimum_frac_measured'])
-
-num_data_sets = len(emissions)
-
-# remove the beginning of the recording which contains artifacts and mean subtract
-for ri in range(num_data_sets):
-    emissions[ri] = emissions[ri][params['index_start']:, :]
-    emissions[ri] = emissions[ri] - np.mean(emissions[ri], axis=0, keepdims=True)
-    inputs[ri] = inputs[ri][params['index_start']:, :]
-latent_dim = len(cell_ids)
-emissions_dim = latent_dim
-inputs_dim = latent_dim
-
+params = pp.get_params(param_name='params_synth')
+num_data_sets = params['num_data_sets']
 device = params["device"]
 dtype = getattr(torch, params["dtype"])
-model_true = Lgssm(latent_dim, emissions_dim, inputs_dim, dtype=dtype, device=device,
-                            verbose=params['verbose'])
+rng = np.random.default_rng(params['random_seed'])
 
-# randomize the parameters (defaults are nonrandom)
-model_true.randomize_weights(rng=rng)
+model_synth_true = Lgssm(params['dynamics_dim'], params['emissions_dim'], params['input_dim'],
+                       dtype=dtype, device=device, param_props=params['param_props'],
+                       dynamics_lags=params['dynamics_lags'], dynamics_input_lags=params['dynamics_input_lags'])
+model_synth_true.randomize_weights(rng=rng)
+model_synth_true.emissions_weights_init = np.eye(model_synth_true.emissions_dim, model_synth_true.dynamics_dim_full)
+model_synth_true.emissions_input_weights_init = np.zeros((model_synth_true.emissions_dim, model_synth_true.input_dim_full))
+model_synth_true.set_to_init()
 
-# this below is only for the synthetic data, don't need for real datasets
 # sample from the randomized model
-# data_dict = model_true.sample(
-#     num_time=params["num_time"],
-#     # num_data_sets=params["num_data_sets"],
-#     nan_freq=params["nan_freq"],
-#     random_seed=params["random_seed"],
-#
+data_dict = \
+    model_synth_true.sample(num_time=params['num_time'],
+                      num_data_sets=params['num_data_sets'],
+                      scattered_nan_freq=params['scattered_nan_freq'],
+                      lost_emission_freq=params['lost_emission_freq'],
+                      input_time_scale=params['input_time_scale'],
+                      rng=rng)
 
-# num_time = np.zeros(len(emissions))
-# for i in range(len(emissions)):
-#     num_time[i] = len(emissions[i])
+emissions = data_dict['emissions']
+inputs = data_dict['inputs']
+latents_true = data_dict['latents']
+init_mean_true = data_dict['init_mean']
+init_cov_true = data_dict['init_cov']
 
-############### copy below this for multiple datasets
-# init_mean_true = data_dict["init_mean"]
-# init_cov_true = data_dict["init_cov"]
-# latents = data_dict["latents"][0]
+num_time = np.zeros(len(emissions))
+for i in range(len(emissions)):
+    num_time[i] = len(emissions[i])
 
-A = model_true.dynamics_weights.detach().numpy()
+A = model_synth_true.dynamics_weights.detach().numpy()
 
 # fit A_hat with p time lags
 # X_i is a granger cause of another time series X_j if at least 1 element A_tau(j,i)
 # for tau=1,...,L is signif larger than 0
 # X_t = sum_1^L A_tau*X(t-tau) + noise(t)
-num_lags = 7
+num_lags = 1
 nan_list = []
 
 for d in range(num_data_sets):
@@ -114,7 +92,7 @@ for d in range(num_data_sets):
     # a_hat is a col vector of each A_hat_p matrix for each lag p -> need to transpose each A_hat_p
     num_good_neurons = len(good_emissions[0, :])
 
-    # ab_hat = np.linalg.lstsq(y_history, y_target, rcond=None)[0]
+    ab_hat = np.linalg.lstsq(y_history, y_target, rcond=None)[0]
 
     # instead do masking from utils to get rid of the 0 entries and get proper fitting
     # mask =
@@ -135,22 +113,21 @@ for d in range(num_data_sets):
     print(mse)
 
     fig, axs = plt.subplots(nrows=1, ncols=1)
-    plt.title('dataset %(dataset)i GC for %(lags)i lags: a_hat' % {"dataset": d, "lags": num_lags})
+    plt.title('SYNTH dataset %(dataset)i GC for %(lags)i lags: a_hat' % {"dataset": d, "lags": num_lags})
     a_hat_pos = plt.imshow(a_hat, aspect='auto', interpolation='nearest')
     plt.colorbar(a_hat_pos)
     # plt.show()
-    str = params['fig_path'] + 'ahat%i.png' % d
+    str = params['fig_path'] + 'SYNTHahat%i.png' % d
     plt.savefig(str)
 
     fig, axs = plt.subplots(nrows=1, ncols=1)
-    plt.title('dataset %(dataset)i GC for %(lags)i lags: b_hat' % {"dataset": d, "lags": num_lags})
+    plt.title('SYNTH dataset %(dataset)i GC for %(lags)i lags: b_hat' % {"dataset": d, "lags": num_lags})
     b_hat_pos = plt.imshow(b_hat, aspect='auto', interpolation='nearest')
     plt.colorbar(b_hat_pos)
     # plt.show()
-    str = params['fig_path'] + 'bhat%i.png' % d
+    str = params['fig_path'] + 'SYNTHbhat%i.png' % d
     plt.savefig(str)
 
 A_pos = plt.imshow(A, interpolation='nearest')
 plt.colorbar(A_pos)
 plt.show()
-
