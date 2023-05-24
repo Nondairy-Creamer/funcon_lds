@@ -839,16 +839,38 @@ class Lgssm:
         return init_mean_list
 
     def estimate_init_cov(self, emissions):
+        # estimate the initial covariance of a data set as the data covariance over all time
         init_cov_list = []
 
-        # In principle you can calculate something from emissions here
-        # but it's simpler to just set it to identity
-        for i in emissions:
-            init_cov_list.append(torch.eye(self.dynamics_dim_full,
-                                 device=self.device, dtype=self.dtype) * self.epsilon)
+        def nan_matmul(a, b, impute_val=0):
+            a_no_nan = torch.where(torch.isnan(a), impute_val, a)
+            b_no_nan = torch.where(torch.isnan(b), impute_val, b)
 
-            init_cov_list[-1][:self.dynamics_dim, :self.dynamics_dim] = \
-                torch.eye(self.dynamics_dim, device=self.device, dtype=self.dtype)
+            return a_no_nan @ b_no_nan
+
+        def estimate_cov(a):
+            a_mean_sub = a-torch.nanmean(a, dim=0, keepdim=True)
+            # estimate the covariance from the data in a
+            cov = nan_matmul(a_mean_sub.T, a_mean_sub) / a.shape[0]
+
+            # some columns will be all 0s due to missing data
+            # replace those diagonals with the mean covariance
+            cov_diag = torch.diag(cov)
+            cov_diag_mean = torch.mean(cov_diag[cov_diag != 0])
+            cov_diag = torch.where(cov_diag==0, cov_diag_mean, cov_diag)
+
+            cov[torch.eye(a.shape[1], device=a.device, dtype=torch.bool)] = cov_diag
+
+            return cov
+
+        for i in emissions:
+            init_cov_block = estimate_cov(i)
+
+            # structure the init cov for lags
+            init_cov = torch.eye(self.dynamics_dim_full, device=self.device, dtype=self.dtype) / self.epsilon
+            init_cov[:self.dynamics_dim, :self.dynamics_dim] = init_cov_block
+
+            init_cov_list.append(init_cov)
 
         return init_cov_list
 
