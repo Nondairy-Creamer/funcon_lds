@@ -132,7 +132,7 @@ def save_run(model_save_folder, model_trained, model_true=None, data=None, run_p
     # save the models, data, and parameters from the fitting procedure
     # if run on SLURM get the slurm ID
     if 'SLURM_JOB_ID' in os.environ:
-        slurm_tag = '_' + os.environ['SLURM_JOB_ID']
+        slurm_tag = os.environ['SLURM_JOB_ID']
     else:
         slurm_tag = 'local'
 
