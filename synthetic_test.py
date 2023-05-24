@@ -62,20 +62,6 @@ if rank == 0:
             setattr(model_trained, init_key, getattr(model_true, init_key))
     model_trained.set_to_init()
 
-    # save the data
-    data_dict['params_init'] = model_trained.get_params()
-    data_dict['params_init']['init_mean'] = init_mean_true
-    data_dict['params_init']['init_cov'] = init_cov_true
-    data_dict['params_true'] = model_true.get_params()
-    data_dict['params_true']['init_mean'] = init_mean_true
-    data_dict['params_true']['init_cov'] = init_cov_true
-
-    save_file = open(run_params['synth_data_save_folder'] + '/data.pkl', 'wb')
-    pickle.dump(data_dict, save_file)
-    save_file.close()
-
-    sio.savemat(run_params['synth_data_save_folder'] + '/data.mat', data_dict)
-
 else:
     emissions = None
     inputs = None
