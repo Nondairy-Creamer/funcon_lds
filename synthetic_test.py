@@ -1,12 +1,10 @@
 import torch
 from ssm_classes import Lgssm
 import loading_utilities as lu
-import pickle
 import numpy as np
 import time
 from mpi4py import MPI
 import inference_utilities as iu
-import scipy.io as sio
 import plotting
 
 
@@ -63,7 +61,8 @@ if rank == 0:
     model_trained.set_to_init()
 
     lu.save_run(run_params['model_save_folder'], model_trained, model_true=model_true,
-                data={'emissions': emissions, 'inputs': inputs, 'cell_ids': None}, run_params=run_params)
+                data={'emissions': emissions, 'inputs': inputs, 'cell_ids': None}, run_params=run_params,
+                remove_old=True)
 else:
     emissions = None
     inputs = None

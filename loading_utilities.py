@@ -128,7 +128,7 @@ def load_data(fun_atlas_path):
     return recordings, labels, q, q_labels, stim_ids, stim_volume_inds
 
 
-def save_run(model_save_folder, model_trained, model_true=None, data=None, run_params=None):
+def save_run(model_save_folder, model_trained, model_true=None, data=None, run_params=None, remove_old=False):
     # save the models, data, and parameters from the fitting procedure
     # if run on SLURM get the slurm ID
     if 'SLURM_JOB_ID' in os.environ:
@@ -152,9 +152,10 @@ def save_run(model_save_folder, model_trained, model_true=None, data=None, run_p
     if model_true is not None:
         model_true.save(path=true_model_save_path)
     else:
-        # if there is an old "true" model delete it because it doesn't correspond to this trained model
-        if os.path.exists(true_model_save_path):
-            os.remove(true_model_save_path)
+        if remove_old:
+            # if there is an old "true" model delete it because it doesn't correspond to this trained model
+            if os.path.exists(true_model_save_path):
+                os.remove(true_model_save_path)
 
     # save the data
     if data is not None:
