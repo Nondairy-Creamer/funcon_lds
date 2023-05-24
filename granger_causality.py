@@ -3,13 +3,13 @@ import pickle
 import torch
 import matplotlib
 import matplotlib.pyplot as plt
-from ssm_classes import LgssmSimple
+from ssm_classes import Lgssm
 import preprocessing as pp
-
 
 params = pp.get_params(param_name='params')
 emissions_unaligned, cell_ids_unaligned, q, q_labels, stim_cell_ids, inputs_unaligned = \
     pp.load_data(params['data_path'])
+rng = np.random.default_rng(params['random_seed'])
 
 # remove recordings that are noisy
 data_sets_to_remove = np.sort(params['bad_data_sets'])[::-1]
@@ -32,14 +32,16 @@ for ri in range(num_data_sets):
     emissions[ri] = emissions[ri] - np.mean(emissions[ri], axis=0, keepdims=True)
     inputs[ri] = inputs[ri][params['index_start']:, :]
 latent_dim = len(cell_ids)
+emissions_dim = latent_dim
+inputs_dim = latent_dim
 
 device = params["device"]
 dtype = getattr(torch, params["dtype"])
-model_true = LgssmSimple(latent_dim, dtype=dtype, device=device,
+model_true = Lgssm(latent_dim, emissions_dim, inputs_dim, dtype=dtype, device=device,
                             verbose=params['verbose'])
 
 # randomize the parameters (defaults are nonrandom)
-model_true.randomize_weights(random_seed=params["random_seed"])
+model_true.randomize_weights(rng=rng)
 
 # this below is only for the synthetic data, don't need for real datasets
 # sample from the randomized model
@@ -76,7 +78,7 @@ for d in range(num_data_sets):
     nans = np.where(np.isnan(emissions[d][0, :]))
     nan_list.append(nans)
     good_emissions = emissions[d][:, ~np.isnan(emissions[d][0, :])]
-
+    good_inputs = inputs[d][:, ~np.isnan(emissions[d][0, :])]
 
     # y_target is the time series we are trying to predict from A_hat @ y_history
     # y_target should start at t=0+num_lags
@@ -86,13 +88,16 @@ for d in range(num_data_sets):
     y_history = np.zeros((num_time - num_lags, 0))
 
     # note this goes from time num_lags to T
+    #need to concat inputs on the right
     y_target = good_emissions[num_lags:, :]
 
     for p in reversed(range(num_lags)):
         if p - num_lags:
             y_history = np.concatenate((y_history, good_emissions[p:p-num_lags, :]), axis=1)
+            y_history = np.concatenate((y_history, good_inputs[p:p-num_lags, :]), axis=1)
         else:
             y_history = np.concatenate((y_history, good_emissions[p:, :]), axis=1)
+            y_history = np.concatenate((y_history, good_inputs[p:p - num_lags, :]), axis=1)
 
     # A_hat = np.linalg.solve(y_history, y_target).T
     # -> linalg.solve doesn't work because y_history is not square --> use least squares instead
@@ -103,24 +108,34 @@ for d in range(num_data_sets):
     # a_hat is a col vector of each A_hat_p matrix for each lag p -> need to transpose each A_hat_p
     num_good_neurons = len(good_emissions[0, :])
 
-    a_hat = np.linalg.lstsq(y_history, y_target, rcond=None)[0]
+    ab_hat = np.linalg.lstsq(y_history, y_target, rcond=None)[0]
+    a_hat = ab_hat[:num_lags*num_good_neurons, :]
+    b_hat = ab_hat[num_lags*num_good_neurons:, :]
     for p in range(num_lags):
         a_hat[p*num_good_neurons:p*num_good_neurons+num_good_neurons, :] = \
             a_hat[p*num_good_neurons:p*num_good_neurons+num_good_neurons, :].T
+        b_hat[p * num_good_neurons:p * num_good_neurons + num_good_neurons, :] = \
+            b_hat[p * num_good_neurons:p * num_good_neurons + num_good_neurons, :].T
 
-    y_hat = y_history @ a_hat
+    y_hat = y_history @ ab_hat
     # print(a_hat)
     # print(y_hat)
     mse = np.mean((y_target - y_hat) ** 2)
     print(mse)
 
-    plt.title('dataset %i GC for 5 lags' % d)
-    a_hat_pos = plt.imshow(a_hat)
+    fig, axs = plt.subplots(nrows=1, ncols=1)
+    plt.title('dataset %i GC for 5 lags: a_hat' % d)
+    a_hat_pos = plt.imshow(a_hat, aspect='auto', interpolation='nearest')
     plt.colorbar(a_hat_pos)
-
     plt.show()
 
-A_pos = plt.imshow(A)
+    fig, axs = plt.subplots(nrows=1, ncols=1)
+    plt.title('dataset %i GC for 5 lags: b_hat' % d)
+    b_hat_pos = plt.imshow(b_hat, aspect='auto', interpolation='nearest')
+    plt.colorbar(b_hat_pos)
+    plt.show()
+
+A_pos = plt.imshow(A, interpolation='nearest')
 plt.colorbar(A_pos)
 plt.show()
 ######## multiple datasets --> think about making function for parts that stay the same
