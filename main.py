@@ -67,6 +67,10 @@ if rank == 0:
 
     model_trained.emissions_weights = torch.eye(model_trained.emissions_dim, model_trained.dynamics_dim_full, device=device, dtype=dtype)
     model_trained.emissions_input_weights = torch.zeros((model_trained.emissions_dim, model_trained.input_dim_full), device=device, dtype=dtype)
+
+    lu.save_run(run_params['model_save_folder'], model_trained,
+                data={'emissions': emissions, 'inputs': inputs, 'cell_ids': cell_ids}, run_params=run_params)
+
 else:
     # if you are a child node, just set everything to None and only calculate your sufficient statistics
     emissions = None
@@ -79,8 +83,7 @@ model_trained = iu.fit_em(model_trained, emissions, inputs, num_steps=run_params
                           is_parallel=is_parallel, save_folder=run_params['model_save_folder'])
 
 if rank == 0:
-    lu.save_run(run_params['model_save_folder'], model_trained,
-                data={'emissions': emissions, 'inputs': inputs, 'cell_ids': cell_ids}, run_params=run_params)
+    lu.save_run(run_params['model_save_folder'], model_trained)
 
     if run_params['plot_figures']:
         plotting.plot_model_params(model_trained)
