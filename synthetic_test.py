@@ -61,7 +61,7 @@ if rank == 0:
     model_trained.set_to_init()
 
     lu.save_run(run_params['model_save_folder'], model_trained, model_true=model_true,
-                data={'emissions': emissions, 'inputs': inputs, 'cell_ids': None}, run_params=run_params,
+                data={'emissions': emissions, 'inputs': inputs, 'cell_ids': model_true.cell_ids}, run_params=run_params,
                 remove_old=True)
 else:
     emissions = None
@@ -75,6 +75,6 @@ model_trained = iu.fit_em(model_trained, emissions, inputs, num_steps=run_params
 if rank == 0:
     lu.save_run(run_params['model_save_folder'], model_trained)
 
-    if run_params['plot_figures']:
+    if not is_parallel and run_params['plot_figures']:
         plotting.plot_model_params(model_trained, model_true=model_true)
 
