@@ -1,8 +1,7 @@
 import torch
 import numpy as np
 import pickle
-import inference_utilities as lu
-from mpi4py import MPI
+import inference_utilities as iu
 import warnings
 
 
@@ -553,11 +552,11 @@ class Lgssm:
         inputs = data[1]
         init_mean = data[2]
         init_cov = data[3]
-        ll, suff_stats = self.get_suff_stats(emissions, inputs, init_mean, init_cov)
+        ll, suff_stats, smoothed_means = self.get_suff_stats(emissions, inputs, init_mean, init_cov)
 
-        return ll, suff_stats
+        return ll, suff_stats, smoothed_means
 
-    def em_step(self, emissions_list, inputs_list, init_mean_list, init_cov_list, is_parallel=False):
+    def em_step(self, emissions_list, inputs_list, init_mean_list, init_cov_list, cpu_id=0, num_cpus=1):
         # mm = runMstep_LDSgaussian(yy,uu,mm,zzmu,zzcov,zzcov_d1,optsEM)
         #
         # Run M-step updates for LDS-Gaussian model
@@ -585,49 +584,39 @@ class Lgssm:
         # Output
         # =======
         #  mmnew - new model struct with updated parameters
-
-        comm = MPI.COMM_WORLD
-        rank = comm.Get_rank()
-        size = comm.Get_size()
-
         nz = self.dynamics_dim_full  # number of latents
 
-        if rank == 0:
+        if cpu_id == 0:
             data_out = list(zip(emissions_list, inputs_list, init_mean_list, init_cov_list))
             num_data = len(emissions_list)
-            chunk_size = int(np.ceil(num_data / size))
+            chunk_size = int(np.ceil(num_data / num_cpus))
             # split data out into a list of inputs
             data_out = [data_out[i:i+chunk_size] for i in range(0, num_data, chunk_size)]
         else:
             data_out = None
 
-        if is_parallel:
-            data = lu.individual_scatter(data_out, root=0)
+        ll_suff_stats_smoothed_means = []
 
-            ll_suff_stats = []
-            for d in data:
-                ll_suff_stats.append(self.parallel_suff_stats(d))
+        data = iu.individual_scatter(data_out, root=0)
 
-            ll_suff_stats = lu.individual_gather(ll_suff_stats, root=0)
+        for d in data:
+            ll_suff_stats_smoothed_means.append(self.parallel_suff_stats(d))
 
-            if rank == 0:
-                ll_suff_stats_out = []
-                for i in ll_suff_stats:
-                    for j in i:
-                        ll_suff_stats_out.append(j)
+        ll_suff_stats_smoothed_means = iu.individual_gather(ll_suff_stats_smoothed_means, root=0)
 
-                ll_suff_stats = ll_suff_stats_out
-
-        else:
-            ll_suff_stats = []
-            for i in data_out:
+        if cpu_id == 0:
+            ll_suff_stats_out = []
+            for i in ll_suff_stats_smoothed_means:
                 for j in i:
-                    ll_suff_stats.append(self.parallel_suff_stats(j))
+                    ll_suff_stats_out.append(j)
 
-        if rank == 0:
-            log_likelihood = [i[0] for i in ll_suff_stats]
+            ll_suff_stats_smoothed_means = ll_suff_stats_out
+
+        if cpu_id == 0:
+            log_likelihood = [i[0] for i in ll_suff_stats_smoothed_means]
             log_likelihood = torch.sum(torch.stack(log_likelihood))
-            suff_stats = [i[1] for i in ll_suff_stats]
+            suff_stats = [i[1] for i in ll_suff_stats_smoothed_means]
+            smoothed_means = [i[2] for i in ll_suff_stats_smoothed_means]
 
             Mz1_list = [i['Mz1'] for i in suff_stats]
             Mz2_list = [i['Mz2'] for i in suff_stats]
@@ -670,7 +659,7 @@ class Lgssm:
             if self.param_props['update']['dynamics_weights'] and self.param_props['update']['dynamics_input_weights']:
                 # do a joint update for A and B
                 Mlin = torch.cat((Mz12, Muz2), dim=0)  # from linear terms
-                Mquad = lu.block(((Mz1, Muz21.T), (Muz21, Mu1)), dims=(1, 0))  # from quadratic terms
+                Mquad = iu.block(((Mz1, Muz21.T), (Muz21, Mu1)), dims=(1, 0))  # from quadratic terms
 
                 if self.param_props['shape']['dynamics_input_weights'] == 'diag':
                     if self.param_props['mask']['dynamics_input_weights'] is None:
@@ -681,7 +670,7 @@ class Lgssm:
                     diag_block = torch.tile(self.param_props['mask']['dynamics_input_weights'].T, (self.dynamics_input_lags, 1))
                     mask = torch.cat((full_block, diag_block), dim=0)
 
-                    ABnew = lu.solve_masked(Mquad.T, Mlin[:, :self.dynamics_dim], mask).T  # new A and B from regression
+                    ABnew = iu.solve_masked(Mquad.T, Mlin[:, :self.dynamics_dim], mask).T  # new A and B from regression
                 else:
                     ABnew = torch.linalg.solve(Mquad.T, Mlin[:, :self.dynamics_dim]).T  # new A and B from regression
 
@@ -708,7 +697,7 @@ class Lgssm:
                     # make the of which parameters to fit
                     mask = torch.tile(self.param_props['mask']['dynamics_input_weights'].T, (self.dynamics_input_lags, 1))
 
-                    self.dynamics_input_weights = lu.solve_masked(Mu1.T, (Muz2 - Muz21 @ self.dynamics_weights.T)[:, :self.dynamics_dim], mask).T  # new A and B from regression
+                    self.dynamics_input_weights = iu.solve_masked(Mu1.T, (Muz2 - Muz21 @ self.dynamics_weights.T)[:, :self.dynamics_dim], mask).T  # new A and B from regression
                 else:
                     self.dynamics_input_weights = torch.linalg.solve(Mu1.T, (Muz2 - Muz21 @ self.dynamics_weights.T)[:, :self.dynamics_dim]).T  # new B
 
@@ -730,7 +719,7 @@ class Lgssm:
             if self.param_props['update']['emissions_weights'] and self.param_props['update']['emissions_input_weights']:
                 # do a joint update to C and D
                 Mlin = torch.cat((Mzy, Muy), dim=0)  # from linear terms
-                Mquad = lu.block([[Mz, Muz.T], [Muz, Mu2]], dims=(1, 0))  # from quadratic terms
+                Mquad = iu.block([[Mz, Muz.T], [Muz, Mu2]], dims=(1, 0))  # from quadratic terms
                 CDnew = torch.linalg.solve(Mquad.T, Mlin).T  # new A and B from regression
                 self.emissions_weights = CDnew[:, :nz]  # new A
                 self.emissions_input_weights = CDnew[:, nz:]  # new B
@@ -759,7 +748,8 @@ class Lgssm:
             if not torch.all(self.emissions_cov == self.emissions_cov.T):
                 warnings.warn('emissions_cov is not symmetric')
 
-            return log_likelihood
+            return log_likelihood, smoothed_means
+        return None, None
 
     def get_suff_stats(self, emissions, inputs, init_mean, init_cov):
         nt = emissions.shape[0]
@@ -822,7 +812,7 @@ class Lgssm:
                       'nt': nt,
                       }
 
-        return ll, suff_stats
+        return ll, suff_stats, smoothed_means
 
     def _pad_init_for_lags(self):
         self.dynamics_weights_init = self._get_lagged_weights(self.dynamics_weights_init, self.dynamics_lags, fill='eye')

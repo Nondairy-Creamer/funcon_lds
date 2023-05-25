@@ -69,7 +69,7 @@ if rank == 0:
     model_trained.emissions_input_weights = torch.zeros((model_trained.emissions_dim, model_trained.input_dim_full), device=device, dtype=dtype)
     model_trained.cell_ids = cell_ids
 
-    lu.save_run(run_params['model_save_folder'], model_trained,
+    lu.save_run(run_params['model_save_folder'], model_trained=model_trained, remove_old=True,
                 data={'emissions': emissions, 'inputs': inputs, 'cell_ids': cell_ids}, run_params=run_params)
 
 else:
@@ -80,12 +80,10 @@ else:
     model_trained = None
 
 # fit the model using expectation maximization
-model_trained = iu.fit_em(model_trained, emissions, inputs, num_steps=run_params['num_train_steps'],
-                          is_parallel=is_parallel, save_folder=run_params['model_save_folder'])
+model_trained, smoothed_means = iu.fit_em(model_trained, emissions, inputs, num_steps=run_params['num_train_steps'],
+                                          save_folder=run_params['model_save_folder'])
 
 if rank == 0:
-    lu.save_run(run_params['model_save_folder'], model_trained)
-
     if not is_parallel and run_params['plot_figures']:
         plotting.plot_model_params(model_trained)
 

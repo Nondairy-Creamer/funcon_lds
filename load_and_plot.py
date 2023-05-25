@@ -9,8 +9,7 @@ model_true = None
 has_ground_truth = False
 
 if len(sys.argv) == 2:
-    model_path = Path(sys.argv[1])
-    model_folder = model_path.parent
+    model_folder = Path(sys.argv[1])
 
 else:
     # search for the most recently generated model

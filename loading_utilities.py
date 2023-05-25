@@ -128,7 +128,8 @@ def load_data(fun_atlas_path):
     return recordings, labels, q, q_labels, stim_ids, stim_volume_inds
 
 
-def save_run(model_save_folder, model_trained, model_true=None, data=None, run_params=None, remove_old=False):
+def save_run(model_save_folder, model_trained=None, model_true=None, data=None, smoothed_means=None,
+             run_params=None, remove_old=False):
     # save the models, data, and parameters from the fitting procedure
     # if run on SLURM get the slurm ID
     if 'SLURM_JOB_ID' in os.environ:
@@ -140,13 +141,15 @@ def save_run(model_save_folder, model_trained, model_true=None, data=None, run_p
     true_model_save_path = full_save_folder / 'model_true.pkl'
     trained_model_save_path = full_save_folder / 'model_trained.pkl'
     data_save_path = full_save_folder / 'data.pkl'
+    smoothed_means_path = full_save_folder / 'smoothed_means.pkl'
     params_save_path = full_save_folder / 'params.pkl'
 
     if not full_save_folder.exists():
         os.mkdir(full_save_folder)
 
     # save the trained model
-    model_trained.save(path=trained_model_save_path)
+    if model_trained is not None:
+        model_trained.save(path=trained_model_save_path)
 
     # save the true model, if it exists
     if model_true is not None:
@@ -162,6 +165,11 @@ def save_run(model_save_folder, model_trained, model_true=None, data=None, run_p
         data_file = open(data_save_path, 'wb')
         pickle.dump(data, data_file)
         data_file.close()
+
+    if smoothed_means is not None:
+        means_file = open(smoothed_means_path, 'wb')
+        pickle.dump(smoothed_means, means_file)
+        means_file.close()
 
     # save the input parameters
     if run_params is not None:
