@@ -1,66 +1,50 @@
 import numpy as np
-import pickle
 import torch
-import matplotlib
-import matplotlib.pyplot as plt
+import loading_utilities as lu
+from matplotlib import pyplot as plt
 from ssm_classes import Lgssm
-import preprocessing as pp
-import utilities as util
+from mpi4py import MPI
+import inference_utilities as iu
 
-params = pp.get_params(param_name='params')
-emissions_unaligned, cell_ids_unaligned, q, q_labels, stim_cell_ids, inputs_unaligned = \
-    pp.load_data(params['data_path'])
-rng = np.random.default_rng(params['random_seed'])
+params = lu.get_run_params(param_name='params')
+device = params["device"]
+dtype = getattr(torch, params["dtype"])
 
-# remove recordings that are noisy
-data_sets_to_remove = np.sort(params['bad_data_sets'])[::-1]
-for bd in data_sets_to_remove:
-    emissions_unaligned.pop(bd)
-    cell_ids_unaligned.pop(bd)
-    inputs_unaligned.pop(bd)
-    stim_cell_ids.pop(bd)
+emissions, inputs, cell_ids = \
+        lu.get_model_data(params['data_path'], num_data_sets=params['num_data_sets'],
+                          bad_data_sets=params['bad_data_sets'],
+                          frac_neuron_coverage=params['frac_neuron_coverage'],
+                          minimum_frac_measured=params['minimum_frac_measured'],
+                          start_index=params['start_index'])
 
-cell_ids, emissions, best_runs, inputs = \
-    pp.get_combined_dataset(emissions_unaligned, cell_ids_unaligned, stim_cell_ids, inputs_unaligned,
-                            frac_neuron_coverage=params['frac_neuron_coverage'],
-                            minimum_freq=params['minimum_frac_measured'])
+# If you are considering multiple lags in the past, lag the inputs
+num_neurons = emissions[0].shape[1]
+
+# create a mask for the dynamics_input_weights. This allows us to fit dynamics weights that are diagonal
+input_mask = torch.eye(num_neurons, dtype=dtype, device=device)
+# get rid of any inputs that never receive stimulation
+has_stims = np.any(np.concatenate(inputs, axis=0), axis=0)
+inputs = [i[:, has_stims] for i in inputs]
+input_mask = input_mask[:, has_stims]
+# set the model properties so the model fits with this mask
+params['param_props']['mask']['dynamics_input_weights'] = input_mask
+# get the input dimension after removing the neurons that were never stimulated
+input_dim = inputs[0].shape[1]
+
+# initialize the model and set model weights
+model_true = Lgssm(num_neurons, num_neurons, input_dim,
+                      dynamics_lags=params['dynamics_lags'],
+                      dynamics_input_lags=params['dynamics_input_lags'],
+                      dtype=dtype, device=device, verbose=params['verbose'],
+                      param_props=params['param_props'])
+
+model_true.emissions_weights = torch.eye(model_true.emissions_dim, model_true.dynamics_dim_full, device=device, dtype=dtype)
+model_true.emissions_input_weights = torch.zeros((model_true.emissions_dim, model_true.input_dim_full), device=device, dtype=dtype)
 
 num_data_sets = len(emissions)
 
-# remove the beginning of the recording which contains artifacts and mean subtract
-for ri in range(num_data_sets):
-    emissions[ri] = emissions[ri][params['index_start']:, :]
-    emissions[ri] = emissions[ri] - np.mean(emissions[ri], axis=0, keepdims=True)
-    inputs[ri] = inputs[ri][params['index_start']:, :]
-latent_dim = len(cell_ids)
-emissions_dim = latent_dim
-inputs_dim = latent_dim
-
-device = params["device"]
-dtype = getattr(torch, params["dtype"])
-model_true = Lgssm(latent_dim, emissions_dim, inputs_dim, dtype=dtype, device=device,
-                            verbose=params['verbose'])
-
 # randomize the parameters (defaults are nonrandom)
-model_true.randomize_weights(rng=rng)
-
-# this below is only for the synthetic data, don't need for real datasets
-# sample from the randomized model
-# data_dict = model_true.sample(
-#     num_time=params["num_time"],
-#     # num_data_sets=params["num_data_sets"],
-#     nan_freq=params["nan_freq"],
-#     random_seed=params["random_seed"],
-#
-
-# num_time = np.zeros(len(emissions))
-# for i in range(len(emissions)):
-#     num_time[i] = len(emissions[i])
-
-############### copy below this for multiple datasets
-# init_mean_true = data_dict["init_mean"]
-# init_cov_true = data_dict["init_cov"]
-# latents = data_dict["latents"][0]
+model_true.randomize_weights()
 
 A = model_true.dynamics_weights.detach().numpy()
 
@@ -68,18 +52,23 @@ A = model_true.dynamics_weights.detach().numpy()
 # X_i is a granger cause of another time series X_j if at least 1 element A_tau(j,i)
 # for tau=1,...,L is signif larger than 0
 # X_t = sum_1^L A_tau*X(t-tau) + noise(t)
-num_lags = 7
-nan_list = []
+num_lags = 2
+# nan_list = []
+
+# testing:
+num_data_sets = 1
 
 for d in range(num_data_sets):
     # num_time, neurons varies depending on the dataset
     num_time, num_neurons = emissions[d].shape
 
     # need to delete columns with NaN neurons, but make a list of these indices to add them in as 0s in the end
-    nans = np.where(np.isnan(emissions[d][0, :]))
-    nan_list.append(nans)
+    nans = np.isnan(emissions[d][:num_neurons, :])
+    nans_mask = nans | nans.T
+    # not_nans = np.where(~np.isnan(emissions[d][0, :]))[0]
+    # nan_list.append(nans)
     good_emissions = emissions[d][:, ~np.isnan(emissions[d][0, :])]
-    good_inputs = inputs[d][:, ~np.isnan(emissions[d][0, :])]
+    curr_inputs = inputs[d]
 
     # y_target is the time series we are trying to predict from A_hat @ y_history
     # y_target should start at t=0+num_lags
@@ -101,9 +90,9 @@ for d in range(num_data_sets):
     # add to y_history the inputs to get input weights (u_t)
     for p in reversed(range(num_lags)):
         if p - num_lags:
-            y_history = np.concatenate((y_history, good_inputs[p:p - num_lags, :]), axis=1)
+            y_history = np.concatenate((y_history, curr_inputs[p:p - num_lags, :]), axis=1)
         else:
-            y_history = np.concatenate((y_history, good_inputs[p:p - num_lags, :]), axis=1)
+            y_history = np.concatenate((y_history, curr_inputs[p:p - num_lags, :]), axis=1)
 
     # A_hat = np.linalg.solve(y_history, y_target).T
     # -> linalg.solve doesn't work because y_history is not square --> use least squares instead
@@ -112,27 +101,47 @@ for d in range(num_data_sets):
     # a_hat = np.dot(np.linalg.inv(r), p)
 
     # a_hat is a col vector of each A_hat_p matrix for each lag p -> need to transpose each A_hat_p
-    num_good_neurons = len(good_emissions[0, :])
+    num_emission_neurons = len(good_emissions[0, :])
+    num_input_neurons = len(curr_inputs[0, :])
 
-    # ab_hat = np.linalg.lstsq(y_history, y_target, rcond=None)[0]
-
+    ab_hat = np.linalg.lstsq(y_history, y_target, rcond=None)[0]
     # instead do masking from utils to get rid of the 0 entries and get proper fitting
-    # mask =
-    # ab_hat = util.solve_masked(y_history, y_target, mask)
+    # torch_y_history = torch.from_numpy(y_history)
+    # torch_y_target = torch.from_numpy(y_target)
+    # ab_hat = iu.solve_masked(torch_y_history, torch_y_target, input_mask)
 
-    a_hat = ab_hat[:num_lags*num_good_neurons, :]
-    b_hat = ab_hat[num_lags*num_good_neurons:, :]
+    a_hat = ab_hat[:num_lags*num_emission_neurons, :]
+    b_hat = ab_hat[num_lags*num_input_neurons:, :]
     for p in range(num_lags):
-        a_hat[p*num_good_neurons:p*num_good_neurons+num_good_neurons, :] = \
-            a_hat[p*num_good_neurons:p*num_good_neurons+num_good_neurons, :].T
-        b_hat[p * num_good_neurons:p * num_good_neurons + num_good_neurons, :] = \
-            b_hat[p * num_good_neurons:p * num_good_neurons + num_good_neurons, :].T
+        a_hat[p*num_emission_neurons:p*num_emission_neurons+num_emission_neurons, :] = \
+            a_hat[p*num_emission_neurons:p*num_emission_neurons+num_emission_neurons, :].T
+        # b_hat[p * num_input_neurons:p * num_input_neurons + num_input_neurons, :] = \
+        #     b_hat[p * num_input_neurons:p * num_input_neurons + num_input_neurons, :].T
 
     y_hat = y_history @ ab_hat
     # print(a_hat)
     # print(y_hat)
     mse = np.mean((y_target - y_hat) ** 2)
     print(mse)
+
+    # add NaNs back in for plotting and to compare across datasets
+    temp = np.zeros((num_neurons, num_neurons))
+    temp[:, :] = np.nan
+    i_count = 0
+    j_count = 0
+    for i in range(num_neurons):
+        for j in range(num_neurons):
+            if ~nans_mask[i, j]:
+                temp[i, j] = a_hat[i_count, j_count]
+                j_count = j_count + 1
+                if j_count == num_emission_neurons:
+                    i_count = i_count + 1
+        j_count = 0
+
+    # temp[not_nans, not_nans] = a_hat[:, :]
+    # temp = np.where(nans_mask, np.nan, a_hat)
+
+    a_hat = temp
 
     fig, axs = plt.subplots(nrows=1, ncols=1)
     plt.title('dataset %(dataset)i GC for %(lags)i lags: a_hat' % {"dataset": d, "lags": num_lags})
@@ -142,7 +151,7 @@ for d in range(num_data_sets):
     str = params['fig_path'] + 'ahat%i.png' % d
     plt.savefig(str)
 
-    fig, axs = plt.subplots(nrows=1, ncols=1)
+    fig2, axs2 = plt.subplots(nrows=1, ncols=1)
     plt.title('dataset %(dataset)i GC for %(lags)i lags: b_hat' % {"dataset": d, "lags": num_lags})
     b_hat_pos = plt.imshow(b_hat, aspect='auto', interpolation='nearest')
     plt.colorbar(b_hat_pos)
