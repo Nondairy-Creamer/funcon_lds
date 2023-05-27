@@ -7,15 +7,15 @@ from mpi4py import MPI
 import inference_utilities as iu
 from matplotlib import pyplot as plt
 
-params = lu.get_run_params(param_name='params_synth')
-num_data_sets = params['num_data_sets']
-device = params["device"]
-dtype = getattr(torch, params["dtype"])
-rng = np.random.default_rng(params['random_seed'])
+run_params = lu.get_run_params(param_name='params_synth')
+num_data_sets = run_params['num_data_sets']
+device = run_params["device"]
+dtype = getattr(torch, run_params["dtype"])
+rng = np.random.default_rng(run_params['random_seed'])
 
-model_synth_true = Lgssm(params['dynamics_dim'], params['emissions_dim'], params['input_dim'],
-                       dtype=dtype, device=device, param_props=params['param_props'],
-                       dynamics_lags=params['dynamics_lags'], dynamics_input_lags=params['dynamics_input_lags'])
+model_synth_true = Lgssm(run_params['dynamics_dim'], run_params['emissions_dim'], run_params['input_dim'],
+                         dtype=dtype, device=device, param_props=run_params['param_props'],
+                         dynamics_lags=run_params['dynamics_lags'], dynamics_input_lags=run_params['dynamics_input_lags'])
 model_synth_true.randomize_weights(rng=rng)
 model_synth_true.emissions_weights_init = np.eye(model_synth_true.emissions_dim, model_synth_true.dynamics_dim_full)
 model_synth_true.emissions_input_weights_init = np.zeros((model_synth_true.emissions_dim, model_synth_true.input_dim_full))
@@ -23,12 +23,12 @@ model_synth_true.set_to_init()
 
 # sample from the randomized model
 data_dict = \
-    model_synth_true.sample(num_time=params['num_time'],
-                      num_data_sets=params['num_data_sets'],
-                      scattered_nan_freq=params['scattered_nan_freq'],
-                      lost_emission_freq=params['lost_emission_freq'],
-                      input_time_scale=params['input_time_scale'],
-                      rng=rng)
+    model_synth_true.sample(num_time=run_params['num_time'],
+                            num_data_sets=run_params['num_data_sets'],
+                            scattered_nan_freq=run_params['scattered_nan_freq'],
+                            lost_emission_freq=run_params['lost_emission_freq'],
+                            input_time_scale=run_params['input_time_scale'],
+                            rng=rng)
 
 emissions = data_dict['emissions']
 inputs = data_dict['inputs']
@@ -40,9 +40,9 @@ num_time = np.zeros(len(emissions))
 for i in range(len(emissions)):
     num_time[i] = len(emissions[i])
 
-outputs = model_synth_true.get_params()
-A = model_synth_true.dynamics_weights.detach().numpy()
-B = outputs['trained']['dynamics_input_weights']
+model_params = model_synth_true.get_params()
+A_true = model_params['trained']['dynamics_weights']
+B_true = model_params['trained']['dynamics_input_weights']
 
 # fit A_hat with p time lags
 # X_i is a granger cause of another time series X_j if at least 1 element A_tau(j,i)
@@ -68,7 +68,7 @@ for d in range(num_data_sets):
     # need to delete columns with NaN neurons, but make a list of these indices to add them in as 0s in the end
     nans = np.isnan(emissions[d][:num_neurons, :])
     nans_mask = nans | nans.T
-    good_emissions = emissions[d][:, ~np.isnan(emissions[d][0, :])]
+    non_nan_emissions = emissions[d][:, ~np.isnan(emissions[d][0, :])]
     curr_inputs = inputs[d]
 
     # y_target is the time series we are trying to predict from A_hat @ y_history
@@ -79,25 +79,25 @@ for d in range(num_data_sets):
     y_history = np.zeros((num_time - num_lags, 0))
 
     # note this goes from time num_lags to T
-    y_target = good_emissions[num_lags:, :]
+    y_target = non_nan_emissions[num_lags:, :]
 
-    # build lagged y_history from emissions (x_t)
+    # build lagged y_history from emissions (x_(t-1))
     for p in reversed(range(num_lags)):
-        if p - num_lags:
-            y_history = np.concatenate((y_history, good_emissions[p:p-num_lags, :]), axis=1)
+        # if p - num_lags:
+        y_history = np.concatenate((y_history, non_nan_emissions[p:p - num_lags, :]), axis=1)
             # y_history = np.concatenate((y_history, curr_inputs[p:p - num_lags, :]), axis=1)
-        else:
-            y_history = np.concatenate((y_history, good_emissions[p:, :]), axis=1)
+        # else:
+        #     y_history = np.concatenate((y_history, non_nan_emissions[p:, :]), axis=1)
             # y_history = np.concatenate((y_history, curr_inputs[p:p - num_lags, :]), axis=1)
 
     # add to y_history the inputs to get input weights (u_t)
     for p in reversed(range(num_lags)):
-        if p - num_lags:
-            y_history = np.concatenate((y_history, curr_inputs[p:p - num_lags, :]), axis=1)
+        if (p - num_lags + 1) != 0:
+            y_history = np.concatenate((y_history, curr_inputs[(p + 1):(p - num_lags + 1), :]), axis=1)
             mask = np.concatenate((mask, input_mask), axis=1)
         else:
-            y_history = np.concatenate((y_history, curr_inputs[p:p - num_lags, :]), axis=1)
-            mask = np.concatenate((mask, input_mask), axis=1)
+            y_history = np.concatenate((y_history, curr_inputs[(p + 1):, :]), axis=1)
+        # mask = np.concatenate((mask, input_mask), axis=1)
 
     # A_hat = np.linalg.solve(y_history, y_target).T
     # -> linalg.solve doesn't work because y_history is not square --> use least squares instead
@@ -106,7 +106,7 @@ for d in range(num_data_sets):
     # a_hat = np.dot(np.linalg.inv(r), p)
 
     # a_hat is a col vector of each A_hat_p matrix for each lag p -> need to transpose each A_hat_p
-    num_emission_neurons = len(good_emissions[0, :])
+    num_emission_neurons = len(non_nan_emissions[0, :])
     num_input_neurons = len(curr_inputs[0, :])
 
     ab_hat = np.linalg.lstsq(y_history, y_target, rcond=None)[0]
@@ -163,12 +163,12 @@ for d in range(num_data_sets):
     # str = params['fig_path'] + 'bhat%i.png' % d
     # plt.savefig(str)
 
-A_pos = plt.imshow(A, interpolation='nearest')
+A_pos = plt.imshow(A_true, interpolation='nearest')
 plt.title('true A')
 plt.colorbar(A_pos)
 plt.show()
 
-B_pos = plt.imshow(B, interpolation='nearest')
+B_pos = plt.imshow(B_true, interpolation='nearest')
 plt.title('true dynamics_input_weights (B)')
 plt.colorbar(B_pos)
 plt.show()

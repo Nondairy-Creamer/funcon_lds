@@ -6,16 +6,16 @@ from ssm_classes import Lgssm
 from mpi4py import MPI
 import inference_utilities as iu
 
-params = lu.get_run_params(param_name='params')
-device = params["device"]
-dtype = getattr(torch, params["dtype"])
+run_params = lu.get_run_params(param_name='params')
+device = run_params["device"]
+dtype = getattr(torch, run_params["dtype"])
 
 emissions, inputs, cell_ids = \
-        lu.get_model_data(params['data_path'], num_data_sets=params['num_data_sets'],
-                          bad_data_sets=params['bad_data_sets'],
-                          frac_neuron_coverage=params['frac_neuron_coverage'],
-                          minimum_frac_measured=params['minimum_frac_measured'],
-                          start_index=params['start_index'])
+        lu.get_model_data(run_params['data_path'], num_data_sets=run_params['num_data_sets'],
+                          bad_data_sets=run_params['bad_data_sets'],
+                          frac_neuron_coverage=run_params['frac_neuron_coverage'],
+                          minimum_frac_measured=run_params['minimum_frac_measured'],
+                          start_index=run_params['start_index'])
 
 # If you are considering multiple lags in the past, lag the inputs
 num_neurons = emissions[0].shape[1]
@@ -27,16 +27,16 @@ has_stims = np.any(np.concatenate(inputs, axis=0), axis=0)
 inputs = [i[:, has_stims] for i in inputs]
 input_mask = input_mask[:, has_stims]
 # set the model properties so the model fits with this mask
-params['param_props']['mask']['dynamics_input_weights'] = input_mask
+run_params['param_props']['mask']['dynamics_input_weights'] = input_mask
 # get the input dimension after removing the neurons that were never stimulated
 input_dim = inputs[0].shape[1]
 
 # initialize the model and set model weights
 model_true = Lgssm(num_neurons, num_neurons, input_dim,
-                      dynamics_lags=params['dynamics_lags'],
-                      dynamics_input_lags=params['dynamics_input_lags'],
-                      dtype=dtype, device=device, verbose=params['verbose'],
-                      param_props=params['param_props'])
+                   dynamics_lags=run_params['dynamics_lags'],
+                   dynamics_input_lags=run_params['dynamics_input_lags'],
+                   dtype=dtype, device=device, verbose=run_params['verbose'],
+                   param_props=run_params['param_props'])
 
 model_true.emissions_weights = torch.eye(model_true.emissions_dim, model_true.dynamics_dim_full, device=device, dtype=dtype)
 model_true.emissions_input_weights = torch.zeros((model_true.emissions_dim, model_true.input_dim_full), device=device, dtype=dtype)
@@ -148,7 +148,7 @@ for d in range(num_data_sets):
     a_hat_pos = plt.imshow(a_hat, aspect='auto', interpolation='nearest')
     plt.colorbar(a_hat_pos)
     # plt.show()
-    str = params['fig_path'] + 'ahat%i.png' % d
+    str = run_params['fig_path'] + 'ahat%i.png' % d
     plt.savefig(str)
 
     fig2, axs2 = plt.subplots(nrows=1, ncols=1)
@@ -156,7 +156,7 @@ for d in range(num_data_sets):
     b_hat_pos = plt.imshow(b_hat, aspect='auto', interpolation='nearest')
     plt.colorbar(b_hat_pos)
     # plt.show()
-    str = params['fig_path'] + 'bhat%i.png' % d
+    str = run_params['fig_path'] + 'bhat%i.png' % d
     plt.savefig(str)
 
 A_pos = plt.imshow(A, interpolation='nearest')
