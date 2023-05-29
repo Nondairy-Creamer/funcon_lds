@@ -223,19 +223,23 @@ class Lgssm:
         else:
             noise_mult = 0
 
-        if inputs_list is None:
-            if input_time_scale != 0:
-                stims_per_data_set = int(num_time / input_time_scale)
-                num_stims = num_data_sets * stims_per_data_set
-                sparse_inputs_init = np.eye(self.input_dim)[rng.choice(self.input_dim, num_stims, replace=True)]
+        if type(num_time) is not list:
+            num_time = [num_time] * num_data_sets
 
-                # upsample to full time
-                total_time = num_time * num_data_sets
-                inputs_list = np.zeros((total_time, self.emissions_dim))
-                inputs_list[::input_time_scale, :] = sparse_inputs_init
-                inputs_list = np.split(inputs_list, num_data_sets)
-            else:
-                inputs_list = [rng.standard_normal((num_time, self.input_dim)) for i in range(num_data_sets)]
+        for nt in num_time:
+            if inputs_list is None:
+                if input_time_scale != 0:
+                    stims_per_data_set = int(nt / input_time_scale)
+                    num_stims = num_data_sets * stims_per_data_set
+                    sparse_inputs_init = np.eye(self.input_dim)[rng.choice(self.input_dim, num_stims, replace=True)]
+
+                    # upsample to full time
+                    total_time = nt * num_data_sets
+                    inputs_list = np.zeros((total_time, self.emissions_dim))
+                    inputs_list[::input_time_scale, :] = sparse_inputs_init
+                    inputs_list = np.split(inputs_list, num_data_sets)
+                else:
+                    inputs_list = [rng.standard_normal((nt, self.input_dim)) for i in range(num_data_sets)]
 
         inputs_lagged = [self.get_lagged_data(i, self.dynamics_input_lags, add_pad=True) for i in inputs_list]
 
@@ -250,13 +254,13 @@ class Lgssm:
                 init_cov = np.eye(self.dynamics_dim_full) / self.epsilon
                 init_cov[:self.dynamics_dim, :self.dynamics_dim] = init_cov_block
 
-            latents = np.zeros((num_time, self.dynamics_dim_full))
-            emissions = np.zeros((num_time, self.emissions_dim))
+            latents = np.zeros((num_time[d], self.dynamics_dim_full))
+            emissions = np.zeros((num_time[d], self.emissions_dim))
             inputs = inputs_lagged[d]
 
             # get the initial observations
-            dynamics_noise = noise_mult * rng.multivariate_normal(np.zeros(self.dynamics_dim_full), self.dynamics_cov, size=num_time)
-            emissions_noise = noise_mult * rng.multivariate_normal(np.zeros(self.emissions_dim), self.emissions_cov, size=num_time)
+            dynamics_noise = noise_mult * rng.multivariate_normal(np.zeros(self.dynamics_dim_full), self.dynamics_cov, size=num_time[d])
+            emissions_noise = noise_mult * rng.multivariate_normal(np.zeros(self.emissions_dim), self.emissions_cov, size=num_time[d])
             dynamics_inputs = (self.dynamics_input_weights @ inputs[:, :, None])[:, :, 0]
             emissions_inputs = (self.emissions_input_weights @ inputs[:, :, None])[:, :, 0]
             latent_init = rng.multivariate_normal(init_mean, init_cov)
@@ -272,7 +276,7 @@ class Lgssm:
                               emissions_noise[0, :]
 
             # loop through time and generate the latents and emissions
-            for t in range(1, num_time):
+            for t in range(1, num_time[d]):
                 latents[t, :] = (self.dynamics_weights @ latents[t-1, :]) + \
                                  dynamics_inputs[t, :] + \
                                  self.dynamics_offset + \
@@ -289,7 +293,6 @@ class Lgssm:
             init_cov_list.append(init_cov)
 
         # add in nans
-        scattered_nan_mask = rng.random((num_data_sets, num_time, self.emissions_dim)) <= scattered_nan_freq
         lost_emission_mask = rng.random((num_data_sets, 1, self.emissions_dim)) < lost_emission_freq
 
         # make sure each data set has at least one measurement and that all emissions were measured at least once
@@ -301,10 +304,9 @@ class Lgssm:
             if np.all(lost_emission_mask[:, :, n]):
                 lost_emission_mask[:, :, n] = False
 
-        nan_mask = scattered_nan_mask | lost_emission_mask
-
         for d in range(num_data_sets):
-            emissions_list[d][nan_mask[d, :, :]] = np.nan
+            this_mask = np.tile(lost_emission_mask[d, :, :], (num_time[d], 1))
+            emissions_list[d][this_mask] = np.nan
 
         data_dict = {'latents': latents_list,
                      'inputs': inputs_list,
