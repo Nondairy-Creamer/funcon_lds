@@ -48,7 +48,7 @@ B_true = model_params['trained']['dynamics_input_weights']
 # X_i is a granger cause of another time series X_j if at least 1 element A_tau(j,i)
 # for tau=1,...,L is signif larger than 0
 # X_t = sum_1^L A_tau*X(t-tau) + noise(t)
-num_lags = 1
+num_lags = 5
 # nan_list = []
 
 for d in range(num_data_sets):
@@ -66,8 +66,8 @@ for d in range(num_data_sets):
     mask = input_mask
 
     # need to delete columns with NaN neurons, but make a list of these indices to add them in as 0s in the end
-    nans = np.isnan(emissions[d][:num_neurons, :])
-    nans_mask = nans | nans.T
+    nans = np.any(np.isnan(emissions[d]), axis=0)
+    nans_mask = nans[:, None] | nans[:, None].T
     non_nan_emissions = emissions[d][:, ~np.isnan(emissions[d][0, :])]
     curr_inputs = inputs[d]
 
@@ -118,13 +118,13 @@ for d in range(num_data_sets):
     # mask =
     # ab_hat = iu.solve_masked(y_history, y_target, mask)
 
-    a_hat = ab_hat[:num_lags * num_emission_neurons, :]
-    b_hat = ab_hat[num_lags * num_input_neurons:, :]
-    for p in range(num_lags):
-        a_hat[p * num_emission_neurons:p * num_emission_neurons + num_emission_neurons, :] = \
-            a_hat[p * num_emission_neurons:p * num_emission_neurons + num_emission_neurons, :].T
-        b_hat[p * num_input_neurons:p * num_input_neurons + num_input_neurons, :] = \
-            b_hat[p * num_input_neurons:p * num_input_neurons + num_input_neurons, :].T
+    a_hat = ab_hat[:num_lags * num_emission_neurons, :].T
+    b_hat = ab_hat[num_lags * num_input_neurons:, :].T
+    # for p in range(num_lags):
+    #     a_hat[p * num_emission_neurons:p * num_emission_neurons + num_emission_neurons, :] = \
+    #         a_hat[p * num_emission_neurons:p * num_emission_neurons + num_emission_neurons, :].T
+    #     b_hat[p * num_input_neurons:p * num_input_neurons + num_input_neurons, :] = \
+    #         b_hat[p * num_input_neurons:p * num_input_neurons + num_input_neurons, :].T
 
     y_hat = y_history @ ab_hat
     # print(a_hat)
@@ -133,23 +133,45 @@ for d in range(num_data_sets):
     print(mse)
 
     # add NaNs back in for plotting and to compare across datasets
-    temp = np.zeros((num_neurons, num_neurons))
-    temp[:, :] = np.nan
-    i_count = 0
-    j_count = 0
-    for i in range(num_neurons):
-        for j in range(num_neurons):
-            if ~nans_mask[i, j]:
-                temp[i, j] = a_hat[i_count, j_count]
-                j_count = j_count + 1
-                if j_count == num_emission_neurons:
-                    i_count = i_count + 1
-        j_count = 0
-    a_hat = temp
+    #
+    # full_dim = 5
+    # nan_dim = 3
+    # data = np.random.randn(nan_dim, nan_dim)
+    # data_loc = np.array([True, True, False, True, False])
+    #
+    # nan_mat = np.zeros((nan_dim, full_dim))
+    # nan_mat[:] = np.nan
+    # nan_mat[:, data_loc] = data
+    #
+    # final_mat = np.zeros((full_dim, full_dim))
+    # final_mat[:] = np.nan
+    # final_mat[data_loc, :] = nan_mat
+
+    # fill in nans across first dimension
+    temp_nan = np.zeros((num_emission_neurons, num_neurons))
+    temp_nan[:] = np.nan
+    temp_nan[:, non_nan_emissions] = a_hat[:, :num_emission_neurons]
+    # fill in nans across second dimension
+    a_hat_full = np.zeros((num_neurons, num_neurons))
+    a_hat_full[:] = np.nan
+    a_hat_full[non_nan_emissions, :] = temp_nan
+
+    # i_count = 0
+    # j_count = 0
+    # for p in range(num_lags):
+    #     for i in range(num_neurons):
+    #         for j in range(num_neurons):
+    #             if ~nans_mask[i, j]:
+    #                 temp[p*num_neurons + i, j] = a_hat[i_count, j_count]
+    #                 j_count = j_count + 1
+    #                 if j_count == num_emission_neurons:
+    #                     i_count = i_count + 1
+    #         j_count = 0
+    # a_hat = temp
 
     fig, axs = plt.subplots(nrows=1, ncols=1)
     plt.title('dataset %(dataset)i GC for %(lags)i lags: a_hat' % {"dataset": d, "lags": num_lags})
-    a_hat_pos = plt.imshow(a_hat, aspect='auto', interpolation='nearest')
+    a_hat_pos = plt.imshow(a_hat_full, aspect='auto', interpolation='nearest')
     plt.colorbar(a_hat_pos)
     plt.show()
     # str = params['fig_path'] + 'ahat%i.png' % d
