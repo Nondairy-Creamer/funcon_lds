@@ -100,6 +100,8 @@ def fit_em(model, emissions_list, inputs_list, init_mean=None, init_cov=None, nu
 
     start = time.time()
     for ep in range(num_steps):
+        model = comm.bcast(model, root=0)
+
         ll, smoothed_means = model.em_step(emissions, inputs, init_mean, init_cov, cpu_id=rank, num_cpus=size)
 
         if ll is None:
