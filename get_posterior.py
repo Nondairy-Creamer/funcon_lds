@@ -67,29 +67,29 @@ else:
 
 print('Got to cpu:', cpu_id)
 data = iu.individual_scatter(data_out, root=0)
-smoothed_means = []
+posterior = []
 
 for d in data:
     this_emission = d[0]
     this_input = d[1]
     this_init_mean = d[2]
     this_init_cov = d[3]
-    smoothed_means.append(
+    posterior.append(
         model.lgssm_smoother(this_emission, this_input, init_mean=this_init_mean, init_cov=this_init_cov)[3])
 
 print('Finished cpu:', cpu_id)
 
-smoothed_means = iu.individual_gather(smoothed_means, root=0)
+posterior = iu.individual_gather(posterior, root=0)
 
 if cpu_id == 0:
     print('Gathered')
 
-    smoothed_means_out = []
-    for i in smoothed_means:
+    posterior_out = []
+    for i in posterior:
         for j in i:
-            smoothed_means_out.append(j)
+            posterior_out.append(j)
 
-    smoothed_means = smoothed_means_out
+    posterior = posterior_out
 
-    lu.save_run(model_folder.parent, smoothed_means=smoothed_means)
+    lu.save_run(model_folder.parent, posterior=posterior)
     print('saved')
