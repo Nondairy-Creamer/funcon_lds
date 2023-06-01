@@ -39,14 +39,13 @@ if prior_path.exists():
     prior_file = open(prior_path, 'rb')
     prior = pickle.load(prior_file)
     prior_file.close()
-    prior = prior['prior']
 else:
     print('Prior has not been sampled yet, this will take some time')
     print('Output will be saved and will not need to be generated again')
     prior = model.sample([i.shape[0] for i in emissions], num_data_sets=len(inputs),
                          inputs_list=inputs, add_noise=False)['emissions']
     prior_file = open(prior_path, 'wb')
-    prior = pickle.dump({'prior': prior}, prior_file)
+    pickle.dump(prior, prior_file)
     prior_file.close()
 
 posterior_file = open(posterior_path, 'rb')

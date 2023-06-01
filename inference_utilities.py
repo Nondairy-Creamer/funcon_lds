@@ -113,7 +113,7 @@ def fit_em(model, emissions_list, inputs_list, init_mean=None, init_cov=None, nu
         model.train_time = time_out
 
         if np.mod(ep, save_every) == 0:
-            lu.save_run(save_folder, model_trained=model, posterior=smoothed_means)
+            lu.save_run(save_folder, model, posterior=smoothed_means)
 
         if model.verbose:
             print('Finished step ' + str(ep + 1) + '/' + str(num_steps))

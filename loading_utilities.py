@@ -128,7 +128,7 @@ def load_data(fun_atlas_path):
     return recordings, labels, q, q_labels, stim_ids, stim_volume_inds
 
 
-def save_run(model_save_folder, model_trained=None, model_true=None, data=None, posterior=None,
+def save_run(model_save_folder, model_trained, model_true=None, data=None, posterior=None,
              run_params=None, remove_old=False):
     # save the models, data, and parameters from the fitting procedure
     # if run on SLURM get the slurm ID
@@ -137,7 +137,9 @@ def save_run(model_save_folder, model_trained=None, model_true=None, data=None, 
     else:
         slurm_tag = 'local'
 
-    full_save_folder = Path(model_save_folder) / slurm_tag
+    lag_tag = 'DL' + str(model_trained.dynamics_lag) + '_IL' + str(model_trained.dynamics_input_lag)
+
+    full_save_folder = Path(model_save_folder) / (slurm_tag + lag_tag)
     true_model_save_path = full_save_folder / 'model_true.pkl'
     trained_model_save_path = full_save_folder / 'model_trained.pkl'
     data_save_path = full_save_folder / 'data.pkl'
@@ -148,8 +150,7 @@ def save_run(model_save_folder, model_trained=None, model_true=None, data=None, 
         os.mkdir(full_save_folder)
 
     # save the trained model
-    if model_trained is not None:
-        model_trained.save(path=trained_model_save_path)
+    model_trained.save(path=trained_model_save_path)
 
     # save the true model, if it exists
     if model_true is not None:

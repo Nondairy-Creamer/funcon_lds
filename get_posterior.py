@@ -91,5 +91,9 @@ if cpu_id == 0:
 
     posterior = posterior_out
 
-    lu.save_run(model_folder.parent, posterior=posterior)
+    posterior_path = model_folder / 'posterior.pkl'
+    means_file = open(posterior_path, 'wb')
+    pickle.dump(posterior, means_file)
+    means_file.close()
+
     print('saved')

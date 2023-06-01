@@ -69,7 +69,7 @@ if rank == 0:
     model_trained.emissions_input_weights = torch.zeros((model_trained.emissions_dim, model_trained.input_dim_full), device=device, dtype=dtype)
     model_trained.cell_ids = cell_ids
 
-    lu.save_run(run_params['model_save_folder'], model_trained=model_trained, remove_old=True,
+    lu.save_run(run_params['model_save_folder'], model_trained, remove_old=True,
                 data={'emissions': emissions, 'inputs': inputs, 'cell_ids': cell_ids}, run_params=run_params)
 
 else:

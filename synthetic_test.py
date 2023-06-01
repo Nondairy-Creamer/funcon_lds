@@ -60,7 +60,7 @@ if rank == 0:
             setattr(model_trained, init_key, getattr(model_true, init_key))
     model_trained.set_to_init()
 
-    lu.save_run(run_params['model_save_folder'], model_trained=model_trained, model_true=model_true,
+    lu.save_run(run_params['model_save_folder'], model_trained, model_true=model_true,
                 data={'emissions': emissions, 'inputs': inputs, 'cell_ids': model_true.cell_ids}, run_params=run_params,
                 remove_old=True)
 else:
