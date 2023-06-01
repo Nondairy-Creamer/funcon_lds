@@ -4,11 +4,12 @@ import loading_utilities as lu
 import numpy as np
 import time
 from mpi4py import MPI
+from mpi4py.util import pkl5
 import inference_utilities as iu
 import plotting
 
 
-comm = MPI.COMM_WORLD
+comm = pkl5.Intracomm(MPI.COMM_WORLD)
 size = comm.Get_size()
 rank = comm.Get_rank()
 
