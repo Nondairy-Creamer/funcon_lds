@@ -11,6 +11,14 @@ def stack_weights(weights, num_split, axis=-1):
     return np.stack(np.split(weights, num_split, axis=axis))
 
 
+def plot_log_likelihood(model):
+    plt.figure()
+    plt.plot(model.log_likelihood)
+    plt.xlabel('EM iterations')
+    plt.ylabel('log likelihood')
+    plt.show()
+
+
 def plot_model_params(model, cell_ids, cell_ids_chosen=None):
     colormap = mpl.colormaps['coolwarm']
 

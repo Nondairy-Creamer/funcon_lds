@@ -137,9 +137,9 @@ def save_run(model_save_folder, model_trained, model_true=None, data=None, poste
     else:
         slurm_tag = 'local'
 
-    lag_tag = 'DL' + str(model_trained.dynamics_lag) + '_IL' + str(model_trained.dynamics_input_lag)
+    lag_tag = 'DL' + str(model_trained.dynamics_lags) + '_IL' + str(model_trained.dynamics_input_lags)
 
-    full_save_folder = Path(model_save_folder) / (slurm_tag + lag_tag)
+    full_save_folder = Path(model_save_folder) / (slurm_tag + '_' + lag_tag)
     true_model_save_path = full_save_folder / 'model_true.pkl'
     trained_model_save_path = full_save_folder / 'model_trained.pkl'
     data_save_path = full_save_folder / 'data.pkl'

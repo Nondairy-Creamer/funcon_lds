@@ -6,8 +6,7 @@ from pathlib import Path
 
 
 # load in the model and training data
-model_folder = Path('/home/mcreamer/Documents/data_sets/fun_con_models/48067823')
-model_name = Path('48067823')
+model_folder = Path('C:/Users/mcreamer/Documents/data_sets/fun_con_models/48186543')
 cell_ids_chosen = ['AVAL', 'AVAR', 'AVEL', 'AVER', 'AFDL', 'AFDR', 'AVJL', 'AVJR', 'AVDL', 'AVDR']
 neuron_to_remove = 'AVJR'
 neuron_to_stim = 'AVJR'
@@ -67,9 +66,10 @@ emissions_chosen = emissions[data_ind_chosen][time_window[0]:time_window[1], neu
 inputs_chosen = inputs_truncated[data_ind_chosen]
 posterior_chosen = posterior[data_ind_chosen][time_window[0]:time_window[1], neuron_inds_chosen]
 
-# au.plot_model_params(model, cell_ids, cell_ids_chosen=cell_ids_chosen)
-# au.plot_posterior(emissions_chosen, inputs_chosen, posterior_chosen, cell_ids_chosen)
-# au.plot_missing_neuron(model, emissions[data_ind_chosen], inputs[data_ind_chosen], posterior[data_ind_chosen], cell_ids, neuron_to_remove, time_window)
+au.plot_log_likelihood(model)
+au.plot_model_params(model, cell_ids, cell_ids_chosen=cell_ids_chosen)
+au.plot_posterior(emissions_chosen, inputs_chosen, posterior_chosen, cell_ids_chosen)
+au.plot_missing_neuron(model, emissions[data_ind_chosen], inputs[data_ind_chosen], posterior[data_ind_chosen], cell_ids, neuron_to_remove, time_window)
 au.plot_stim_power(model, emissions, inputs, posterior, prior, cell_ids, cell_ids_chosen, window=(0, 120))
 au.plot_stim_response(model, emissions, inputs, posterior, prior, cell_ids, cell_ids_chosen, neuron_to_stim, window=(-60, 120))
 
