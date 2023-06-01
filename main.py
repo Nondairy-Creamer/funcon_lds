@@ -4,6 +4,7 @@ import loading_utilities as lu
 import plotting
 from ssm_classes import Lgssm
 from mpi4py import MPI
+from mpi4py.util import pkl5
 import inference_utilities as iu
 
 # the goal of this function is to take the pairwise stimulation and response data from
@@ -22,7 +23,7 @@ import inference_utilities as iu
 # w_t, v_t are gaussian with 0 mean
 
 # set up the option to parallelize the model fitting over CPUs
-comm = MPI.COMM_WORLD
+comm = pkl5.Intracomm(MPI.COMM_WORLD)
 size = comm.Get_size()
 rank = comm.Get_rank()
 is_parallel = size > 1
