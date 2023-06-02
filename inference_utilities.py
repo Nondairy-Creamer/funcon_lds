@@ -1,6 +1,7 @@
 import torch
 import time
 from mpi4py import MPI
+from mpi4py.util import pkl5
 import numpy as np
 import loading_utilities as lu
 
@@ -14,7 +15,7 @@ def block(block_list, dims=(2, 1)):
 
 
 def individual_scatter(data, root=0):
-    comm = MPI.COMM_WORLD
+    comm = pkl5.Intracomm(MPI.COMM_WORLD)
     rank = comm.Get_rank()
 
     if rank == root:
@@ -32,7 +33,7 @@ def individual_scatter(data, root=0):
 
 
 def individual_gather(data, root=0):
-    comm = MPI.COMM_WORLD
+    comm = pkl5.Intracomm(MPI.COMM_WORLD)
     rank = comm.Get_rank()
     size = comm.Get_size()
 
@@ -71,7 +72,7 @@ def solve_masked(A, b, mask):
 
 def fit_em(model, emissions_list, inputs_list, init_mean=None, init_cov=None, num_steps=10,
            save_folder='trained_models', save_every=10):
-    comm = MPI.COMM_WORLD
+    comm = pkl5.Intracomm(MPI.COMM_WORLD)
     rank = comm.Get_rank()
     size = comm.Get_size()
 
