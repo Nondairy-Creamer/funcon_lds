@@ -46,6 +46,8 @@ def plot_model_params(model, cell_ids, cell_ids_chosen=None):
         plt.figure()
         plt.imshow(aa, interpolation='nearest', cmap=colormap)
         plt.clim((-cmax, cmax))
+        plt.yticks(plot_x, cell_ids_chosen)
+        plt.xticks(plot_x, cell_ids_chosen)
         plt.colorbar()
         plt.title('A' + str(ai))
 
@@ -68,19 +70,27 @@ def plot_model_params(model, cell_ids, cell_ids_chosen=None):
 
     # Plot the Q matrix
     Q = model_params['trained']['dynamics_cov'][:model.dynamics_dim, :model.dynamics_dim]
+    Q = Q[neuron_inds_chosen, :]
+    Q = Q[:, neuron_inds_chosen]
     cmax = np.max(np.abs(Q))
     plt.figure()
-    plt.imshow(model_params['trained']['dynamics_cov'][:model.dynamics_dim, :model.dynamics_dim], interpolation='nearest', cmap=colormap)
+    plt.imshow(Q, interpolation='nearest', cmap=colormap)
     plt.clim((-cmax, cmax))
+    plt.yticks(plot_x, cell_ids_chosen)
+    plt.xticks(plot_x, cell_ids_chosen)
     plt.title('Q')
     plt.colorbar()
 
     # Plot the R matrix
     R = model_params['trained']['emissions_cov']
+    R = R[neuron_inds_chosen, :]
+    R = R[:, neuron_inds_chosen]
     cmax = np.max(np.abs(R))
     plt.figure()
-    plt.imshow(model_params['trained']['emissions_cov'], interpolation='nearest', cmap=colormap)
+    plt.imshow(R, interpolation='nearest', cmap=colormap)
     plt.clim((-cmax, cmax))
+    plt.yticks(plot_x, cell_ids_chosen)
+    plt.xticks(plot_x, cell_ids_chosen)
     plt.title('R')
     plt.colorbar()
 
@@ -203,7 +213,7 @@ def plot_missing_neuron(model, emissions, inputs, posterior, cell_ids, neuron_to
     plt.plot(posterior)
     plt.plot(posterior_missing)
     plt.legend(['measured', 'full posterior', 'posterior missing'])
-    plt.title([neuron_to_remove + ' missing'])
+    plt.title(neuron_to_remove + ' missing')
     plt.show()
 
 
@@ -258,23 +268,24 @@ def plot_stim_power(model, emissions, inputs, posterior, prior, cell_ids, cell_i
     model_weights_power = model_weights_power / np.max(model_weights_power)
 
     plt.figure()
+
     plt.subplot(2, 2, 1)
+    plt.imshow(measured_response_power, interpolation='nearest', cmap=colormap)
+    plt.title('measured response power')
+    plt.xticks(plot_x, cell_ids_chosen)
+    plt.yticks(plot_x, cell_ids_chosen)
+    plt.clim((-1, 1))
+
+    plt.subplot(2, 2, 2)
     plt.imshow(prior_response_power, interpolation='nearest', cmap=colormap)
     plt.title('prior response power')
     plt.xticks(plot_x, cell_ids_chosen)
     plt.yticks(plot_x, cell_ids_chosen)
     plt.clim((-1, 1))
 
-    plt.subplot(2, 2, 2)
+    plt.subplot(2, 2, 3)
     plt.imshow(posterior_response_power, interpolation='nearest', cmap=colormap)
     plt.title('posterior response power')
-    plt.xticks(plot_x, cell_ids_chosen)
-    plt.yticks(plot_x, cell_ids_chosen)
-    plt.clim((-1, 1))
-
-    plt.subplot(2, 2, 3)
-    plt.imshow(measured_response_power, interpolation='nearest', cmap=colormap)
-    plt.title('measured response power')
     plt.xticks(plot_x, cell_ids_chosen)
     plt.yticks(plot_x, cell_ids_chosen)
     plt.clim((-1, 1))
