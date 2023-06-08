@@ -28,7 +28,7 @@ def plot_model_params(model, cell_ids, cell_ids_chosen=None):
 
     # limit the matrix to the chosen neurons
     if cell_ids_chosen is not None:
-        neuron_inds_chosen = np.array([list(cell_ids).index(i) for i in cell_ids_chosen])
+        neuron_inds_chosen = np.array([cell_ids.index(i) for i in cell_ids_chosen])
         plot_x = np.arange(len(neuron_inds_chosen))
 
         for aa in range(len(A)):
@@ -338,10 +338,11 @@ def plot_stim_response(model, emissions, inputs, posterior, prior, cell_ids, cel
 
     for i in range(measured_stim_responses.shape[1]):
         plt.figure()
+        plt.axvline(0, color='k', linestyle='--')
+        plt.axhline(0, color='k', linestyle='--')
         plt.plot(plot_x, measured_stim_responses[:, i, neuron_to_stim_ind])
         plt.plot(plot_x, posterior_stim_responses[:, i, neuron_to_stim_ind])
         plt.plot(plot_x, prior_stim_responses[:, i, neuron_to_stim_ind])
-        plt.axvline(0, color='k', linestyle='--')
         plt.ylabel(cell_ids_chosen[i])
 
         plt.legend(['measured', 'posterior', 'prior'])

@@ -6,8 +6,9 @@ from pathlib import Path
 
 
 # load in the model and training data
-model_folder = Path('C:/Users/mcreamer/Documents/data_sets/fun_con_models/48186543')
+model_folder = Path('/home/mcreamer/Documents/data_sets/fun_con_models/48203609_DL5_IL60/')
 cell_ids_chosen = ['AVAL', 'AVAR', 'AVEL', 'AVER', 'AFDL', 'AFDR', 'AVJL', 'AVJR', 'AVDL', 'AVDR']
+# cell_ids_chosen = ['AVDR', 'AVER', 'AVJR', 'RMDL', 'SAADL']
 neuron_to_remove = 'AVJR'
 neuron_to_stim = 'AVJR'
 
@@ -54,7 +55,7 @@ posterior_file.close()
 
 # pull out specific data sets to show
 if cell_ids_chosen is not None:
-    neuron_inds_chosen = np.array([list(cell_ids).index(i) for i in cell_ids_chosen])
+    neuron_inds_chosen = np.array([cell_ids.index(i) for i in cell_ids_chosen])
 else:
     neuron_inds_chosen = np.arange(len(cell_ids))
 

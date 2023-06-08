@@ -5,6 +5,8 @@ from pathlib import Path
 import yaml
 import os
 import pickle
+import tmac.preprocessing as tp
+import time
 
 # utilities for loading and saving the data
 
@@ -27,19 +29,50 @@ def get_run_params(param_name='params'):
     return params
 
 
-def get_model_data(data_path, num_data_sets=None, bad_data_sets=(), frac_neuron_coverage=0.0, minimum_frac_measured=0.0,
-                   start_index=0):
+def preprocess_data(emissions, inputs, start_index=0):
+    # remove the beginning of the recording which contains artifacts and mean subtract
+    emissions = emissions[start_index:, :]
+    inputs = inputs[start_index:, :]
+
+    # remove stimulation events with interpolation
+    window = np.array((-2, 3))
+    for c in range(emissions.shape[1]):
+        stim_locations = np.where(inputs[:, c])[0]
+
+        for s in stim_locations:
+            data_x = window + s
+            interp_x = np.arange(data_x[0], data_x[1])
+            emissions[interp_x, c] = np.interp(interp_x, data_x, emissions[data_x, c])
+
+    # filter out noise at the nyquist frequency
+    filter_size = 2
+    filter_shape = np.ones(filter_size) / filter_size
+    emissions_filtered = np.zeros((emissions.shape[0] - filter_size + 1, emissions.shape[1]))
+
+    for c in range(emissions.shape[1]):
+        emissions_filtered[:, c] = np.convolve(emissions[:, c], filter_shape, mode='valid')
+
+    # photobleach correction
+    emissions_filtered_corrected = tp.photobleach_correction(emissions_filtered, num_exp=2)
+    emissions_filtered_corrected = emissions_filtered_corrected / emissions_filtered_corrected.mean(0) - 1
+
+    # truncate inputs to match emissions after filtering
+    inputs = inputs[:emissions_filtered_corrected.shape[0], :]
+
+    return emissions_filtered, inputs
+
+
+def load_and_align_data(data_path, force_preprocess=False, num_data_sets=None, bad_data_sets=(), start_index=0):
     # load all the recordings of neural activity
-    emissions_unaligned, cell_ids_unaligned, q, q_labels, stim_cell_ids, inputs_unaligned = \
-        load_data(data_path)
+    emissions_unaligned, inputs_unaligned, cell_ids_unaligned = \
+        load_and_preprocess_data(data_path, force_preprocess=force_preprocess, start_index=start_index)
 
     # remove recordings that are noisy
     data_sets_to_remove = np.sort(bad_data_sets)[::-1]
     for bd in data_sets_to_remove:
         emissions_unaligned.pop(bd)
-        cell_ids_unaligned.pop(bd)
         inputs_unaligned.pop(bd)
-        stim_cell_ids.pop(bd)
+        cell_ids_unaligned.pop(bd)
 
     # truncate the number of recordings if you can't fit all of them at once due to memory constraints
     if num_data_sets is None:
@@ -48,84 +81,59 @@ def get_model_data(data_path, num_data_sets=None, bad_data_sets=(), frac_neuron_
     emissions_unaligned = emissions_unaligned[:num_data_sets]
     cell_ids_unaligned = cell_ids_unaligned[:num_data_sets]
     inputs_unaligned = inputs_unaligned[:num_data_sets]
-    stim_cell_ids = stim_cell_ids[:num_data_sets]
 
     # choose a subset of the data sets to maximize the number of recordings * the number of neurons included
-    cell_ids, emissions, best_runs, inputs = \
-        get_combined_dataset(emissions_unaligned, cell_ids_unaligned, stim_cell_ids, inputs_unaligned,
-                             frac_neuron_coverage=frac_neuron_coverage,
-                             minimum_freq=minimum_frac_measured)
-
-    num_data = len(emissions)
-
-    # remove the beginning of the recording which contains artifacts and mean subtract
-    for ri in range(num_data):
-        emissions[ri] = emissions[ri][start_index:, :]
-        emissions[ri] = emissions[ri] - np.mean(emissions[ri], axis=0, keepdims=True)
-        inputs[ri] = inputs[ri][start_index:, :]
+    emissions, inputs, cell_ids, = get_combined_dataset(emissions_unaligned, inputs_unaligned, cell_ids_unaligned)
 
     return emissions, inputs, cell_ids
 
 
-def load_data(fun_atlas_path):
+def load_and_preprocess_data(fun_atlas_path, force_preprocess=False, start_index=0):
     fun_atlas_path = Path(fun_atlas_path)
 
-    recordings = []
-    labels = []
-    label_indicies = []
-    stim_cell_inds = []
-    stim_volume_inds = []
-    stim_ids = []
+    preprocess_filename = 'funcon_preprocessed_data.pkl'
+    emissions = []
+    inputs = []
+    cell_ids = []
 
     # find all files in the folder that have francesco_green.npy
     for i in fun_atlas_path.rglob('francesco_green.npy'):
-        recordings.append(np.load(str(i), allow_pickle=False))
-        labels.append(np.load(str(i.parent / 'labels.npy'), allow_pickle=False))
-        # currently don't know how francesco labels his bit connectivity matrix. reconstruct it with the indicies he
-        # provided that map labels to the connectivity matrix
-        label_indicies.append(np.load(str(i.parent / 'label_indicies.npy'), allow_pickle=False))
+        # check if a processed version exists
+        preprocess_path = i.parent / preprocess_filename
 
-        nan_neurons = np.all(np.isnan(recordings[-1]), axis=0) | (np.std(recordings[-1], axis=0) == 0)
-        # print(labels[-1].shape)
-        # print(labels[-1].shape[0] - recordings[-1].shape[1])
-        labels[-1] = list(labels[-1][~nan_neurons])
-        recordings[-1] = recordings[-1][:, ~nan_neurons]
+        if not force_preprocess and preprocess_path.exists():
+            preprocessed_data = np.load(str(preprocess_path), allow_pickle=True)
+            this_emissions = preprocessed_data['emissions']
+            this_inputs = preprocessed_data['inputs']
+            this_cell_ids = preprocessed_data['cell_ids']
 
-        # tau = 2
-        # t = np.arange(0, tau * 3, 0.5)
-        # filt = np.exp(-t / tau)
-        #
-        # for c in range(recordings[-1].shape[1]):
-        #     recordings[-1][:, c] = np.convolve(recordings[-1][:, c], filt, mode='full')[:recordings[-1].shape[0]]
+        else:
+            this_emissions = np.load(str(i), allow_pickle=False)
+            this_cell_ids = list(np.load(str(i.parent / 'labels.npy'), allow_pickle=False))
 
-        neuron_std = np.std(recordings[-1], axis=0)
-        recordings[-1] = (recordings[-1] - np.mean(recordings[-1], axis=0)) / neuron_std
-        # recordings[-1] = recordings[-1] / np.mean(recordings[-1], axis=0) - 1
+            # load stimulation data
+            this_stim_cell_ids = np.load(str(i.parent / 'stim_recording_cell_inds.npy'), allow_pickle=True)
+            this_stim_volume_inds = np.load(str(i.parent / 'stim_volumes_inds.npy'), allow_pickle=True)
 
-        # load stimulation data
-        stim_atlas_inds = np.load(str(i.parent / 'stim_atlas_inds.npy'), allow_pickle=True)
-        stim_ids.append(np.load(str(i.parent / 'stim_ids.npy'), allow_pickle=True))
-        stim_cell_inds.append(np.load(str(i.parent / 'stim_recording_cell_inds.npy'), allow_pickle=True))
-        stim_volume_inds.append(np.load(str(i.parent / 'stim_volumes_inds.npy'), allow_pickle=True))
+            this_inputs = np.zeros_like(this_emissions)
+            this_stim_volume_inds = this_stim_volume_inds[this_stim_cell_ids != -2]
+            this_stim_cell_ids = this_stim_cell_ids[this_stim_cell_ids != -2]
+            this_inputs[this_stim_volume_inds, this_stim_cell_ids] = 1
 
-    # fun con matricies are [i, j] where j is stimulated and i is responding
-    dff = np.load(str(fun_atlas_path / 'dFF.npy'))
-    occ1 = np.load(str(fun_atlas_path / 'occ1.npy'))
-    occ3 = np.load(str(fun_atlas_path / 'occ3.npy'))
-    q = np.load(str(fun_atlas_path / 'q.npy'))
-    tost_q = np.load(str(fun_atlas_path / 'tost_q.npy'))
+            start = time.time()
+            this_emissions, this_inputs = preprocess_data(this_emissions, this_inputs, start_index=start_index)
+            print('Data set', i.parent, 'preprocessed')
+            print('Took', time.time() - start, 's')
 
-    dff_all = np.load(str(fun_atlas_path / 'dFF_all.npy'), allow_pickle=True)
-    occ2 = np.load(str(fun_atlas_path / 'occ2.npy'), allow_pickle=True)
-    resp_traces = np.load(str(fun_atlas_path / 'resp_traces.npz'), allow_pickle=True)
+            preprocessed_file = open(preprocess_path, 'wb')
+            pickle.dump({'emissions': this_emissions, 'inputs': this_inputs, 'cell_ids': this_cell_ids}, preprocessed_file)
+            preprocessed_file.close()
 
-    q_labels = np.array([''] * q.shape[0], dtype=object)
-    for ri in range(len(recordings)):
-        if len(labels[ri]) == len(label_indicies[ri]):
-            for li, l in enumerate(label_indicies[ri]):
-                q_labels[l] = labels[ri][li]
+        emissions.append(this_emissions)
+        inputs.append(this_inputs)
+        cell_ids.append(this_cell_ids)
 
-    return recordings, labels, q, q_labels, stim_ids, stim_volume_inds
+    return emissions, inputs, cell_ids
 
 
 def save_run(model_save_folder, model_trained, model_true=None, data=None, posterior=None,
@@ -179,64 +187,37 @@ def save_run(model_save_folder, model_trained, model_true=None, data=None, poste
         params_file.close()
 
 
-def get_combined_dataset(neural_data, neuron_labels, stim_ids, stim_volume_inds,
-                         frac_neuron_coverage=0.75, num_rep=1e6, minimum_freq=0.5):
+def get_combined_dataset(emissions, inputs, cell_ids):
+    cell_ids_unique = list(np.unique(np.concatenate(cell_ids)))
+    if cell_ids_unique[0] == '':
+        cell_ids_unique = cell_ids_unique[1:]
 
-    neural_labels_unique, cell_label_count = np.unique(np.concatenate(neuron_labels), return_counts=True)
+    num_neurons = len(cell_ids_unique)
 
-    if neural_labels_unique[0] == '':
-        cell_label_count = cell_label_count[1:]
-        neural_labels_unique = neural_labels_unique[1:]
-
-    cell_label_freq = cell_label_count / len(neuron_labels)
-    neural_labels_unique = neural_labels_unique[cell_label_freq >= minimum_freq]
-
-    num_neurons = len(neural_labels_unique)
-    num_datasets = len(neural_data)
-    neural_data_labeled = []
-    stim_mat = []
-    runs_by_neurons = np.zeros((num_datasets, num_neurons))
+    emissions_aligned = []
+    inputs_aligned = []
 
     # now update the neural data and fill in nans where we don't have a recording from a neuron
-    for wi, w in enumerate(neural_data):
-        nan_mat = np.empty([w.shape[0], num_neurons])
-        this_stim_mat = np.zeros((w.shape[0], num_neurons))
-        nan_mat[:] = np.nan
-        neural_data_labeled.append(nan_mat)
+    for ei, e in enumerate(emissions):
+        # TODO: remove this hack, is fixed in preprocessing
+        inputs[ei] = inputs[ei][:e.shape[0], :]
 
-        for ci, c in enumerate(neural_labels_unique):
-            # fill in where this neuron was stimulated
-            for si, s in enumerate(stim_ids[wi]):
-                if s == c:
-                    this_stim_index = stim_volume_inds[wi][si]
-                    this_stim_mat[this_stim_index, ci] = 1
+        this_emissions = np.empty([e.shape[0], num_neurons])
+        this_inputs = np.zeros((e.shape[0], num_neurons))
+        this_emissions[:] = np.nan
 
-            # find the trace associated with this cell_id
-            this_trace = None
-            for li, l in enumerate(neuron_labels[wi]):
-                if c == l:
-                    this_trace = li
+        # loop through all the labels from this data set
+        for ci, c in enumerate(cell_ids[ei]):
+            # find the index of the full list of cell ids
+            if c != '':
+                this_cell_ind = cell_ids_unique.index(c)
+                this_emissions[:, this_cell_ind] = e[:, ci]
+                this_inputs[:, this_cell_ind] = inputs[ei][:, ci]
 
-            if this_trace is not None:
-                neural_data_labeled[wi][:, ci] = w[:, this_trace]
-                runs_by_neurons[wi, ci] = 1
+        emissions_aligned.append(this_emissions)
+        inputs_aligned.append(this_inputs)
 
-        stim_mat.append(this_stim_mat)
-
-    if frac_neuron_coverage > 0:
-        # choose which dataset to pass on
-        max_val, best_runs, best_neurons = max_set(runs_by_neurons, cell_id_frac_cutoff=frac_neuron_coverage, num_rep=num_rep)
-
-        neural_data_selected = [neural_data_labeled[i][:, best_neurons] for i in best_runs]
-        stim_mat_selected = [stim_mat[i][:, best_neurons] for i in best_runs]
-        neural_labels_selected = neural_labels_unique[best_neurons]
-    else:
-        best_runs = list(np.arange(len(neural_data)))
-        neural_data_selected = neural_data_labeled
-        neural_labels_selected = neural_labels_unique
-        stim_mat_selected = stim_mat
-
-    return neural_labels_selected, neural_data_selected, best_runs, stim_mat_selected
+    return emissions_aligned, inputs_aligned, cell_ids_unique
 
 
 def max_set(a, cell_id_frac_cutoff=1.0, num_rep=1e6) -> (np.ndarray, int, float):

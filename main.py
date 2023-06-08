@@ -39,15 +39,12 @@ if rank == 0:
 
     # load in the data for the model and do any preprocessing here
     emissions, inputs, cell_ids = \
-        lu.get_model_data(run_params['data_path'], num_data_sets=run_params['num_data_sets'],
-                          bad_data_sets=run_params['bad_data_sets'],
-                          frac_neuron_coverage=run_params['frac_neuron_coverage'],
-                          minimum_frac_measured=run_params['minimum_frac_measured'],
-                          start_index=run_params['start_index'])
+        lu.load_and_align_data(run_params['data_path'], num_data_sets=run_params['num_data_sets'],
+                               bad_data_sets=run_params['bad_data_sets'],
+                               start_index=run_params['start_index'],
+                               force_preprocess=run_params['force_preprocess'])
 
-    # If you are considering multiple lags in the past, lag the inputs
     num_neurons = emissions[0].shape[1]
-
     # create a mask for the dynamics_input_weights. This allows us to fit dynamics weights that are diagonal
     input_mask = torch.eye(num_neurons, dtype=dtype, device=device)
     # get rid of any inputs that never receive stimulation

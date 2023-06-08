@@ -6,18 +6,8 @@ bad_data_sets: []
 # cut out the first ~15 seconds to let the system equilibrate
 start_index: 25
 
-# We want to take our data set of recordings and pick a subset of those recordings and neurons in order
-# to maximize the number of recordings * the number of neurons that appear in those recordings
-# this variable allows a neuron to only appear in this fraction of recordings to still be included
-# (rather than enforcing it is in 100% of the recording subset)
-frac_neuron_coverage: 0.0
-
-# for a neuron to be included in the dataset, it must be in at least this fraction of the recordings
-# this is not a principled threshold, (you could have 90 bad recordings and 10 good ones), but it's a quick heuristic
-# to reduce dataset size
-minimum_frac_measured: 0.0
-
 num_data_sets: 10
+force_preprocess: True
 
 param_props:
   update:
