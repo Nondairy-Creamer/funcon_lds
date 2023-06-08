@@ -199,9 +199,6 @@ def get_combined_dataset(emissions, inputs, cell_ids):
 
     # now update the neural data and fill in nans where we don't have a recording from a neuron
     for ei, e in enumerate(emissions):
-        # TODO: remove this hack, is fixed in preprocessing
-        inputs[ei] = inputs[ei][:e.shape[0], :]
-
         this_emissions = np.empty([e.shape[0], num_neurons])
         this_inputs = np.zeros((e.shape[0], num_neurons))
         this_emissions[:] = np.nan
