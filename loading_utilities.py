@@ -59,7 +59,7 @@ def preprocess_data(emissions, inputs, start_index=0):
     # truncate inputs to match emissions after filtering
     inputs = inputs[:emissions_filtered_corrected.shape[0], :]
 
-    return emissions_filtered, inputs
+    return emissions_filtered_corrected, inputs
 
 
 def load_and_align_data(data_path, force_preprocess=False, num_data_sets=None, bad_data_sets=(), start_index=0):
@@ -122,12 +122,14 @@ def load_and_preprocess_data(fun_atlas_path, force_preprocess=False, start_index
 
             start = time.time()
             this_emissions, this_inputs = preprocess_data(this_emissions, this_inputs, start_index=start_index)
-            print('Data set', i.parent, 'preprocessed')
-            print('Took', time.time() - start, 's')
 
             preprocessed_file = open(preprocess_path, 'wb')
             pickle.dump({'emissions': this_emissions, 'inputs': this_inputs, 'cell_ids': this_cell_ids}, preprocessed_file)
             preprocessed_file.close()
+
+            print('Data set', i.parent, 'preprocessed')
+            print('Took', time.time() - start, 's')
+            a=1
 
         emissions.append(this_emissions)
         inputs.append(this_inputs)
