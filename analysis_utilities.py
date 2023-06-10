@@ -246,14 +246,10 @@ def plot_stim_power(model, emissions, inputs, posterior, prior, cell_ids, cell_i
     model_weights_power = rms(stack_weights(model_weights, model.dynamics_lags, axis=1), axis=0)
 
     # pull out the neurons we care about
-    measured_response_power = measured_response_power[chosen_neuron_inds, :]
-    measured_response_power = measured_response_power[:, chosen_neuron_inds]
-    prior_response_power = prior_response_power[chosen_neuron_inds, :]
-    prior_response_power = prior_response_power[:, chosen_neuron_inds]
-    posterior_response_power = posterior_response_power[chosen_neuron_inds, :]
-    posterior_response_power = posterior_response_power[:, chosen_neuron_inds]
-    model_weights_power = model_weights_power[chosen_neuron_inds, :]
-    model_weights_power = model_weights_power[:, chosen_neuron_inds]
+    measured_response_power = measured_response_power[chosen_neuron_inds, :][:, chosen_neuron_inds]
+    prior_response_power = prior_response_power[chosen_neuron_inds, :][:, chosen_neuron_inds]
+    posterior_response_power = posterior_response_power[chosen_neuron_inds, :][:, chosen_neuron_inds]
+    model_weights_power = model_weights_power[chosen_neuron_inds, :][:, chosen_neuron_inds]
 
     # set the diagonal to 0 for visualization
     measured_response_power[np.eye(measured_response_power.shape[0], dtype=bool)] = 0

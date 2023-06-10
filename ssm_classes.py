@@ -402,7 +402,6 @@ class Lgssm:
             # locate nans and set covariance at their location to a large number to marginalize over them
             nan_loc = torch.isnan(y)
             y = torch.where(nan_loc, 0, y)
-            R = torch.where(torch.diag(nan_loc), self.epsilon, self.emissions_cov)
 
             # Predict the next state
             pred_mean = self.dynamics_weights @ filtered_mean + dynamics_inputs[t, :] + self.dynamics_offset
