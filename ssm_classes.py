@@ -293,20 +293,26 @@ class Lgssm:
             init_cov_list.append(init_cov)
 
         # add in nans
-        lost_emission_mask = rng.random((num_data_sets, 1, self.emissions_dim)) < lost_emission_freq
+        scattered_nans_mask = [rng.random((num_time[i], self.emissions_dim)) < scattered_nan_freq for i in range(num_data_sets)]
+        lost_emission_mask = [rng.random((1, self.emissions_dim)) < lost_emission_freq for i in range(num_data_sets)]
+        nan_mask = [scattered_nans_mask[i] | lost_emission_mask[i] for i in range(num_data_sets)]
 
         # make sure each data set has at least one measurement and that all emissions were measured at least once
         for d in range(num_data_sets):
-            if np.all(lost_emission_mask[d, :, :]):
-                lost_emission_mask[d, :, rng.integers(0, self.emissions_dim)] = False
+            if np.all(nan_mask[d]):
+                nan_mask[d][:, rng.integers(0, self.emissions_dim)] = False
 
-        for n in range(self.emissions_dim):
-            if np.all(lost_emission_mask[:, :, n]):
-                lost_emission_mask[:, :, n] = False
+        neurons_measured = np.zeros(self.emissions_dim, dtype=bool)
+        for d in range(num_data_sets):
+            neurons_measured = neurons_measured | ~np.all(nan_mask[d], axis=0)
+
+        for nmi, nm in enumerate(neurons_measured):
+            if not nm:
+                random_data_set = rng.integers(0, num_data_sets)
+                nan_mask[random_data_set][:, nmi] = False
 
         for d in range(num_data_sets):
-            this_mask = np.tile(lost_emission_mask[d, :, :], (num_time[d], 1))
-            emissions_list[d][this_mask] = np.nan
+            emissions_list[d][nan_mask[d]] = np.nan
 
         data_dict = {'latents': latents_list,
                      'inputs': inputs_list,
@@ -336,9 +342,15 @@ class Lgssm:
 
         filtered_means_list = []
         filtered_covs_list = []
-        cov_converged = False
         converge_t = num_timesteps - 1
 
+        # determine if you're going to check for covariance convergence
+        # save a lot of time and memory, but can only be done if each neuron is either all or no nans
+        any_nan_neurons = torch.any(torch.isnan(emissions), dim=0)
+        all_nan_neurons = torch.all(torch.isnan(emissions), dim=0)
+        check_convergence = torch.all(any_nan_neurons == all_nan_neurons).numpy()
+
+        # step through the loop and keep calculating the covariances until they converge
         for t in range(num_timesteps):
             # Shorthand: get parameters and input for time index t
             y = emissions[t, :]
@@ -350,41 +362,60 @@ class Lgssm:
 
             # Predict the next state
             pred_mean = self.dynamics_weights @ filtered_mean + dynamics_inputs[t, :] + self.dynamics_offset
-
-            if not cov_converged:
-                pred_cov = self.dynamics_weights @ filtered_cov @ self.dynamics_weights.T + self.dynamics_cov
+            pred_cov = self.dynamics_weights @ filtered_cov @ self.dynamics_weights.T + self.dynamics_cov
 
             # Update the log likelihood
             ll_mu = self.emissions_weights @ pred_mean + emissions_inputs[t, :] + self.emissions_offset
 
-            if not cov_converged:
-                ll_cov = self.emissions_weights @ pred_cov @ self.emissions_weights.T + R
-                ll_cov_logdet = torch.linalg.slogdet(ll_cov)[1]
-                ll_cov_inv = torch.linalg.inv(ll_cov)
+            ll_cov = self.emissions_weights @ pred_cov @ self.emissions_weights.T + R
+            ll_cov_logdet = torch.linalg.slogdet(ll_cov)[1]
+            ll_cov_inv = torch.linalg.inv(ll_cov)
 
             # ll += torch.distributions.multivariate_normal.MultivariateNormal(ll_mu, ll_cov).log_prob(y)
             mean_diff = y - ll_mu
             ll += -1/2 * (emissions.shape[1] * np.log(2*np.pi) + ll_cov_logdet +
                           torch.dot(mean_diff, ll_cov_inv @ mean_diff))
 
-            if not cov_converged:
-                # Condition on this emission
-                # Compute the Kalman gain
-                K = pred_cov.T @ self.emissions_weights.T @ ll_cov_inv
-                # K = torch.linalg.solve(ll_cov, self.emissions_weights @ pred_cov).T
-                filtered_cov = pred_cov - K @ ll_cov @ K.T
+            # Condition on this emission
+            # Compute the Kalman gain
+            K = pred_cov.T @ self.emissions_weights.T @ ll_cov_inv
+            # K = torch.linalg.solve(ll_cov, self.emissions_weights @ pred_cov).T
+            filtered_cov = pred_cov - K @ ll_cov @ K.T
 
             filtered_mean = pred_mean + K @ mean_diff
+            filtered_means_list.append(filtered_mean)
 
             # check if covariance has converged
-            if not cov_converged and t > 0:
+            if check_convergence and t > 0:
                 max_abs_diff_cov = torch.max(torch.abs(filtered_cov - filtered_covs_list[-1]))
                 if max_abs_diff_cov < 1 / self.epsilon:
-                    cov_converged = True
                     converge_t = t - 1
+                    break
 
-            if not cov_converged:
-                filtered_covs_list.append(filtered_cov)
+            filtered_covs_list.append(filtered_cov)
+
+        # once the covariances converge, don't recalculate them
+        for t in range(converge_t + 2, num_timesteps):
+            # Shorthand: get parameters and input for time index t
+            y = emissions[t, :]
+
+            # locate nans and set covariance at their location to a large number to marginalize over them
+            nan_loc = torch.isnan(y)
+            y = torch.where(nan_loc, 0, y)
+            R = torch.where(torch.diag(nan_loc), self.epsilon, self.emissions_cov)
+
+            # Predict the next state
+            pred_mean = self.dynamics_weights @ filtered_mean + dynamics_inputs[t, :] + self.dynamics_offset
+
+            # Update the log likelihood
+            ll_mu = self.emissions_weights @ pred_mean + emissions_inputs[t, :] + self.emissions_offset
+
+            # ll += torch.distributions.multivariate_normal.MultivariateNormal(ll_mu, ll_cov).log_prob(y)
+            mean_diff = y - ll_mu
+            ll += -1 / 2 * (emissions.shape[1] * np.log(2 * np.pi) + ll_cov_logdet +
+                            torch.dot(mean_diff, ll_cov_inv @ mean_diff))
+
+            filtered_mean = pred_mean + K @ mean_diff
 
             filtered_means_list.append(filtered_mean)
 

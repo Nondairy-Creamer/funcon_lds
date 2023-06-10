@@ -53,8 +53,11 @@ def preprocess_data(emissions, inputs, start_index=0):
         emissions_filtered[:, c] = np.convolve(emissions[:, c], filter_shape, mode='valid')
 
     # photobleach correction
-    emissions_filtered_corrected = tp.photobleach_correction(emissions_filtered, num_exp=2)
-    emissions_filtered_corrected = emissions_filtered_corrected / emissions_filtered_corrected.mean(0) - 1
+    emissions_filtered_corrected = np.zeros_like(emissions_filtered)
+    for c in range(emissions_filtered.shape[1]):
+        emissions_filtered_corrected[:, c] = tp.photobleach_correction(emissions_filtered[:, c], num_exp=1)[:, 0]
+
+    emissions_filtered_corrected = emissions_filtered_corrected / np.nanmean(emissions_filtered_corrected, axis=0) - 1
 
     # truncate inputs to match emissions after filtering
     inputs = inputs[:emissions_filtered_corrected.shape[0], :]
@@ -65,7 +68,8 @@ def preprocess_data(emissions, inputs, start_index=0):
 def load_and_align_data(data_path, force_preprocess=False, num_data_sets=None, bad_data_sets=(), start_index=0):
     # load all the recordings of neural activity
     emissions_unaligned, inputs_unaligned, cell_ids_unaligned = \
-        load_and_preprocess_data(data_path, force_preprocess=force_preprocess, start_index=start_index)
+        load_and_preprocess_data(data_path, num_data_sets=num_data_sets,
+                                 force_preprocess=force_preprocess, start_index=start_index)
 
     # remove recordings that are noisy
     data_sets_to_remove = np.sort(bad_data_sets)[::-1]
@@ -74,21 +78,13 @@ def load_and_align_data(data_path, force_preprocess=False, num_data_sets=None, b
         inputs_unaligned.pop(bd)
         cell_ids_unaligned.pop(bd)
 
-    # truncate the number of recordings if you can't fit all of them at once due to memory constraints
-    if num_data_sets is None:
-        num_data_sets = len(emissions_unaligned)
-
-    emissions_unaligned = emissions_unaligned[:num_data_sets]
-    cell_ids_unaligned = cell_ids_unaligned[:num_data_sets]
-    inputs_unaligned = inputs_unaligned[:num_data_sets]
-
     # choose a subset of the data sets to maximize the number of recordings * the number of neurons included
     emissions, inputs, cell_ids, = get_combined_dataset(emissions_unaligned, inputs_unaligned, cell_ids_unaligned)
 
     return emissions, inputs, cell_ids
 
 
-def load_and_preprocess_data(fun_atlas_path, force_preprocess=False, start_index=0):
+def load_and_preprocess_data(fun_atlas_path, num_data_sets=None, force_preprocess=False, start_index=0):
     fun_atlas_path = Path(fun_atlas_path)
 
     preprocess_filename = 'funcon_preprocessed_data.pkl'
@@ -97,7 +93,7 @@ def load_and_preprocess_data(fun_atlas_path, force_preprocess=False, start_index
     cell_ids = []
 
     # find all files in the folder that have francesco_green.npy
-    for i in fun_atlas_path.rglob('francesco_green.npy'):
+    for i_ind, i in enumerate(fun_atlas_path.rglob('francesco_green.npy')):
         # check if a processed version exists
         preprocess_path = i.parent / preprocess_filename
 
@@ -108,8 +104,10 @@ def load_and_preprocess_data(fun_atlas_path, force_preprocess=False, start_index
             this_cell_ids = preprocessed_data['cell_ids']
 
         else:
-            this_emissions = np.load(str(i), allow_pickle=False)
-            this_cell_ids = list(np.load(str(i.parent / 'labels.npy'), allow_pickle=False))
+            this_emissions = np.load(str(i))
+            this_nan_mask = np.load(str(i.parent / 'nan_mask.npy'))
+            this_emissions[this_nan_mask] = np.nan
+            this_cell_ids = list(np.load(str(i.parent / 'labels.npy')))
 
             # load stimulation data
             this_stim_cell_ids = np.load(str(i.parent / 'stim_recording_cell_inds.npy'), allow_pickle=True)
@@ -129,11 +127,14 @@ def load_and_preprocess_data(fun_atlas_path, force_preprocess=False, start_index
 
             print('Data set', i.parent, 'preprocessed')
             print('Took', time.time() - start, 's')
-            a=1
 
         emissions.append(this_emissions)
         inputs.append(this_inputs)
         cell_ids.append(this_cell_ids)
+
+        if num_data_sets is not None:
+            if i_ind >= num_data_sets - 1:
+                break
 
     return emissions, inputs, cell_ids
 
