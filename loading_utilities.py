@@ -83,6 +83,9 @@ def preprocess_data(emissions, inputs, start_index=0, correct_photobleach=False)
 
     else:
         emissions_filtered_corrected = emissions_filtered
+        emissions_mean = np.nanmean(emissions_filtered_corrected, axis=0)
+        emissions_std = np.nanstd(emissions_filtered_corrected, axis=0)
+        emissions_filtered_corrected = (emissions_filtered_corrected - emissions_mean) / emissions_std
 
     # truncate inputs to match emissions after filtering
     inputs = inputs[:emissions_filtered_corrected.shape[0], :]
