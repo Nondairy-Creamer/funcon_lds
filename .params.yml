@@ -8,6 +8,7 @@ start_index: 25
 
 num_data_sets: 10
 force_preprocess: False
+interpolate_nans: True
 
 param_props:
   update:

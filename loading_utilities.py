@@ -105,7 +105,8 @@ def load_and_align_data(data_path, force_preprocess=False, num_data_sets=None, b
     return emissions, inputs, cell_ids
 
 
-def load_and_preprocess_data(fun_atlas_path, num_data_sets=None, force_preprocess=False, start_index=0):
+def load_and_preprocess_data(fun_atlas_path, num_data_sets=None, force_preprocess=False, start_index=0,
+                             interpolate_nans=True):
     fun_atlas_path = Path(fun_atlas_path)
 
     preprocess_filename = 'funcon_preprocessed_data.pkl'
@@ -126,8 +127,11 @@ def load_and_preprocess_data(fun_atlas_path, num_data_sets=None, force_preproces
 
         else:
             this_emissions = np.load(str(i))
-            this_nan_mask = np.load(str(i.parent / 'nan_mask.npy'))
-            this_emissions[this_nan_mask] = np.nan
+
+            if not interpolate_nans:
+                this_nan_mask = np.load(str(i.parent / 'nan_mask.npy'))
+                this_emissions[this_nan_mask] = np.nan
+
             this_cell_ids = list(np.load(str(i.parent / 'labels.npy')))
 
             # load stimulation data
