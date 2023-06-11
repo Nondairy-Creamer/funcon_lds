@@ -31,7 +31,7 @@ def get_run_params(param_name='params'):
     return params
 
 
-def preprocess_data(emissions, inputs, start_index=0):
+def preprocess_data(emissions, inputs, start_index=0, correct_photobleach=False):
     # remove the beginning of the recording which contains artifacts and mean subtract
     emissions = emissions[start_index:, :]
     inputs = inputs[start_index:, :]
@@ -54,31 +54,35 @@ def preprocess_data(emissions, inputs, start_index=0):
     for c in range(emissions.shape[1]):
         emissions_filtered[:, c] = au.nan_convolve(emissions[:, c].copy(), filter_shape)
 
-    # photobleach correction
-    emissions_filtered_corrected = np.zeros_like(emissions_filtered)
-    for c in range(emissions_filtered.shape[1]):
-        emissions_filtered_corrected[:, c] = tp.photobleach_correction(emissions_filtered[:, c], num_exp=2)[:, 0]
+    if correct_photobleach:
+        # photobleach correction
+        emissions_filtered_corrected = np.zeros_like(emissions_filtered)
+        for c in range(emissions_filtered.shape[1]):
+            emissions_filtered_corrected[:, c] = tp.photobleach_correction(emissions_filtered[:, c], num_exp=2)[:, 0]
 
-    # occasionally the fit fails check for outputs who don't have a mean close to 1
-    # fit those with a single exponential
-    # all the nan mean calls throw warnings when averaging over nans so supress those
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", category=RuntimeWarning)
-        bad_fits_2exp = np.where(np.abs(np.nanmean(emissions_filtered_corrected, axis=0) - 1) > 0.1)[0]
+        # occasionally the fit fails check for outputs who don't have a mean close to 1
+        # fit those with a single exponential
+        # all the nan mean calls throw warnings when averaging over nans so supress those
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            bad_fits_2exp = np.where(np.abs(np.nanmean(emissions_filtered_corrected, axis=0) - 1) > 0.1)[0]
 
-        for bf in bad_fits_2exp:
-            emissions_filtered_corrected[:, bf] = tp.photobleach_correction(emissions_filtered[:, bf], num_exp=1)[:, 0]
+            for bf in bad_fits_2exp:
+                emissions_filtered_corrected[:, bf] = tp.photobleach_correction(emissions_filtered[:, bf], num_exp=1)[:, 0]
 
-        bad_fits_1xp = np.where(np.abs(np.nanmean(emissions_filtered_corrected, axis=0) - 1) > 0.2)[0]
-        if len(bad_fits_1xp) > 0:
-            warnings.warn('Photobleach correction problems found in neurons ' + str(bad_fits_1xp) + ' setting to nan')
-            emissions_filtered_corrected[:, bad_fits_1xp] = np.nan
+            bad_fits_1xp = np.where(np.abs(np.nanmean(emissions_filtered_corrected, axis=0) - 1) > 0.2)[0]
+            if len(bad_fits_1xp) > 0:
+                warnings.warn('Photobleach correction problems found in neurons ' + str(bad_fits_1xp) + ' setting to nan')
+                emissions_filtered_corrected[:, bad_fits_1xp] = np.nan
 
-        # divide by the mean and subtract 1. Will throw warnings on the all nan data, ignore htem
-        emissions_time_mean = np.nanmean(emissions_filtered_corrected, axis=0)
-        emissions_filtered_corrected = emissions_filtered_corrected / emissions_time_mean - 1
+            # divide by the mean and subtract 1. Will throw warnings on the all nan data, ignore htem
+            emissions_time_mean = np.nanmean(emissions_filtered_corrected, axis=0)
+            emissions_filtered_corrected = emissions_filtered_corrected / emissions_time_mean - 1
 
-    emissions_filtered_corrected[emissions_filtered_corrected > 5] = np.nan
+        emissions_filtered_corrected[emissions_filtered_corrected > 5] = np.nan
+
+    else:
+        emissions_filtered_corrected = emissions_filtered
 
     # truncate inputs to match emissions after filtering
     inputs = inputs[:emissions_filtered_corrected.shape[0], :]
@@ -86,11 +90,13 @@ def preprocess_data(emissions, inputs, start_index=0):
     return emissions_filtered_corrected, inputs
 
 
-def load_and_align_data(data_path, force_preprocess=False, num_data_sets=None, bad_data_sets=(), start_index=0):
+def load_and_align_data(data_path, force_preprocess=False, num_data_sets=None, bad_data_sets=(), start_index=0,
+                        correct_photobleach=False, interpolate_nans=False):
     # load all the recordings of neural activity
     emissions_unaligned, inputs_unaligned, cell_ids_unaligned = \
         load_and_preprocess_data(data_path, num_data_sets=num_data_sets,
-                                 force_preprocess=force_preprocess, start_index=start_index)
+                                 force_preprocess=force_preprocess, start_index=start_index,
+                                 correct_photobleach=correct_photobleach, interpolate_nans=interpolate_nans)
 
     # remove recordings that are noisy
     data_sets_to_remove = np.sort(bad_data_sets)[::-1]
@@ -106,7 +112,7 @@ def load_and_align_data(data_path, force_preprocess=False, num_data_sets=None, b
 
 
 def load_and_preprocess_data(fun_atlas_path, num_data_sets=None, force_preprocess=False, start_index=0,
-                             interpolate_nans=True):
+                             correct_photobleach=False, interpolate_nans=True):
     fun_atlas_path = Path(fun_atlas_path)
 
     preprocess_filename = 'funcon_preprocessed_data.pkl'
@@ -144,7 +150,8 @@ def load_and_preprocess_data(fun_atlas_path, num_data_sets=None, force_preproces
             this_inputs[this_stim_volume_inds, this_stim_cell_ids] = 1
 
             start = time.time()
-            this_emissions, this_inputs = preprocess_data(this_emissions, this_inputs, start_index=start_index)
+            this_emissions, this_inputs = preprocess_data(this_emissions, this_inputs, start_index=start_index,
+                                                          correct_photobleach=correct_photobleach)
 
             preprocessed_file = open(preprocess_path, 'wb')
             pickle.dump({'emissions': this_emissions, 'inputs': this_inputs, 'cell_ids': this_cell_ids}, preprocessed_file)

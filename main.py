@@ -42,7 +42,9 @@ if rank == 0:
         lu.load_and_align_data(run_params['data_path'], num_data_sets=run_params['num_data_sets'],
                                bad_data_sets=run_params['bad_data_sets'],
                                start_index=run_params['start_index'],
-                               force_preprocess=run_params['force_preprocess'])
+                               force_preprocess=run_params['force_preprocess'],
+                               correct_photobleach=run_params['correct_photobleach'],
+                               interpolate_nans=run_params['interpolate_nans'])
 
     num_neurons = emissions[0].shape[1]
     # create a mask for the dynamics_input_weights. This allows us to fit dynamics weights that are diagonal
