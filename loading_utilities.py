@@ -7,6 +7,8 @@ import os
 import pickle
 import tmac.preprocessing as tp
 import time
+import analysis_utilities as au
+import warnings
 
 # utilities for loading and saving the data
 
@@ -50,14 +52,33 @@ def preprocess_data(emissions, inputs, start_index=0):
     emissions_filtered = np.zeros((emissions.shape[0] - filter_size + 1, emissions.shape[1]))
 
     for c in range(emissions.shape[1]):
-        emissions_filtered[:, c] = np.convolve(emissions[:, c], filter_shape, mode='valid')
+        emissions_filtered[:, c] = au.nan_convolve(emissions[:, c].copy(), filter_shape)
 
     # photobleach correction
     emissions_filtered_corrected = np.zeros_like(emissions_filtered)
     for c in range(emissions_filtered.shape[1]):
-        emissions_filtered_corrected[:, c] = tp.photobleach_correction(emissions_filtered[:, c], num_exp=1)[:, 0]
+        emissions_filtered_corrected[:, c] = tp.photobleach_correction(emissions_filtered[:, c], num_exp=2)[:, 0]
 
-    emissions_filtered_corrected = emissions_filtered_corrected / np.nanmean(emissions_filtered_corrected, axis=0) - 1
+    # occasionally the fit fails check for outputs who don't have a mean close to 1
+    # fit those with a single exponential
+    # all the nan mean calls throw warnings when averaging over nans so supress those
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        bad_fits_2exp = np.where(np.abs(np.nanmean(emissions_filtered_corrected, axis=0) - 1) > 0.1)[0]
+
+        for bf in bad_fits_2exp:
+            emissions_filtered_corrected[:, bf] = tp.photobleach_correction(emissions_filtered[:, bf], num_exp=1)[:, 0]
+
+        bad_fits_1xp = np.where(np.abs(np.nanmean(emissions_filtered_corrected, axis=0) - 1) > 0.2)[0]
+        if len(bad_fits_1xp) > 0:
+            warnings.warn('Photobleach correction problems found in neurons ' + str(bad_fits_1xp) + ' setting to nan')
+            emissions_filtered_corrected[:, bad_fits_1xp] = np.nan
+
+        # divide by the mean and subtract 1. Will throw warnings on the all nan data, ignore htem
+        emissions_time_mean = np.nanmean(emissions_filtered_corrected, axis=0)
+        emissions_filtered_corrected = emissions_filtered_corrected / emissions_time_mean - 1
+
+    emissions_filtered_corrected[emissions_filtered_corrected > 5] = np.nan
 
     # truncate inputs to match emissions after filtering
     inputs = inputs[:emissions_filtered_corrected.shape[0], :]

@@ -7,6 +7,27 @@ def rms(data, axis=-1):
     return np.sqrt(np.mean(data**2, axis=axis))
 
 
+def nan_convolve(data, filter):
+    # attempt to ignore nans during a convolution
+    # this isn't particularly principled, will just replace nans with 0s and divide the convolution
+    # by the fraction of data that was in the window
+    # only makes sense for nonnegative filters
+
+    if np.any(filter < 0):
+        raise Exception('nan_filter can only handle nonnegative filters')
+
+    nan_loc = np.isnan(data)
+    data_no_nan = data
+    data_no_nan[nan_loc] = 0
+    data_filtered = np.convolve(data_no_nan, filter, mode='valid')
+    nan_count = np.convolve(~nan_loc, filter / np.sum(filter), mode='valid')
+    nan_count[nan_count == 0] = 1
+    data_nan_conv = data_filtered / nan_count
+    data_nan_conv[nan_loc[:data_filtered.shape[0]]] = np.nan
+
+    return data_nan_conv
+
+
 def stack_weights(weights, num_split, axis=-1):
     return np.stack(np.split(weights, num_split, axis=axis))
 
