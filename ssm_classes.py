@@ -27,6 +27,7 @@ class Lgssm:
         self.train_time = None
         self.epsilon = nan_fill
         self.cell_ids = ['S' + str(i) for i in range(self.dynamics_dim)]
+        self.sample_rate = 0.5  # default is 2 Hz
 
         # define the weights here, but set them to tensor versions of the intial values with _set_to_init()
         self.dynamics_weights = None
