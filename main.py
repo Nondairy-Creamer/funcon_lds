@@ -84,6 +84,8 @@ model_trained, smoothed_means = iu.fit_em(model_trained, emissions, inputs, num_
                                           save_folder=run_params['model_save_folder'])
 
 if rank == 0:
+    lu.save_run(run_params['model_save_folder'], model_trained, posterior=smoothed_means)
+
     if not is_parallel and run_params['plot_figures']:
         plotting.plot_model_params(model_trained)
 

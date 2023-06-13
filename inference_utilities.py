@@ -105,21 +105,19 @@ def fit_em(model, emissions_list, inputs_list, init_mean=None, init_cov=None, nu
 
         ll, smoothed_means = model.em_step(emissions, inputs, init_mean, init_cov, cpu_id=rank, num_cpus=size)
 
-        if ll is None:
-            continue
+        if rank == 0:
+            log_likelihood_out.append(ll.detach().cpu().numpy())
+            time_out.append(time.time() - start)
+            model.log_likelihood = log_likelihood_out
+            model.train_time = time_out
 
-        log_likelihood_out.append(ll.detach().cpu().numpy())
-        time_out.append(time.time() - start)
-        model.log_likelihood = log_likelihood_out
-        model.train_time = time_out
+            if np.mod(ep, save_every-1) == 0:
+                lu.save_run(save_folder, model, posterior=smoothed_means)
 
-        if np.mod(ep, save_every) == 0:
-            lu.save_run(save_folder, model, posterior=smoothed_means)
-
-        if model.verbose:
-            print('Finished step ' + str(ep + 1) + '/' + str(num_steps))
-            print('log likelihood = ' + str(log_likelihood_out[-1]))
-            print('Time elapsed = ' + str(time_out[-1]))
+            if model.verbose:
+                print('Finished step ' + str(ep + 1) + '/' + str(num_steps))
+                print('log likelihood = ' + str(log_likelihood_out[-1]))
+                print('Time elapsed = ' + str(time_out[-1]))
 
     return model, smoothed_means
 
