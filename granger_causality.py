@@ -44,11 +44,8 @@ A = model_true.dynamics_weights.detach().numpy()
 # X_i is a granger cause of another time series X_j if at least 1 element A_tau(j,i)
 # for tau=1,...,L is signif larger than 0
 # X_t = sum_1^L A_tau*X(t-tau) + noise(t)
-num_lags = 1
+num_lags = 5
 # nan_list = []
-
-# testing:
-num_data_sets = 1
 
 for d in range(num_data_sets):
     # num_time, neurons varies depending on the dataset
@@ -103,8 +100,9 @@ for d in range(num_data_sets):
     # create a mask for the dynamics_input_weights. This allows us to fit dynamics weights that are diagonal
     input_mask = torch.eye(non_nan_emissions.shape[1], has_stims.shape[0], dtype=dtype, device=device)
     input_mask = input_mask[:, has_stims]
+    input_mask = torch.tile(input_mask.T, (num_lags, 1))
 
-    input_mask = torch.cat((torch.ones(non_nan_emissions.shape[1], non_nan_emissions.shape[1]), input_mask.T), dim=0)
+    input_mask = torch.cat((torch.ones(non_nan_emissions.shape[1]*num_lags, non_nan_emissions.shape[1]), input_mask), dim=0)
 
 
 
@@ -121,7 +119,7 @@ for d in range(num_data_sets):
     ab_hat = ab_hat.detach().numpy()
 
     a_hat = ab_hat[:num_lags * num_emission_neurons, :].T
-    b_hat = ab_hat[num_lags * num_input_neurons:, :].T
+    b_hat = ab_hat[num_lags * num_emission_neurons:, :].T
 
     y_hat = y_history @ ab_hat
     # print(a_hat)
@@ -130,21 +128,22 @@ for d in range(num_data_sets):
     print(mse)
 
     # add NaNs back in for plotting and to compare across datasets
-    # temp = np.zeros((num_neurons * num_lags, num_neurons))
-    # temp[:, :] = np.nan
-    # i_count = 0
-    # j_count = 0
-    # for p in range(num_lags):
-    #     for i in range(num_neurons):
-    #         for j in range(num_neurons):
-    #             if ~nans_mask[i, j]:
-    #                 temp[p * num_neurons + i, j] = a_hat[i_count, j_count]
-    #                 j_count = j_count + 1
-    #                 if j_count == num_emission_neurons:
-    #                     i_count = i_count + 1
-    #         j_count = 0
-    # a_hat = temp
-    #
+    temp = np.zeros((num_neurons, num_neurons * num_lags))
+    temp[:, :] = np.nan
+    i_count = 0
+    j_count = 0
+    for p in range(num_lags):
+        for i in range(num_neurons):
+            for j in range(num_neurons):
+                if ~nans[i] and ~nans[j] and i_count < num_emission_neurons:
+                    temp[i, p * num_neurons + j] = a_hat[i_count, p * num_emission_neurons + j_count]
+                    j_count = j_count + 1
+                    if j_count == num_emission_neurons:
+                        i_count = i_count + 1
+            j_count = 0
+        i_count = 0
+    a_hat_full = temp
+
     temp = np.zeros((num_neurons, num_neurons*num_lags))
     temp[:, :] = np.nan
     i_count = 0
@@ -152,22 +151,23 @@ for d in range(num_data_sets):
     for p in range(num_lags):
         for i in range(num_neurons):
             for j in range(num_neurons):
-                if has_stims[i] and has_stims[j]:
-                    temp[i, p * num_input_neurons + j] = b_hat[i_count, j_count]
+                if has_stims[i] and has_stims[j] and i_count < num_emission_neurons:
+                    temp[i, p * num_neurons + j] = b_hat[i_count, p * num_input_neurons + j_count]
                     j_count = j_count + 1
-                    if j_count == num_input_neurons:
+                    if j_count == num_emission_neurons:
                         i_count = i_count + 1
             j_count = 0
+        i_count = 0
     b_hat_full = temp
 
-    # fill in nans across first dimension
-    temp_nan = np.zeros((num_emission_neurons, num_neurons))
-    temp_nan[:] = np.nan
-    temp_nan[:, ~nans] = a_hat[:, :num_emission_neurons]
-    # fill in nans across second dimension
-    a_hat_full = np.zeros((num_neurons, num_neurons))
-    a_hat_full[:] = np.nan
-    a_hat_full[~nans, :] = temp_nan
+    # # fill in nans across first dimension
+    # temp_nan = np.zeros((num_emission_neurons, num_neurons))
+    # temp_nan[:] = np.nan
+    # temp_nan[:, ~nans] = a_hat[:, :num_emission_neurons]
+    # # fill in nans across second dimension
+    # a_hat_full = np.zeros((num_neurons, num_neurons))
+    # a_hat_full[:] = np.nan
+    # a_hat_full[~nans, :] = temp_nan
 
     # temp_nan = np.zeros((num_input_neurons, num_neurons))
     # temp_nan[:] = np.nan
