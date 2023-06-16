@@ -11,7 +11,7 @@ device = run_params["device"]
 dtype = getattr(torch, run_params["dtype"])
 
 emissions, inputs, cell_ids = \
-        lu.get_model_data(run_params['data_path'], num_data_sets=run_params['num_data_sets'],
+        lu.get_model_data(run_params['data_path'],
                           bad_data_sets=run_params['bad_data_sets'],
                           frac_neuron_coverage=run_params['frac_neuron_coverage'],
                           minimum_frac_measured=run_params['minimum_frac_measured'],
@@ -45,7 +45,9 @@ A = model_true.dynamics_weights.detach().numpy()
 # for tau=1,...,L is signif larger than 0
 # X_t = sum_1^L A_tau*X(t-tau) + noise(t)
 num_lags = 5
-# nan_list = []
+
+all_a_hat = np.empty((num_neurons, num_neurons*num_lags, num_data_sets))
+all_b_hat = np.empty((num_neurons, num_neurons*num_lags, num_data_sets))
 
 for d in range(num_data_sets):
     # num_time, neurons varies depending on the dataset
@@ -110,7 +112,7 @@ for d in range(num_data_sets):
     num_emission_neurons = len(non_nan_emissions[0, :])
     num_input_neurons = len(curr_inputs[0, :])
 
-    ab_hat = np.linalg.lstsq(y_history, y_target, rcond=None)[0]
+    # ab_hat = np.linalg.lstsq(y_history, y_target, rcond=None)[0]
     # instead do masking from utils to get rid of the 0 entries and get proper fitting
     torch_y_history = torch.from_numpy(y_history)
     torch_y_target = torch.from_numpy(y_target)
@@ -140,6 +142,9 @@ for d in range(num_data_sets):
                     j_count = j_count + 1
                     if j_count == num_emission_neurons:
                         i_count = i_count + 1
+                    # set diagonal elements = 0 for plotting
+                    if i == j:
+                        temp[i, p * num_neurons + j] = 0.0
             j_count = 0
         i_count = 0
     a_hat_full = temp
@@ -156,9 +161,19 @@ for d in range(num_data_sets):
                     j_count = j_count + 1
                     if j_count == num_emission_neurons:
                         i_count = i_count + 1
+                    # set diagonal elements = 0 for plotting
+                    if i == j:
+                        temp[i, p * num_neurons + j] = 0.0
             j_count = 0
         i_count = 0
     b_hat_full = temp
+
+    # # set diagonal elements = 0 for plotting
+    # np.fill_diagonal(a_hat_full, 0.0)
+    # np.fill_diagonal(b_hat_full, 0.0)
+
+    all_a_hat[:, :, d] = a_hat_full
+    all_b_hat[:, :, d] = b_hat_full
 
     # # fill in nans across first dimension
     # temp_nan = np.zeros((num_emission_neurons, num_neurons))
@@ -177,27 +192,43 @@ for d in range(num_data_sets):
     # b_hat_full[:] = np.nan
     # b_hat_full[has_stims, :] = temp_nan
 
-    # set diagonal elements = 0 for plotting
-    np.fill_diagonal(a_hat_full, 0.0)
-    np.fill_diagonal(b_hat_full, 0.0)
-
     fig, axs = plt.subplots(nrows=1, ncols=1)
     plt.title('dataset %(dataset)i GC for %(lags)i lags: a_hat' % {"dataset": d, "lags": num_lags})
     a_hat_pos = plt.imshow(a_hat_full, aspect='auto', interpolation='nearest')
     plt.colorbar(a_hat_pos)
-    plt.show()
-    str = run_params['fig_path'] + 'ahat%i.png' % d
-    plt.savefig(str)
+    # plt.show()
+    string = run_params['fig_path'] + 'ahat%i.png' % d
+    plt.savefig(string)
 
     fig2, axs2 = plt.subplots(nrows=1, ncols=1)
     plt.title('dataset %(dataset)i GC for %(lags)i lags: b_hat' % {"dataset": d, "lags": num_lags})
     b_hat_pos = plt.imshow(b_hat_full, aspect='auto', interpolation='nearest')
     plt.colorbar(b_hat_pos)
-    plt.show()
-    str = run_params['fig_path'] + 'bhat%i.png' % d
-    plt.savefig(str)
+    # plt.show()
+    string = run_params['fig_path'] + 'bhat%i.png' % d
+    plt.savefig(string)
 
 A_pos = plt.imshow(A, interpolation='nearest')
 plt.colorbar(A_pos)
 plt.show()
 
+# create averaged a_hat and b_hat matrices over all non-NaN values over all datasets
+# save all a_hat and b_hat full mtxes first as 3d array, then nanmean over each element along 3rd axis
+a_hat_avg = np.nanmean(all_a_hat, axis=2)
+b_hat_avg = np.nanmean(all_b_hat, axis=2)
+
+fig3, axs3 = plt.subplots(nrows=1, ncols=1)
+plt.title('averaged a_hat over all datasets')
+avg_a_hat_pos = plt.imshow(a_hat_avg, aspect='auto', interpolation='nearest')
+plt.colorbar(avg_a_hat_pos)
+# plt.show()
+string = run_params['fig_path'] + 'avg_a_hat.png'
+plt.savefig(string)
+
+fig4, axs4 = plt.subplots(nrows=1, ncols=1)
+plt.title('averaged b_hat over all datasets')
+avg_b_hat_pos = plt.imshow(b_hat_avg, aspect='auto', interpolation='nearest')
+plt.colorbar(avg_b_hat_pos)
+# plt.show()
+string = run_params['fig_path'] + 'avg_b_hat.png'
+plt.savefig(string)
