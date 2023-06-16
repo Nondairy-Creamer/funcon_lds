@@ -104,7 +104,7 @@ for d in range(num_data_sets):
     input_mask = torch.eye(non_nan_emissions.shape[1], has_stims.shape[0], dtype=dtype, device=device)
     input_mask = input_mask[:, has_stims]
 
-    input_mask = torch.cat((torch.ones(y_history.shape[0], non_nan_emissions.shape[1]), input_mask.T), dim=0)
+    input_mask = torch.cat((torch.ones(non_nan_emissions.shape[1], non_nan_emissions.shape[1]), input_mask.T), dim=0)
 
 
 
@@ -114,9 +114,11 @@ for d in range(num_data_sets):
 
     ab_hat = np.linalg.lstsq(y_history, y_target, rcond=None)[0]
     # instead do masking from utils to get rid of the 0 entries and get proper fitting
-    # torch_y_history = torch.from_numpy(y_history)
-    # torch_y_target = torch.from_numpy(y_target)
-    # ab_hat = iu.solve_masked(torch_y_history, torch_y_target, input_mask)
+    torch_y_history = torch.from_numpy(y_history)
+    torch_y_target = torch.from_numpy(y_target)
+    ab_hat = iu.solve_masked(torch_y_history, torch_y_target, input_mask)
+
+    ab_hat = ab_hat.detach().numpy()
 
     a_hat = ab_hat[:num_lags * num_emission_neurons, :].T
     b_hat = ab_hat[num_lags * num_input_neurons:, :].T
@@ -174,6 +176,10 @@ for d in range(num_data_sets):
     # b_hat_full = np.zeros((num_neurons, num_neurons))
     # b_hat_full[:] = np.nan
     # b_hat_full[has_stims, :] = temp_nan
+
+    # set diagonal elements = 0 for plotting
+    np.fill_diagonal(a_hat_full, 0.0)
+    np.fill_diagonal(b_hat_full, 0.0)
 
     fig, axs = plt.subplots(nrows=1, ncols=1)
     plt.title('dataset %(dataset)i GC for %(lags)i lags: a_hat' % {"dataset": d, "lags": num_lags})
