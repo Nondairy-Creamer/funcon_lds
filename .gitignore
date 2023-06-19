@@ -207,3 +207,4 @@ pytorch-minimize
 
 *.slurm
 runs
+tmac

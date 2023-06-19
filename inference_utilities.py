@@ -1,7 +1,7 @@
 import torch
 import time
 from mpi4py import MPI
-import os
+from mpi4py.util import pkl5
 import numpy as np
 import loading_utilities as lu
 
@@ -15,6 +15,7 @@ def block(block_list, dims=(2, 1)):
 
 
 def individual_scatter(data, root=0):
+    # comm = pkl5.Intracomm(MPI.COMM_WORLD)
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
 
@@ -33,6 +34,7 @@ def individual_scatter(data, root=0):
 
 
 def individual_gather(data, root=0):
+    # comm = pkl5.Intracomm(MPI.COMM_WORLD)
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
     size = comm.Get_size()
@@ -70,11 +72,14 @@ def solve_masked(A, b, mask):
     return x_hat
 
 
-def fit_em(model, emissions_list, inputs_list, init_mean=None, init_cov=None, num_steps=10, is_parallel=False,
+def fit_em(model, emissions_list, inputs_list, init_mean=None, init_cov=None, num_steps=10,
            save_folder='trained_models', save_every=10):
+    # comm = pkl5.Intracomm(MPI.COMM_WORLD)
     comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+    size = comm.Get_size()
 
-    if emissions_list is not None:
+    if rank == 0:
         emissions, inputs = model.standardize_inputs(emissions_list, inputs_list)
 
         # lag the inputs if the model has lags
@@ -95,35 +100,28 @@ def fit_em(model, emissions_list, inputs_list, init_mean=None, init_cov=None, nu
 
     log_likelihood_out = []
     time_out = []
+    smoothed_means = None
 
     start = time.time()
     for ep in range(num_steps):
-        if is_parallel:
-            model = comm.bcast(model, root=0)
+        model = comm.bcast(model, root=0)
 
-        ll = model.em_step(emissions, inputs, init_mean, init_cov, is_parallel=is_parallel)
+        ll, smoothed_means = model.em_step(emissions, inputs, init_mean, init_cov, cpu_id=rank, num_cpus=size)
 
-        if ll is None:
-            continue
+        if rank == 0:
+            log_likelihood_out.append(ll.detach().cpu().numpy())
+            time_out.append(time.time() - start)
+            model.log_likelihood = log_likelihood_out
+            model.train_time = time_out
 
-        if 'SLURM_JOB_ID' in os.environ:
-            slurm_tag = '_' + os.environ['SLURM_JOB_ID']
-        else:
-            slurm_tag = ''
+            if np.mod(ep, save_every-1) == 0:
+                lu.save_run(save_folder, model, posterior=smoothed_means)
 
-        log_likelihood_out.append(ll.detach().cpu().numpy())
-        time_out.append(time.time() - start)
-        model.log_likelihood = log_likelihood_out
-        model.train_time = time_out
+            if model.verbose:
+                print('Finished step ' + str(ep + 1) + '/' + str(num_steps))
+                print('log likelihood = ' + str(log_likelihood_out[-1]))
+                print('Time elapsed = ' + str(time_out[-1]))
 
-        if np.mod(ep, save_every) == 0:
-            lu.save_run(save_folder, model)
-
-        if model.verbose:
-            print('Finished step ' + str(ep + 1) + '/' + str(num_steps))
-            print('log likelihood = ' + str(log_likelihood_out[-1]))
-            print('Time elapsed = ' + str(time_out[-1]))
-
-    return model
+    return model, smoothed_means
 
 

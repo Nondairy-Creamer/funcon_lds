@@ -4,7 +4,9 @@ import loading_utilities as lu
 import plotting
 from ssm_classes import Lgssm
 from mpi4py import MPI
+from mpi4py.util import pkl5
 import inference_utilities as iu
+
 
 # the goal of this function is to take the pairwise stimulation and response data from
 # https://arxiv.org/abs/2208.04790
@@ -22,6 +24,7 @@ import inference_utilities as iu
 # w_t, v_t are gaussian with 0 mean
 
 # set up the option to parallelize the model fitting over CPUs
+# comm = pkl5.Intracomm(MPI.COMM_WORLD)
 comm = MPI.COMM_WORLD
 size = comm.Get_size()
 rank = comm.Get_rank()
@@ -38,15 +41,14 @@ if rank == 0:
 
     # load in the data for the model and do any preprocessing here
     emissions, inputs, cell_ids = \
-        lu.get_model_data(run_params['data_path'], num_data_sets=run_params['num_data_sets'],
-                          bad_data_sets=run_params['bad_data_sets'],
-                          frac_neuron_coverage=run_params['frac_neuron_coverage'],
-                          minimum_frac_measured=run_params['minimum_frac_measured'],
-                          start_index=run_params['start_index'])
+        lu.load_and_align_data(run_params['data_path'], num_data_sets=run_params['num_data_sets'],
+                               bad_data_sets=run_params['bad_data_sets'],
+                               start_index=run_params['start_index'],
+                               force_preprocess=run_params['force_preprocess'],
+                               correct_photobleach=run_params['correct_photobleach'],
+                               interpolate_nans=run_params['interpolate_nans'])
 
-    # If you are considering multiple lags in the past, lag the inputs
     num_neurons = emissions[0].shape[1]
-
     # create a mask for the dynamics_input_weights. This allows us to fit dynamics weights that are diagonal
     input_mask = torch.eye(num_neurons, dtype=dtype, device=device)
     # get rid of any inputs that never receive stimulation
@@ -67,8 +69,9 @@ if rank == 0:
 
     model_trained.emissions_weights = torch.eye(model_trained.emissions_dim, model_trained.dynamics_dim_full, device=device, dtype=dtype)
     model_trained.emissions_input_weights = torch.zeros((model_trained.emissions_dim, model_trained.input_dim_full), device=device, dtype=dtype)
+    model_trained.cell_ids = cell_ids
 
-    lu.save_run(run_params['model_save_folder'], model_trained,
+    lu.save_run(run_params['model_save_folder'], model_trained, remove_old=True,
                 data={'emissions': emissions, 'inputs': inputs, 'cell_ids': cell_ids}, run_params=run_params)
 
 else:
@@ -79,12 +82,12 @@ else:
     model_trained = None
 
 # fit the model using expectation maximization
-model_trained = iu.fit_em(model_trained, emissions, inputs, num_steps=run_params['num_train_steps'],
-                          is_parallel=is_parallel, save_folder=run_params['model_save_folder'])
+model_trained, smoothed_means = iu.fit_em(model_trained, emissions, inputs, num_steps=run_params['num_train_steps'],
+                                          save_folder=run_params['model_save_folder'])
 
 if rank == 0:
-    lu.save_run(run_params['model_save_folder'], model_trained)
+    lu.save_run(run_params['model_save_folder'], model_trained, posterior=smoothed_means)
 
-    if run_params['plot_figures']:
+    if not is_parallel and run_params['plot_figures']:
         plotting.plot_model_params(model_trained)
 

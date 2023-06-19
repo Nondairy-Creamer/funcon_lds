@@ -115,6 +115,34 @@ Model
 \end_layout
 
 \begin_layout Standard
+\begin_inset Formula $x_{t}=Ax_{t-1}+Bu_{t}+w_{t}$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $y_{t}=x_{t}+v_{t}$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $w_{t}\sim𝒩(0,\Sigma_{w})$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $v_{t}\sim𝒩(0,\Sigma_{v})$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
 Constraints
 \end_layout
 
@@ -183,7 +211,6 @@ I & 0
 \begin_layout Standard
 \begin_inset Formula $\hat{B}=\left[\begin{array}{ccc}
 B_{1} & B_{2} & B_{3}\\
-0 & 0 & 0\\
 0 & 0 & 0
 \end{array}\right]$
 \end_inset
@@ -203,6 +230,13 @@ u_{t-2}
 \end_layout
 
 \begin_layout Standard
+\begin_inset Formula $\hat{x}_{t}=\hat{A}\hat{x}_{t-1}+\hat{B}\hat{u}_{t}$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
 \begin_inset Formula $\left[\begin{array}{c}
 x_{t}\\
 x_{t-1}
@@ -214,13 +248,19 @@ x_{t-1}\\
 x_{t-2}
 \end{array}\right]+\left[\begin{array}{ccc}
 B_{1} & B_{2} & B_{3}\\
-0 & 0 & 0\\
 0 & 0 & 0
 \end{array}\right]\left[\begin{array}{c}
 u_{t}\\
 u_{t-1}\\
 u_{t-2}
 \end{array}\right]$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $P(x_{t}|y_{1:T})$
 \end_inset
 
 

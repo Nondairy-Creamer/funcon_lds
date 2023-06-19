@@ -4,11 +4,12 @@ import loading_utilities as lu
 import numpy as np
 import time
 from mpi4py import MPI
+from mpi4py.util import pkl5
 import inference_utilities as iu
 import plotting
 
 
-comm = MPI.COMM_WORLD
+comm = pkl5.Intracomm(MPI.COMM_WORLD)
 size = comm.Get_size()
 rank = comm.Get_rank()
 
@@ -61,7 +62,7 @@ if rank == 0:
     model_trained.set_to_init()
 
     lu.save_run(run_params['model_save_folder'], model_trained, model_true=model_true,
-                data={'emissions': emissions, 'inputs': inputs, 'cell_ids': None}, run_params=run_params,
+                data={'emissions': emissions, 'inputs': inputs, 'cell_ids': model_true.cell_ids}, run_params=run_params,
                 remove_old=True)
 else:
     emissions = None
@@ -69,12 +70,10 @@ else:
     model_trained = None
     model_true = None
 
-model_trained = iu.fit_em(model_trained, emissions, inputs, num_steps=run_params['num_train_steps'],
-                          is_parallel=is_parallel, save_folder=run_params['model_save_folder'])
+model_trained, smoothed_means = iu.fit_em(model_trained, emissions, inputs, num_steps=run_params['num_train_steps'],
+                                          save_folder=run_params['model_save_folder'])
 
 if rank == 0:
-    lu.save_run(run_params['model_save_folder'], model_trained)
-
-    if run_params['plot_figures']:
+    if not is_parallel and run_params['plot_figures']:
         plotting.plot_model_params(model_trained, model_true=model_true)
 
