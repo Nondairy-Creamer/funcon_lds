@@ -324,9 +324,9 @@ class Lgssm:
 
         return data_dict
 
-    from memory_profiler import profile
-
-    @profile
+    # from memory_profiler import profile
+    #
+    # @profile
     def lgssm_filter(self, emissions, inputs, init_mean, init_cov):
         """Run a Kalman filter to produce the marginal likelihood and filtered state estimates.
         adapted from Dynamax.
