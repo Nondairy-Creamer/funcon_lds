@@ -427,7 +427,7 @@ class Lgssm:
 
         return ll, filtered_means_list, filtered_covs_list, converge_t
 
-    @profile
+    # @profile
     def lgssm_smoother(self, emissions, inputs, init_mean, init_cov):
         if inputs.shape[1] < self.input_dim_full:
             inputs = self.get_lagged_data(inputs, self.dynamics_input_lags)
