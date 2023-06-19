@@ -324,6 +324,9 @@ class Lgssm:
 
         return data_dict
 
+    from memory_profiler import profile
+
+    @profile
     def lgssm_filter(self, emissions, inputs, init_mean, init_cov):
         """Run a Kalman filter to produce the marginal likelihood and filtered state estimates.
         adapted from Dynamax.
@@ -419,11 +422,12 @@ class Lgssm:
 
             filtered_means_list.append(filtered_mean)
 
-        filtered_means = torch.stack(filtered_means_list)
-        filtered_covs = torch.stack(filtered_covs_list)
+        filtered_means_list = torch.stack(filtered_means_list)
+        filtered_covs_list = torch.stack(filtered_covs_list)
 
-        return ll, filtered_means, filtered_covs, converge_t
+        return ll, filtered_means_list, filtered_covs_list, converge_t
 
+    @profile
     def lgssm_smoother(self, emissions, inputs, init_mean, init_cov):
         if inputs.shape[1] < self.input_dim_full:
             inputs = self.get_lagged_data(inputs, self.dynamics_input_lags)

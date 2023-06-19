@@ -7,6 +7,7 @@ from mpi4py import MPI
 from mpi4py.util import pkl5
 import inference_utilities as iu
 
+
 # the goal of this function is to take the pairwise stimulation and response data from
 # https://arxiv.org/abs/2208.04790
 # this data is a collection of calcium recordings of ~200 neurons over ~5-15 minutes where individual neurons are
@@ -23,7 +24,8 @@ import inference_utilities as iu
 # w_t, v_t are gaussian with 0 mean
 
 # set up the option to parallelize the model fitting over CPUs
-comm = pkl5.Intracomm(MPI.COMM_WORLD)
+# comm = pkl5.Intracomm(MPI.COMM_WORLD)
+comm = MPI.COMM_WORLD
 size = comm.Get_size()
 rank = comm.Get_rank()
 is_parallel = size > 1

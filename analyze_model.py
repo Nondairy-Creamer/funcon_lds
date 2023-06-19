@@ -7,7 +7,8 @@ from pathlib import Path
 
 # load in the model and training data
 # model_folder = Path('/home/mcreamer/Documents/data_sets/fun_con_models/48203609_DL5_IL60/')
-model_folder = Path('/home/mcreamer/Documents/data_sets/fun_con_models/48196084_DL3_IL45/')
+model_folder = Path('/home/mcreamer/Documents/data_sets/fun_con_models/48/196084_DL3_IL45/')
+model_folder = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/local_DL1_IL1/')
 cell_ids_chosen = ['AVAL', 'AVAR', 'AVEL', 'AVER', 'AFDL', 'AFDR', 'AVJL', 'AVJR', 'AVDL', 'AVDR']
 # cell_ids_chosen = ['AVAL', 'AVAR', 'ADAL', 'ADAR', 'AFDL', 'AFDR', 'AVJL', 'AVJR', 'ADLL', 'ADLR']
 # cell_ids_chosen = ['AVDR', 'AVER', 'AVJR', 'RMDL', 'SAADL']
