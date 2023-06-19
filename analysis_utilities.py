@@ -56,7 +56,7 @@ def plot_model_params(model, cell_ids, cell_ids_chosen=None):
             A[aa] = A[aa][neuron_inds_chosen, :]
             A[aa] = A[aa][:, neuron_inds_chosen]
 
-    plot_x = A[0].shape[0]
+    plot_x = np.arange(A[0].shape[0])
 
     # get rid of the diagonal
     for aa in range(len(A)):

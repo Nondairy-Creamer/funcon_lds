@@ -7,8 +7,8 @@ from pathlib import Path
 
 # load in the model and training data
 # model_folder = Path('/home/mcreamer/Documents/data_sets/fun_con_models/48203609_DL5_IL60/')
-model_folder = Path('/home/mcreamer/Documents/data_sets/fun_con_models/48/196084_DL3_IL45/')
-model_folder = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/local_DL1_IL1/')
+model_folder = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/48196084_DL3_IL45/')
+# model_folder = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/local_DL1_IL1/')
 cell_ids_chosen = ['AVAL', 'AVAR', 'AVEL', 'AVER', 'AFDL', 'AFDR', 'AVJL', 'AVJR', 'AVDL', 'AVDR']
 # cell_ids_chosen = ['AVAL', 'AVAR', 'ADAL', 'ADAR', 'AFDL', 'AFDR', 'AVJL', 'AVJR', 'ADLL', 'ADLR']
 # cell_ids_chosen = ['AVDR', 'AVER', 'AVJR', 'RMDL', 'SAADL']
@@ -98,12 +98,12 @@ inputs_chosen = inputs_full[data_ind_chosen][time_window[0]:time_window[1], neur
 posterior_chosen = posterior[data_ind_chosen][time_window[0]:time_window[1], neuron_inds_chosen]
 prior_chosen = prior_w_noise[data_ind_chosen][time_window[0]:time_window[1], neuron_inds_chosen]
 
-# au.plot_log_likelihood(model)
-# au.plot_model_params(model, cell_ids, cell_ids_chosen=cell_ids_chosen)
-# au.plot_dynamics_eigs(model)
+au.plot_log_likelihood(model)
+au.plot_model_params(model, cell_ids, cell_ids_chosen=cell_ids_chosen)
+au.plot_dynamics_eigs(model)
 au.plot_posterior(emissions_chosen, inputs_chosen, posterior_chosen, prior_chosen, cell_ids_chosen)
-# au.plot_missing_neuron(model, emissions[data_ind_chosen], inputs[data_ind_chosen], posterior[data_ind_chosen], cell_ids, neuron_to_remove, time_window)
-# au.plot_stim_l2_norm(model, emissions, inputs_full, posterior, prior, cell_ids, cell_ids_chosen, window=(0, 120))
-# au.plot_stim_response(emissions, inputs_full, posterior, prior, cell_ids, cell_ids_chosen, neuron_to_stim, window=(-60, 120))
+au.plot_missing_neuron(model, emissions[data_ind_chosen], inputs[data_ind_chosen], posterior[data_ind_chosen], cell_ids, neuron_to_remove, time_window)
+au.plot_stim_l2_norm(model, emissions, inputs_full, posterior, prior, cell_ids, cell_ids_chosen, window=(0, 120))
+au.plot_stim_response(emissions, inputs_full, posterior, prior, cell_ids, cell_ids_chosen, neuron_to_stim, window=(-60, 120))
 
 

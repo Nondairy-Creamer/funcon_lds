@@ -156,6 +156,11 @@ def load_and_preprocess_data(fun_atlas_path, num_data_sets=None, force_preproces
             this_emissions, this_inputs = preprocess_data(this_emissions, this_inputs, start_index=start_index,
                                                           correct_photobleach=correct_photobleach)
 
+            if interpolate_nans:
+                full_nan_loc = np.all(np.isnan(this_emissions), axis=0)
+                interp_emissions = tp.interpolate_over_nans(this_emissions[:, ~full_nan_loc])[0]
+                this_emissions[:, ~full_nan_loc] = interp_emissions
+
             preprocessed_file = open(preprocess_path, 'wb')
             pickle.dump({'emissions': this_emissions, 'inputs': this_inputs, 'cell_ids': this_cell_ids}, preprocessed_file)
             preprocessed_file.close()
