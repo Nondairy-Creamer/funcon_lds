@@ -2,23 +2,28 @@ import numpy as np
 import torch
 import loading_utilities as lu
 from matplotlib import pyplot as plt
+import matplotlib as mpl
 from ssm_classes import Lgssm
 from mpi4py import MPI
 import inference_utilities as iu
+
+colormap = mpl.colormaps['coolwarm']
 
 run_params = lu.get_run_params(param_name='params')
 device = run_params["device"]
 dtype = getattr(torch, run_params["dtype"])
 
+# load in the data for the model and do any preprocessing here
 emissions, inputs, cell_ids = \
-        lu.get_model_data(run_params['data_path'],
-                          bad_data_sets=run_params['bad_data_sets'],
-                          frac_neuron_coverage=run_params['frac_neuron_coverage'],
-                          minimum_frac_measured=run_params['minimum_frac_measured'],
-                          start_index=run_params['start_index'])
+    lu.load_and_align_data(run_params['data_path'],
+                           bad_data_sets=run_params['bad_data_sets'],
+                           start_index=run_params['start_index'],
+                           force_preprocess=run_params['force_preprocess'],
+                           correct_photobleach=run_params['correct_photobleach'],
+                           interpolate_nans=run_params['interpolate_nans'])
 
-# If you are considering multiple lags in the past, lag the inputs
 num_neurons = emissions[0].shape[1]
+num_data_sets = len(emissions)
 
 # get the input dimension after removing the neurons that were never stimulated
 input_dim = inputs[0].shape[1]
@@ -32,8 +37,6 @@ model_true = Lgssm(num_neurons, num_neurons, input_dim,
 
 model_true.emissions_weights = torch.eye(model_true.emissions_dim, model_true.dynamics_dim_full, device=device, dtype=dtype)
 model_true.emissions_input_weights = torch.zeros((model_true.emissions_dim, model_true.input_dim_full), device=device, dtype=dtype)
-
-num_data_sets = len(emissions)
 
 # randomize the parameters (defaults are nonrandom)
 model_true.randomize_weights()
@@ -156,10 +159,10 @@ for d in range(num_data_sets):
     for p in range(num_lags):
         for i in range(num_neurons):
             for j in range(num_neurons):
-                if has_stims[i] and has_stims[j] and i_count < num_emission_neurons:
+                if has_stims[i] and has_stims[j] and i_count < num_input_neurons:
                     temp[i, p * num_neurons + j] = b_hat[i_count, p * num_input_neurons + j_count]
                     j_count = j_count + 1
-                    if j_count == num_emission_neurons:
+                    if j_count == num_input_neurons:
                         i_count = i_count + 1
                     # set diagonal elements = 0 for plotting
                     if i == j:
@@ -194,7 +197,9 @@ for d in range(num_data_sets):
 
     fig, axs = plt.subplots(nrows=1, ncols=1)
     plt.title('dataset %(dataset)i GC for %(lags)i lags: a_hat' % {"dataset": d, "lags": num_lags})
-    a_hat_pos = plt.imshow(a_hat_full, aspect='auto', interpolation='nearest')
+    a_hat_pos = plt.imshow(a_hat_full, aspect='auto', interpolation='nearest', cmap=colormap)
+    color_limits = np.nanmax(np.abs(a_hat_full))
+    plt.clim((-color_limits, color_limits))
     plt.colorbar(a_hat_pos)
     # plt.show()
     string = run_params['fig_path'] + 'ahat%i.png' % d
@@ -202,13 +207,18 @@ for d in range(num_data_sets):
 
     fig2, axs2 = plt.subplots(nrows=1, ncols=1)
     plt.title('dataset %(dataset)i GC for %(lags)i lags: b_hat' % {"dataset": d, "lags": num_lags})
-    b_hat_pos = plt.imshow(b_hat_full, aspect='auto', interpolation='nearest')
-    plt.colorbar(b_hat_pos)
+    b_hat_pos = plt.imshow(b_hat_full, aspect='auto', interpolation='nearest', cmap=colormap)
+    color_limits = np.nanmax(np.abs(b_hat_full))
+    print("max bhat " + color_limits)
+    plt.clim((-color_limits, color_limits))
+    plt.colorbar(b_ha t_pos)
     # plt.show()
     string = run_params['fig_path'] + 'bhat%i.png' % d
     plt.savefig(string)
 
-A_pos = plt.imshow(A, interpolation='nearest')
+color_limits = np.nanmax(np.abs(A))
+A_pos = plt.imshow(A, interpolation='nearest', cmap=colormap)
+plt.clim((-color_limits, color_limits))
 plt.colorbar(A_pos)
 plt.show()
 
@@ -219,7 +229,9 @@ b_hat_avg = np.nanmean(all_b_hat, axis=2)
 
 fig3, axs3 = plt.subplots(nrows=1, ncols=1)
 plt.title('averaged a_hat over all datasets')
-avg_a_hat_pos = plt.imshow(a_hat_avg, aspect='auto', interpolation='nearest')
+avg_a_hat_pos = plt.imshow(a_hat_avg, aspect='auto', interpolation='nearest', cmap=colormap)
+color_limits = np.nanmax(np.abs(a_hat_avg))
+plt.clim((-color_limits, color_limits))
 plt.colorbar(avg_a_hat_pos)
 # plt.show()
 string = run_params['fig_path'] + 'avg_a_hat.png'
@@ -227,7 +239,9 @@ plt.savefig(string)
 
 fig4, axs4 = plt.subplots(nrows=1, ncols=1)
 plt.title('averaged b_hat over all datasets')
-avg_b_hat_pos = plt.imshow(b_hat_avg, aspect='auto', interpolation='nearest')
+avg_b_hat_pos = plt.imshow(b_hat_avg, aspect='auto', interpolation='nearest', cmap=colormap)
+color_limits = np.nanmax(np.abs(b_hat_avg))
+plt.clim((-color_limits, color_limits))
 plt.colorbar(avg_b_hat_pos)
 # plt.show()
 string = run_params['fig_path'] + 'avg_b_hat.png'
