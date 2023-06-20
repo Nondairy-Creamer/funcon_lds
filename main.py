@@ -47,20 +47,6 @@ if rank == 0:
                                correct_photobleach=run_params['correct_photobleach'],
                                interpolate_nans=run_params['interpolate_nans'])
 
-    from matplotlib import pyplot as plt
-    import matplotlib as mpl
-    colormap = mpl.colormaps['coolwarm']
-
-    for e in emissions:
-        c_limit = np.nanmax(np.abs(e))
-
-        plt.figure()
-        plt.imshow(e.T, aspect='auto', interpolation='nearest', cmap=colormap)
-        plt.clim((-c_limit), c_limit)
-        plt.colorbar()
-        plt.show()
-        a=1
-
     num_neurons = emissions[0].shape[1]
     # create a mask for the dynamics_input_weights. This allows us to fit dynamics weights that are diagonal
     input_mask = torch.eye(num_neurons, dtype=dtype, device=device)
