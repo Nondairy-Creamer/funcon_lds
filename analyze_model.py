@@ -7,8 +7,8 @@ from pathlib import Path
 
 # load in the model and training data
 # model_folder = Path('/home/mcreamer/Documents/data_sets/fun_con_models/48203609_DL5_IL60/')
-model_folder = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/48196084_DL3_IL45/')
-# model_folder = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/local_DL1_IL1/')
+# model_folder = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/48196084_DL3_IL45/')
+model_folder = Path('C:/Users/mcreamer/Documents/python/funcon_lds/trained_models/48196084_DL3_IL45')
 cell_ids_chosen = ['AVAL', 'AVAR', 'AVEL', 'AVER', 'AFDL', 'AFDR', 'AVJL', 'AVJR', 'AVDL', 'AVDR']
 # cell_ids_chosen = ['AVAL', 'AVAR', 'ADAL', 'ADAR', 'AFDL', 'AFDR', 'AVJL', 'AVJR', 'ADLL', 'ADLR']
 # cell_ids_chosen = ['AVDR', 'AVER', 'AVJR', 'RMDL', 'SAADL']
@@ -45,21 +45,26 @@ if prior_path.exists():
     prior = pickle.load(prior_file)
     prior_file.close()
 
+else:
+    print('Prior has not been sampled yet, this will take several minutes')
+    print('Output will be saved and will not need to be generated again')
+    prior = model.sample([i.shape[0] for i in emissions], num_data_sets=len(inputs),
+                         inputs_list=inputs, add_noise=False)['emissions']
+
+    prior_file = open(prior_path, 'wb')
+    pickle.dump(prior, prior_file)
+    prior_file.close()
+
+if prior_w_noise_path.exists():
     prior_w_noise_file = open(prior_w_noise_path, 'rb')
     prior_w_noise = pickle.load(prior_w_noise_file)
     prior_w_noise_file.close()
 
 else:
-    print('Prior has not been sampled yet, this will take some time')
+    print('Prior with noise has not been sampled yet, this will take several minutes')
     print('Output will be saved and will not need to be generated again')
-    prior = model.sample([i.shape[0] for i in emissions], num_data_sets=len(inputs),
-                         inputs_list=inputs, add_noise=False)['emissions']
     prior_w_noise = model.sample([i.shape[0] for i in emissions], num_data_sets=len(inputs),
                                  inputs_list=inputs, add_noise=True)['emissions']
-
-    prior_file = open(prior_path, 'wb')
-    pickle.dump(prior, prior_file)
-    prior_file.close()
 
     prior_w_noise_file = open(prior_w_noise_path, 'wb')
     pickle.dump(prior_w_noise, prior_w_noise_file)
