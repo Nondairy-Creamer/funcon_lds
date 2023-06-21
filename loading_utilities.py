@@ -181,7 +181,7 @@ def load_and_preprocess_data(fun_atlas_path, num_data_sets=None, force_preproces
         num_loaded_data += 1
 
         if num_data_sets is not None:
-            if i_ind >= num_data_sets:
+            if num_loaded_data >= num_data_sets:
                 break
 
     print('Size of data set:', len(emissions))
