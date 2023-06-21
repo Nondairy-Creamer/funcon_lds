@@ -123,9 +123,10 @@ def load_and_preprocess_data(fun_atlas_path, num_data_sets=None, force_preproces
     emissions = []
     inputs = []
     cell_ids = []
+    num_loaded_data = 0
 
     # find all files in the folder that have francesco_green.npy
-    for i_ind, i in enumerate(fun_atlas_path.rglob('francesco_green.npy')):
+    for i in fun_atlas_path.rglob('francesco_green.npy'):
         # skip any data that is being held out
         if i.parts[-2] in held_out_data:
             continue
@@ -177,9 +178,13 @@ def load_and_preprocess_data(fun_atlas_path, num_data_sets=None, force_preproces
         inputs.append(this_inputs)
         cell_ids.append(this_cell_ids)
 
+        num_loaded_data += 1
+
         if num_data_sets is not None:
-            if i_ind >= num_data_sets - 1:
+            if i_ind >= num_data_sets:
                 break
+
+    print('Size of data set:', len(emissions))
 
     return emissions, inputs, cell_ids
 
