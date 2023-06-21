@@ -9,7 +9,20 @@ start_index: 25
 num_data_sets: 10
 force_preprocess: False
 interpolate_nans: True
+correct_photobleach: True
 
+held_out_data: ['pumpprobe_20210825_150349',
+                'pumpprobe_20210827_115857',
+                'pumpprobe_20211206_165435',
+                'pumpprobe_20220124_163157',
+                'pumpprobe_20220331_114306',
+                'pumpprobe_20220405_110704',
+                'pumpprobe_20220929_151408',
+                'pumpprobe_20230222_165630',
+                'pumpprobe_20230304_112842',
+                'pumpprobe_20230317_174524',
+                ]
+                
 param_props:
   update:
     dynamics_weights: True

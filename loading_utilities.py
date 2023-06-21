@@ -94,12 +94,13 @@ def preprocess_data(emissions, inputs, start_index=0, correct_photobleach=False)
 
 
 def load_and_align_data(data_path, force_preprocess=False, num_data_sets=None, bad_data_sets=(), start_index=0,
-                        correct_photobleach=False, interpolate_nans=False):
+                        correct_photobleach=False, interpolate_nans=False, held_out_data=[]):
     # load all the recordings of neural activity
     emissions_unaligned, inputs_unaligned, cell_ids_unaligned = \
         load_and_preprocess_data(data_path, num_data_sets=num_data_sets,
                                  force_preprocess=force_preprocess, start_index=start_index,
-                                 correct_photobleach=correct_photobleach, interpolate_nans=interpolate_nans)
+                                 correct_photobleach=correct_photobleach, interpolate_nans=interpolate_nans,
+                                 held_out_data=held_out_data)
 
     # remove recordings that are noisy
     data_sets_to_remove = np.sort(bad_data_sets)[::-1]
@@ -115,7 +116,7 @@ def load_and_align_data(data_path, force_preprocess=False, num_data_sets=None, b
 
 
 def load_and_preprocess_data(fun_atlas_path, num_data_sets=None, force_preprocess=False, start_index=0,
-                             correct_photobleach=False, interpolate_nans=True):
+                             correct_photobleach=False, interpolate_nans=True, held_out_data=[]):
     fun_atlas_path = Path(fun_atlas_path)
 
     preprocess_filename = 'funcon_preprocessed_data.pkl'
@@ -125,6 +126,10 @@ def load_and_preprocess_data(fun_atlas_path, num_data_sets=None, force_preproces
 
     # find all files in the folder that have francesco_green.npy
     for i_ind, i in enumerate(fun_atlas_path.rglob('francesco_green.npy')):
+        # skip any data that is being held out
+        if i.parts[-2] in held_out_data:
+            continue
+
         # check if a processed version exists
         preprocess_path = i.parent / preprocess_filename
 
