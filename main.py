@@ -24,8 +24,7 @@ import inference_utilities as iu
 # w_t, v_t are gaussian with 0 mean
 
 # set up the option to parallelize the model fitting over CPUs
-# comm = pkl5.Intracomm(MPI.COMM_WORLD)
-comm = MPI.COMM_WORLD
+comm = pkl5.Intracomm(MPI.COMM_WORLD)
 size = comm.Get_size()
 rank = comm.Get_rank()
 is_parallel = size > 1
@@ -46,7 +45,8 @@ if rank == 0:
                                start_index=run_params['start_index'],
                                force_preprocess=run_params['force_preprocess'],
                                correct_photobleach=run_params['correct_photobleach'],
-                               interpolate_nans=run_params['interpolate_nans'])
+                               interpolate_nans=run_params['interpolate_nans'],
+                               held_out_data=run_params['held_out_data'])
 
     num_neurons = emissions[0].shape[1]
     # create a mask for the dynamics_input_weights. This allows us to fit dynamics weights that are diagonal
