@@ -82,11 +82,14 @@ else:
     model_trained = None
 
 # fit the model using expectation maximization
-model_trained, smoothed_means = iu.fit_em(model_trained, emissions, inputs, num_steps=run_params['num_train_steps'],
-                                          save_folder=run_params['model_save_folder'])
+model_trained, smoothed_means, init_mean, init_cov = \
+    iu.fit_em(model_trained, emissions, inputs, num_steps=run_params['num_train_steps'],
+              save_folder=run_params['model_save_folder'])
 
 if rank == 0:
-    lu.save_run(run_params['model_save_folder'], model_trained, posterior=smoothed_means)
+    initial_coniditons = {'init_mean': init_mean, 'init_cov': init_cov}
+    lu.save_run(run_params['model_save_folder'], model_trained, posterior=smoothed_means,
+                initial_conditions=initial_coniditons)
 
     if not is_parallel and run_params['plot_figures']:
         plotting.plot_model_params(model_trained)
