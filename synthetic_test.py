@@ -54,7 +54,8 @@ if rank == 0:
     # make a new model to fit to the random model
     model_trained = Lgssm(run_params['dynamics_dim'], run_params['emissions_dim'], run_params['input_dim'],
                           dtype=dtype, device=device, verbose=run_params['verbose'], param_props=run_params['param_props'],
-                          dynamics_lags=run_params['dynamics_lags'], dynamics_input_lags=run_params['dynamics_input_lags'])
+                          dynamics_lags=run_params['dynamics_lags'], dynamics_input_lags=run_params['dynamics_input_lags'],
+                          ridge_lambda=run_params['ridge_lambda'])
     for k in model_trained.param_props['update'].keys():
         if not model_trained.param_props['update'][k]:
             init_key = k + '_init'
@@ -70,10 +71,15 @@ else:
     model_trained = None
     model_true = None
 
-model_trained, smoothed_means = iu.fit_em(model_trained, emissions, inputs, num_steps=run_params['num_train_steps'],
-                                          save_folder=run_params['model_save_folder'])
+model_trained, smoothed_means, init_mean, init_cov = \
+    iu.fit_em(model_trained, emissions, inputs, num_steps=run_params['num_train_steps'],
+              save_folder=run_params['model_save_folder'])
 
 if rank == 0:
+    initial_coniditons = {'init_mean': init_mean, 'init_cov': init_cov}
+    lu.save_run(run_params['model_save_folder'], model_trained, posterior=smoothed_means,
+                initial_conditions=initial_coniditons)
+
     if not is_parallel and run_params['plot_figures']:
         plotting.plot_model_params(model_trained, model_true=model_true)
 

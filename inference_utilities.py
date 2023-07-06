@@ -52,18 +52,24 @@ def individual_gather(data, root=0):
     return item
 
 
-def solve_masked(A, b, mask):
+def solve_masked(A, b, mask=None, ridge_penalty=None):
     # solves the linear equation b=Ax where x has 0's where mask == 0
-
     dtype = A.dtype
     device = A.device
     x_hat = torch.zeros((A.shape[1], b.shape[1]), device=device, dtype=dtype)
+
+    if mask is None:
+        mask = torch.ones_like(x_hat)
 
     for i in range(b.shape[1]):
         non_zero_loc = mask[:, i] != 0
 
         b_i = b[:, i]
-        A_nonzero = A[:, non_zero_loc]
+
+        if ridge_penalty is None:
+            A_nonzero = A[:, non_zero_loc]
+        else:
+            A_nonzero = A[:, non_zero_loc] + ridge_penalty[i, :, non_zero_loc]
 
         x_hat[non_zero_loc, i] = torch.linalg.lstsq(A_nonzero, b_i, rcond=None)[0]
 
@@ -94,6 +100,8 @@ def fit_em(model, emissions_list, inputs_list, init_mean=None, init_cov=None, nu
     else:
         emissions = None
         inputs = None
+        init_mean = None
+        init_cov = None
 
     log_likelihood_out = []
     time_out = []
@@ -103,22 +111,32 @@ def fit_em(model, emissions_list, inputs_list, init_mean=None, init_cov=None, nu
     for ep in range(num_steps):
         model = comm.bcast(model, root=0)
 
-        ll, smoothed_means = model.em_step(emissions, inputs, init_mean, init_cov, cpu_id=rank, num_cpus=size)
+        ll, smoothed_means, smoothed_covs = \
+            model.em_step(emissions, inputs, init_mean, init_cov, cpu_id=rank, num_cpus=size)
 
         if rank == 0:
+            # set the initial mean and cov to the first smoothed mean / cov
+            for i in range(len(smoothed_means)):
+                init_mean[i] = smoothed_means[i][0, :]
+                if type(smoothed_covs[i]) is tuple:
+                    init_cov[i] = smoothed_covs[i][0][0, :, :]
+                else:
+                    init_cov[i] = smoothed_covs[i][0, :, :]
+
             log_likelihood_out.append(ll.detach().cpu().numpy())
             time_out.append(time.time() - start)
             model.log_likelihood = log_likelihood_out
             model.train_time = time_out
 
             if np.mod(ep, save_every-1) == 0:
-                lu.save_run(save_folder, model, posterior=smoothed_means)
+                initial_conditions = {'init_mean': init_mean, 'init_cov': init_cov}
+                lu.save_run(save_folder, model, posterior=smoothed_means, initial_conditions=initial_conditions)
 
             if model.verbose:
                 print('Finished step ' + str(ep + 1) + '/' + str(num_steps))
                 print('log likelihood = ' + str(log_likelihood_out[-1]))
                 print('Time elapsed = ' + str(time_out[-1]))
 
-    return model, smoothed_means
+    return model, smoothed_means, init_mean, init_cov
 
 
