@@ -805,7 +805,8 @@ class Lgssm:
             self.lgssm_smoother(emissions, inputs, init_mean, init_cov)
 
         # y = torch.where(torch.isnan(emissions), 0, emissions)
-        y = torch.where(torch.isnan(emissions), (self.emissions_weights @ smoothed_means.T).T, emissions)
+        y_nan_loc = torch.isnan(emissions)
+        y = torch.where(y_nan_loc, (self.emissions_weights @ smoothed_means.T).T, emissions)
 
         # =============== Update dynamics parameters ==============
         # Compute sufficient statistics for latents
@@ -834,9 +835,38 @@ class Lgssm:
         Mz_emis = last_cov + smoothed_means[-1, :, None] * smoothed_means[-1, None, :]  # re-use Mz1 if possible
         Mu_emis = inputs[0, :, None] * inputs[0, None, :]  # reuse Mu
         Muz_emis = inputs[0, :, None] * smoothed_means[0, None, :]  # reuse Muz
-        Mzy = smoothed_means.T @ y  # E[zz@yy']
         Muy = inputs.T @ y  # E[uu@yy']
-        My = y.T @ y  # compute suff stat E[yy@yy']
+
+        Mzy = torch.zeros((smoothed_means.shape[1], y.shape[1]), device=self.device, dtype=self.dtype)
+        My = torch.zeros((y.shape[1], y.shape[1]), device=self.device, dtype=self.dtype)
+
+        num_time = y.shape[0]
+        for t in range(num_time):
+            y_nan_loc_t = y_nan_loc[t, :]
+            c_nan = self.emissions_weights[y_nan_loc_t, :]
+            r_nan = self.emissions_cov[y_nan_loc_t, :][:, y_nan_loc_t]
+
+            if type(smoothed_covs) is tuple:
+                # smoothed covs are only stored til they converge so we have covs for the beginning and end of the data
+                beginning_size = smoothed_covs[0].shape[0]
+                end_size = smoothed_covs[1].shape[0]
+                if t < beginning_size:
+                    this_cov = smoothed_covs[0][t, :, :]
+                elif num_time - t <= end_size:
+                    ti = end_size - (num_time - t)
+                    this_cov = smoothed_covs[1][ti, :, :]
+                else:
+                    this_cov = smoothed_covs[0][-1, :, :]
+            else:
+                this_cov = smoothed_covs[t, :, :]
+
+            My_cov = torch.zeros((y.shape[1], y.shape[1]), device=self.device, dtype=self.dtype)
+            My_cov[np.ix_(y_nan_loc_t, y_nan_loc_t)] = c_nan @ this_cov @ c_nan.T + r_nan
+            My += y[t, :, None] * y[t, :, None].T + My_cov
+
+            Mzy_cov = torch.zeros((smoothed_means.shape[1], y.shape[1]), device=self.device, dtype=self.dtype)
+            Mzy_cov[:, y_nan_loc_t] = this_cov @ c_nan.T
+            Mzy += smoothed_means[t, :, None] * y[t, :, None].T + Mzy_cov
 
         Mz = Mz1 + Mz_emis
         Mu2 = Mu1 + Mu_emis
