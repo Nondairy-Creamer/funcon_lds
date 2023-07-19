@@ -61,10 +61,10 @@ def plot_params(param_init, param_trained, param_true, title=''):
 
     if param_true is not None:
         n_row = 2
-        abs_max = np.max([np.max(np.abs(i)) for i in [param_init, param_trained, param_true, param_true - param_trained]])
+        abs_max = np.max([np.max(np.abs(i)) for i in [param_trained, param_true, param_true - param_trained]])
     else:
         n_row = 1
-        abs_max = np.max([np.max(np.abs(i)) for i in [param_init, param_trained]])
+        abs_max = np.max([np.max(np.abs(i)) for i in [param_trained]])
 
     plt.figure()
     plt.subplot(n_row, 2, 1)
@@ -72,7 +72,8 @@ def plot_params(param_init, param_trained, param_true, title=''):
     plt.title('init weights, ' + title)
     plt.xlabel('input neurons')
     plt.ylabel('output neurons')
-    plt.clim((-abs_max, abs_max))
+    init_abs_max = np.max(np.abs(param_init))
+    plt.clim((-init_abs_max, init_abs_max))
     plt.colorbar()
 
     plt.subplot(n_row, 2, 2)

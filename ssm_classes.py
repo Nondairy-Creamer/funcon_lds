@@ -121,6 +121,9 @@ class Lgssm:
         self.dynamics_weights_init = np.real(eig_vects @ np.transpose(np.linalg.solve(np.transpose(eig_vects, (0, 2, 1)), eig_vals_mat), (0, 2, 1)))
         self.dynamics_weights_init = self.dynamics_weights_init * dynamics_time_decay[:, None, None]
 
+        # TODO: this is for testing, remove
+        self.dynamics_weights_init = self.dynamics_weights_init / np.max(np.abs(self.dynamics_weights_init)) * 0.1
+
         dynamics_input_tau = self.dynamics_input_lags / 3
         dynamics_input_const = (np.exp(3) - 1) * np.exp(1 / dynamics_input_tau - 3) / (np.exp(1 / dynamics_input_tau) - 1)
         dynamics_input_time_decay = np.exp(-np.arange(self.dynamics_input_lags) / dynamics_input_tau) / dynamics_input_const
@@ -384,18 +387,17 @@ class Lgssm:
 
             filtered_mean = pred_mean + K @ mean_diff
             filtered_means_list.append(filtered_mean)
+            filtered_covs_list.append(filtered_cov)
 
             # check if covariance has converged
             if check_convergence and t > 0:
-                max_abs_diff_cov = torch.max(torch.abs(filtered_cov - filtered_covs_list[-1]))
+                max_abs_diff_cov = torch.max(torch.abs(filtered_cov - filtered_covs_list[-2]))
                 if max_abs_diff_cov < 1 / self.epsilon:
-                    converge_t = t - 1
+                    converge_t = t
                     break
 
-            filtered_covs_list.append(filtered_cov)
-
         # once the covariances converge, don't recalculate them
-        for t in range(converge_t + 2, num_timesteps):
+        for t in range(converge_t + 1, num_timesteps):
             # Shorthand: get parameters and input for time index t
             y = emissions[t, :]
 
@@ -503,8 +505,8 @@ class Lgssm:
         smoothed_crosses_beginning = []
 
         # Run the smoother backward in time
-        # start with the en
-        for ti, t in enumerate(reversed(range(num_timesteps - converge_t - 1, num_timesteps - 1))):
+        # converge_t + 1 is the number of time steps before convergence
+        for ti, t in enumerate(reversed(range(num_timesteps - (converge_t + 2), num_timesteps - 1))):
             # Unpack the input
             filtered_mean = filtered_means[t, :]
             filtered_cov = filtered_covs[-1, :, :]
@@ -524,7 +526,7 @@ class Lgssm:
             # Compute the smoothed expectation of x_t x_{t+1}^T
             smoothed_crosses_end.append(G @ smoothed_cov_next)
 
-        for t in reversed(range(converge_t, num_timesteps - converge_t)):
+        for t in reversed(range(converge_t + 1, num_timesteps - (converge_t + 2))):
             # Unpack the input
             filtered_mean = filtered_means[t, :]
             smoothed_mean_next = smoothed_means[t + 1, :]
@@ -538,7 +540,7 @@ class Lgssm:
 
         smoothed_covs_beginning.append(smoothed_covs_end[-1])
 
-        for ti, t in enumerate(reversed(range(0, converge_t))):
+        for ti, t in enumerate(reversed(range(0, converge_t + 1))):
             # Unpack the input
             filtered_mean = filtered_means[t, :]
             filtered_cov = filtered_covs[t, :, :]
