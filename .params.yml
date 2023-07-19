@@ -49,6 +49,7 @@ dtype: float64
 # choices are: gradient_descent and batch_sgd
 dynamics_lags: 1
 dynamics_input_lags: 1
+ridge_lambda: 0.0
 fit_type: em
 num_train_steps: 50
 verbose: True

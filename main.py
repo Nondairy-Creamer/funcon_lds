@@ -65,7 +65,8 @@ if rank == 0:
                           dynamics_lags=run_params['dynamics_lags'],
                           dynamics_input_lags=run_params['dynamics_input_lags'],
                           dtype=dtype, device=device, verbose=run_params['verbose'],
-                          param_props=run_params['param_props'])
+                          param_props=run_params['param_props'],
+                          ridge_lambda=run_params['ridge_lambda'])
 
     model_trained.emissions_weights = torch.eye(model_trained.emissions_dim, model_trained.dynamics_dim_full, device=device, dtype=dtype)
     model_trained.emissions_input_weights = torch.zeros((model_trained.emissions_dim, model_trained.input_dim_full), device=device, dtype=dtype)

@@ -12,6 +12,7 @@ lost_emission_freq: 0.0
 dynamics_lags: 1
 dynamics_input_lags: 1
 input_time_scale: 0
+ridge_lambda: 0.0
 
 # initialize a linear gaussian ssm model
 param_props:
