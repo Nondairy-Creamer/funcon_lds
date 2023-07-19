@@ -77,7 +77,8 @@ def plot_model_params(model, cell_ids, cell_ids_chosen=None):
     # plot the B matrix
     B_full = model_params['trained']['dynamics_input_weights'][:model.dynamics_dim, :]
     B = np.split(B_full, model.dynamics_input_lags, axis=1)
-    B = [i[model.param_props['mask']['dynamics_input_weights'].numpy().astype(bool)] for i in B]
+    mask = model.param_props['mask']['dynamics_input_weights'].numpy().astype(bool)
+    B = [i[mask] for i in B]
     B = [i[:, None] for i in B]
     B = np.concatenate(B, axis=1)
     B = B[neuron_inds_chosen, :]
@@ -300,6 +301,11 @@ def plot_stim_l2_norm(model, emissions, inputs_full, posterior, prior, cell_ids,
     posterior_stim_responses = get_stim_response(posterior, inputs_full, window=window)
     model_weights = model.dynamics_weights[:model.dynamics_dim, :]
 
+    # calculate the average cross correlation between neurons
+
+    correlation = [np.corrcoef(i.T) for i in emissions]
+    correlation = np.nanmean(np.stack(correlation), axis=0)
+
     # calculate the rms for each response. This deals with the fact that responses can vary and go negative
     measured_response_norm = rms(measured_stim_responses, axis=0)
     prior_response_norm = rms(prior_stim_responses, axis=0)
@@ -307,18 +313,21 @@ def plot_stim_l2_norm(model, emissions, inputs_full, posterior, prior, cell_ids,
     model_weights_norm = rms(stack_weights(model_weights, model.dynamics_lags, axis=1), axis=0)
 
     # pull out the neurons we care about
+    correlation = np.abs(np.linalg.inv(correlation[chosen_neuron_inds, :][:, chosen_neuron_inds]))
     measured_response_norm = measured_response_norm[chosen_neuron_inds, :][:, chosen_neuron_inds]
     prior_response_norm = prior_response_norm[chosen_neuron_inds, :][:, chosen_neuron_inds]
     posterior_response_norm = posterior_response_norm[chosen_neuron_inds, :][:, chosen_neuron_inds]
     model_weights_norm = model_weights_norm[chosen_neuron_inds, :][:, chosen_neuron_inds]
 
     # set the diagonal to 0 for visualization
+    correlation[np.eye(correlation.shape[0], dtype=bool)] = 0
     measured_response_norm[np.eye(measured_response_norm.shape[0], dtype=bool)] = 0
     prior_response_norm[np.eye(prior_response_norm.shape[0], dtype=bool)] = 0
     posterior_response_norm[np.eye(posterior_response_norm.shape[0], dtype=bool)] = 0
     model_weights_norm[np.eye(model_weights_norm.shape[0], dtype=bool)] = 0
 
     # normalize so that everything is on the same scale
+    correlation = correlation / np.nanmax(correlation)
     measured_response_norm = measured_response_norm / np.nanmax(measured_response_norm)
     prior_response_norm = prior_response_norm / np.max(prior_response_norm)
     posterior_response_norm = posterior_response_norm / np.max(posterior_response_norm)
@@ -345,8 +354,8 @@ def plot_stim_l2_norm(model, emissions, inputs_full, posterior, prior, cell_ids,
     plt.clim((-1, 1))
 
     ax = plt.subplot(2, 2, 3)
-    plt.imshow(posterior_response_norm, interpolation='nearest', cmap=colormap)
-    plt.title('posterior response L2 norm')
+    plt.imshow(correlation, interpolation='nearest', cmap=colormap)
+    plt.title('correlation inverse')
     plt.xticks(plot_x, cell_ids_chosen)
     plt.yticks(plot_x, cell_ids_chosen)
     for label in ax.get_xticklabels():
