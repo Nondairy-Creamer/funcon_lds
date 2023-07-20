@@ -388,7 +388,7 @@ class Lgssm:
 
             # check if covariance has converged
             if check_convergence and t > 0:
-                max_abs_diff_cov = torch.max(torch.abs(filtered_cov - filtered_covs_list[-1]))
+                max_abs_diff_cov = torch.max(torch.abs(filtered_covs_list[-1] - filtered_covs_list[-2]))
                 if max_abs_diff_cov < 1 / self.epsilon:
                     converge_t = t
                     break
