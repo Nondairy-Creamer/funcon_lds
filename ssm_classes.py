@@ -688,12 +688,7 @@ class Lgssm:
             dynamics_pad = torch.cat((dynamics_eye_pad, dynamics_zeros_pad), dim=1)
             dynamics_inputs_zeros_pad = torch.zeros((self.dynamics_dim * (self.dynamics_lags - 1), self.input_dim_full), device=self.device, dtype=self.dtype)
 
-            penalty_mat = torch.zeros((self.dynamics_dim_full + self.input_dim_full, self.dynamics_dim_full + self.input_dim_full))
-            ridge_penalty = torch.tile(penalty_mat, (self.dynamics_dim, 1, 1))
-            for i in range(self.dynamics_dim):
-                penalty = self.ridge_lambda * self.dynamics_cov[i, i] * \
-                          torch.eye(self.dynamics_dim_full, dtype=self.dtype, device=self.device)
-                ridge_penalty[i, :self.dynamics_dim_full, :self.dynamics_dim_full] = penalty
+            ridge_penalty = self.ridge_lambda * torch.diag(self.dynamics_cov)
 
             if self.param_props['update']['dynamics_weights'] and self.param_props['update']['dynamics_input_weights']:
                 # do a joint update for A and B

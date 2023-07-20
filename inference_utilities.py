@@ -69,7 +69,10 @@ def solve_masked(A, b, mask=None, ridge_penalty=None):
         if ridge_penalty is None:
             A_nonzero = A[:, non_zero_loc]
         else:
-            A_nonzero = A[:, non_zero_loc] + ridge_penalty[i, :, non_zero_loc]
+            r_size = ridge_penalty.shape[0]
+            penalty = ridge_penalty[i] * torch.eye(r_size, device=device, dtype=dtype)[:, non_zero_loc[:r_size]]
+            A_nonzero = A[:, non_zero_loc]
+            A_nonzero[:r_size, :penalty.shape[1]] += penalty
 
         x_hat[non_zero_loc, i] = torch.linalg.lstsq(A_nonzero, b_i, rcond=None)[0]
 
