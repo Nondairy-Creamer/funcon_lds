@@ -16,17 +16,9 @@ import warnings
 def get_run_params(param_name='params'):
     # load in the parameters for the run which dictate how many data sets to use,
     # or how many time lags the model will fit etc
-    # first load in the defaults from the hidden files like .params.yml
-    # then load in the user updated version from params_update.yml
 
-    with open('.' + param_name + '.yml', 'r') as file:
+    with open('./submission_scripts/' + param_name + '.yml', 'r') as file:
         params = yaml.safe_load(file)
-
-    if Path(param_name + '_update.yml').exists():
-        with open(param_name + '_update.yml', 'r') as file:
-            params_update = yaml.safe_load(file)
-
-        params.update(params_update)
 
     return params
 

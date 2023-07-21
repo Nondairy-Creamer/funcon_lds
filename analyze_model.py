@@ -7,13 +7,13 @@ from pathlib import Path
 
 # load in the model and training data
 # model_folder = Path('/home/mcreamer/Documents/data_sets/fun_con_models/48203609_DL5_IL60/')
-# model_folder = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/48196084_DL3_IL45/')
-model_folder = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/48713174_DL3_IL45/')
+model_folder = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/48196084_DL3_IL45/')
+# model_folder = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/48713174_DL3_IL45/')
 cell_ids_chosen = ['AVAL', 'AVAR', 'AVEL', 'AVER', 'AFDL', 'AFDR', 'AVJL', 'AVJR', 'AVDL', 'AVDR']
 # cell_ids_chosen = ['AVAL', 'AVAR', 'ADAL', 'ADAR', 'AFDL', 'AFDR', 'AVJL', 'AVJR', 'ADLL', 'ADLR']
 # cell_ids_chosen = ['AVDR', 'AVER', 'AVJR', 'RMDL', 'SAADL']
 neuron_to_remove = 'AVJR'
-neuron_to_stim = 'AVJR'
+neuron_to_stim = 'AFDR'
 sample_rate = 0.5
 
 window_size = 1000
@@ -94,7 +94,6 @@ for i in inputs:
 
 # get all the inputs but with only the chosen neurons
 inputs_truncated = [i[:, neuron_inds_chosen] for i in inputs_full]
-inputs_truncated.pop(3)
 data_ind_chosen, time_window = au.find_stim_events(inputs_truncated, window_size=window_size)
 data_ind_chosen += 1
 
