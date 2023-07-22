@@ -23,7 +23,7 @@ os.makedirs(save_folder)
 if 'slurm' in run_params.keys():
     # default values that should be the same for
     full_path = Path(__file__).parent.resolve()
-    slurm = Slurm(**run_params['slurm'], output=full_path / save_folder)
+    slurm = Slurm(**run_params['slurm'], output=full_path / save_folder / 'slurm.out')
 
     run_command = ['module purge',
                    'module load anaconda3/2022.10',
