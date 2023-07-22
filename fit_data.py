@@ -9,12 +9,13 @@ import inference_utilities as iu
 import plotting
 
 
-def fit_synthetic(run_params):
+def fit_synthetic(param_name, save_folder):
     comm = pkl5.Intracomm(MPI.COMM_WORLD)
     size = comm.Get_size()
     rank = comm.Get_rank()
-
     is_parallel = size > 1
+
+    run_params = lu.get_run_params(param_name=param_name)
 
     if rank == 0:
         device = run_params['device']
@@ -62,9 +63,9 @@ def fit_synthetic(run_params):
                 setattr(model_trained, init_key, getattr(model_true, init_key))
         model_trained.set_to_init()
 
-        lu.save_run(run_params['model_save_folder'], model_trained, model_true=model_true,
-                    data={'emissions': emissions, 'inputs': inputs, 'cell_ids': model_true.cell_ids}, run_params=run_params,
-                    remove_old=True)
+        lu.save_run(save_folder, model_trained, model_true=model_true,
+                    data={'emissions': emissions, 'inputs': inputs, 'cell_ids': model_true.cell_ids},
+                    run_params=run_params, remove_old=True)
     else:
         emissions = None
         inputs = None
@@ -73,18 +74,18 @@ def fit_synthetic(run_params):
 
     model_trained, smoothed_means, init_mean, init_cov = \
         iu.fit_em(model_trained, emissions, inputs, num_steps=run_params['num_train_steps'],
-                  save_folder=run_params['model_save_folder'])
+                  save_folder=save_folder)
 
     if rank == 0:
         initial_coniditons = {'init_mean': init_mean, 'init_cov': init_cov}
-        lu.save_run(run_params['model_save_folder'], model_trained, posterior=smoothed_means,
+        lu.save_run(save_folder, model_trained, posterior=smoothed_means,
                     initial_conditions=initial_coniditons)
 
         if not is_parallel and run_params['plot_figures']:
             plotting.plot_model_params(model_trained, model_true=model_true)
 
 
-def fit_experimental(run_params):
+def fit_experimental(param_name, save_folder):
     # the goal of this function is to take the pairwise stimulation and response data from
     # https://arxiv.org/abs/2208.04790
     # this data is a collection of calcium recordings of ~200 neurons over ~5-15 minutes where individual neurons are
@@ -105,6 +106,8 @@ def fit_experimental(run_params):
     size = comm.Get_size()
     rank = comm.Get_rank()
     is_parallel = size > 1
+
+    run_params = lu.get_run_params(param_name=param_name)
 
     # rank 0 is the parent node which will send out the data to the children nodes
     if rank == 0:
@@ -146,7 +149,7 @@ def fit_experimental(run_params):
         model_trained.emissions_input_weights = torch.zeros((model_trained.emissions_dim, model_trained.input_dim_full), device=device, dtype=dtype)
         model_trained.cell_ids = cell_ids
 
-        lu.save_run(run_params['model_save_folder'], model_trained, remove_old=True,
+        lu.save_run(save_folder, model_trained, remove_old=True,
                     data={'emissions': emissions, 'inputs': inputs, 'cell_ids': cell_ids}, run_params=run_params)
 
     else:
@@ -159,11 +162,11 @@ def fit_experimental(run_params):
     # fit the model using expectation maximization
     model_trained, smoothed_means, init_mean, init_cov = \
         iu.fit_em(model_trained, emissions, inputs, num_steps=run_params['num_train_steps'],
-                  save_folder=run_params['model_save_folder'])
+                  save_folder=save_folder)
 
     if rank == 0:
         initial_coniditons = {'init_mean': init_mean, 'init_cov': init_cov}
-        lu.save_run(run_params['model_save_folder'], model_trained, posterior=smoothed_means,
+        lu.save_run(save_folder, model_trained, posterior=smoothed_means,
                     initial_conditions=initial_coniditons)
 
         if not is_parallel and run_params['plot_figures']:

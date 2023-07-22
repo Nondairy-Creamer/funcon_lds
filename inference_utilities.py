@@ -80,7 +80,7 @@ def solve_masked(A, b, mask=None, ridge_penalty=None):
 
 
 def fit_em(model, emissions_list, inputs_list, init_mean=None, init_cov=None, num_steps=10,
-           save_folder='trained_models', save_every=10):
+           save_folder='em_test', save_every=10):
     comm = pkl5.Intracomm(MPI.COMM_WORLD)
     rank = comm.Get_rank()
     size = comm.Get_size()

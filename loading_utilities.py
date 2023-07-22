@@ -183,25 +183,16 @@ def load_and_preprocess_data(fun_atlas_path, num_data_sets=None, force_preproces
 
 def save_run(model_save_folder, model_trained, model_true=None, data=None, posterior=None,
              run_params=None, initial_conditions=None, remove_old=False):
-    # save the models, data, and parameters from the fitting procedure
-    # if run on SLURM get the slurm ID
-    if 'SLURM_JOB_ID' in os.environ:
-        slurm_tag = os.environ['SLURM_JOB_ID']
-    else:
-        slurm_tag = 'local'
+    model_save_folder = Path(model_save_folder)
+    true_model_save_path = model_save_folder / 'model_true.pkl'
+    trained_model_save_path = model_save_folder / 'model_trained.pkl'
+    data_save_path = model_save_folder / 'data.pkl'
+    posterior_path = model_save_folder / 'posterior.pkl'
+    params_save_path = model_save_folder / 'params.pkl'
+    init_cond_save_path = model_save_folder / 'initial_conditions.pkl'
 
-    lag_tag = 'DL' + str(model_trained.dynamics_lags) + '_IL' + str(model_trained.dynamics_input_lags)
-
-    full_save_folder = Path(model_save_folder) / (slurm_tag + '_' + lag_tag)
-    true_model_save_path = full_save_folder / 'model_true.pkl'
-    trained_model_save_path = full_save_folder / 'model_trained.pkl'
-    data_save_path = full_save_folder / 'data.pkl'
-    posterior_path = full_save_folder / 'posterior.pkl'
-    params_save_path = full_save_folder / 'params.pkl'
-    init_cond_save_path = full_save_folder / 'initial_conditions.pkl'
-
-    if not full_save_folder.exists():
-        os.mkdir(full_save_folder)
+    if not model_save_folder.exists():
+        os.makedirs(model_save_folder)
 
     # save the trained model
     model_trained.save(path=trained_model_save_path)
