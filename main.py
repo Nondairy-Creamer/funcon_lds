@@ -26,9 +26,9 @@ if 'slurm' in run_params.keys():
 
     run_command = ['module purge',
                    'module load anaconda3/2022.10',
-                   'module load openmpi/gcc/4.1.2,'
-                   'conda activate fast-mpi4py,'
-                   'srun python -uc \'import fit_data; fit_data.' + run_params['fit_file'] + '(' + param_name + ',' + save_folder + ')',
+                   'module load openmpi/gcc/4.1.2,',
+                   'conda activate fast-mpi4py,',
+                   'srun python -uc \'import fit_data; fit_data.' + run_params['fit_file'] + '(\'' + param_name + '\',\'' + save_folder + '\')\'',
                    ]
 
     slurm.sbatch('\n'.join(run_command))
