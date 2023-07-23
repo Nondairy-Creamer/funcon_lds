@@ -14,8 +14,8 @@ rank = comm.Get_rank()
 is_parallel = size > 1
 
 if len(sys.argv) == 1:
-    # param_name = 'synthetic_test'
-    param_name = 'experimental_test'
+    param_name = 'synthetic_test'
+    # param_name = 'experimental_test'
 else:
     param_name = sys.argv[1]
 
@@ -34,17 +34,18 @@ else:
     save_folder = None
 
 if 'slurm' in run_params.keys():
-    # default values that should be the same for
-    slurm = Slurm(**run_params['slurm'], output=full_path / save_folder / 'slurm_%A.out')
+    if rank == 0:
+        # default values that should be the same for
+        slurm = Slurm(**run_params['slurm'], output=save_folder/'slurm_%A.out', job_name=param_name)
 
-    run_command = ['module purge',
-                   'module load anaconda3/2022.10',
-                   'module load openmpi/gcc/4.1.2',
-                   'conda activate fast-mpi4py',
-                   'srun python -uc \"import fit_data; fit_data.' + run_params['fit_file'] + '(\'' + str(param_name) + '\',\'' + str(save_folder) + '\')\"',
-                   ]
+        run_command = ['module purge',
+                       'module load anaconda3/2022.10',
+                       'module load openmpi/gcc/4.1.2',
+                       'conda activate fast-mpi4py',
+                       'srun python -uc \"import fit_data; fit_data.' + run_params['fit_file'] + '(\'' + str(param_name) + '\',\'' + str(save_folder) + '\')\"',
+                       ]
 
-    slurm.sbatch('\n'.join(run_command))
+        slurm.sbatch('\n'.join(run_command))
 
 else:
     method = getattr(fit_data, run_params['fit_file'])
