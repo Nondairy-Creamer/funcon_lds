@@ -11,7 +11,7 @@ class Lgssm:
         This verison assumes diagonal input weights, diagonal noise covariance, no offsets, and identity emissions
     """
 
-    def __init__(self, dynamics_dim, emissions_dim, input_dim, dynamics_lags=1, dynamics_input_lags=1,
+    def __init__(self, dynamics_dim, emissions_dim, input_dim, dynamics_lags=1, dynamics_input_lags=1, cell_ids=None,
                  param_props=None, dtype=torch.float64, device='cpu', verbose=True, nan_fill=1e8, ridge_lambda=0):
         self.dynamics_lags = dynamics_lags
         self.dynamics_input_lags = dynamics_input_lags
@@ -26,9 +26,12 @@ class Lgssm:
         self.log_likelihood = None
         self.train_time = None
         self.epsilon = nan_fill
-        self.cell_ids = ['S' + str(i) for i in range(self.dynamics_dim)]
         self.sample_rate = 0.5  # default is 2 Hz
         self.ridge_lambda = ridge_lambda
+        if cell_ids is None:
+            self.cell_ids = ['S' + str(i) for i in range(self.dynamics_dim)]
+        else:
+            self.cell_ids = cell_ids
 
         # define the weights here, but set them to tensor versions of the intial values with _set_to_init()
         self.dynamics_weights = None
@@ -319,6 +322,7 @@ class Lgssm:
                      'emissions': emissions_list,
                      'init_mean': init_mean_list,
                      'init_cov': init_cov_list,
+                     'cell_ids': self.cell_ids,
                      }
 
         return data_dict

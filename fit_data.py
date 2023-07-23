@@ -33,7 +33,14 @@ def fit_synthetic(param_name, save_folder):
 
         start = time.time()
         # sample from the randomized model
-        data_dict = \
+        data_train_dict = \
+            model_true.sample(num_time=run_params['num_time'],
+                              num_data_sets=run_params['num_data_sets'],
+                              scattered_nan_freq=run_params['scattered_nan_freq'],
+                              lost_emission_freq=run_params['lost_emission_freq'],
+                              input_time_scale=run_params['input_time_scale'],
+                              rng=rng)
+        data_test_dict = \
             model_true.sample(num_time=run_params['num_time'],
                               num_data_sets=run_params['num_data_sets'],
                               scattered_nan_freq=run_params['scattered_nan_freq'],
@@ -42,11 +49,11 @@ def fit_synthetic(param_name, save_folder):
                               rng=rng)
         print('Time to sample:', time.time() - start, 's')
 
-        emissions = data_dict['emissions']
-        inputs = data_dict['inputs']
-        latents_true = data_dict['latents']
-        init_mean_true = data_dict['init_mean']
-        init_cov_true = data_dict['init_cov']
+        emissions = data_train_dict['emissions']
+        inputs = data_train_dict['inputs']
+        latents_true = data_train_dict['latents']
+        init_mean_true = data_train_dict['init_mean']
+        init_cov_true = data_train_dict['init_cov']
 
         # get the log likelihood of the true data
         ll_true_params = model_true.get_ll(emissions, inputs, init_mean_true, init_cov_true)
@@ -64,7 +71,7 @@ def fit_synthetic(param_name, save_folder):
         model_trained.set_to_init()
 
         lu.save_run(save_folder, model_trained, model_true=model_true,
-                    data_train={'emissions': emissions, 'inputs': inputs, 'cell_ids': model_true.cell_ids},
+                    data_train=data_train_dict, data_test=data_test_dict,
                     run_params=run_params, remove_old=True)
     else:
         emissions = None
@@ -146,7 +153,8 @@ def fit_experimental(param_name, save_folder):
                               dynamics_input_lags=run_params['dynamics_input_lags'],
                               dtype=dtype, device=device, verbose=run_params['verbose'],
                               param_props=run_params['param_props'],
-                              ridge_lambda=run_params['ridge_lambda'])
+                              ridge_lambda=run_params['ridge_lambda'],
+                              cell_ids=cell_ids)
 
         model_trained.emissions_weights = torch.eye(model_trained.emissions_dim, model_trained.dynamics_dim_full, device=device, dtype=dtype)
         model_trained.emissions_input_weights = torch.zeros((model_trained.emissions_dim, model_trained.input_dim_full), device=device, dtype=dtype)
