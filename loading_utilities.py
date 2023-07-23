@@ -85,26 +85,22 @@ def preprocess_data(emissions, inputs, start_index=0, correct_photobleach=False)
     return emissions_filtered_corrected, inputs
 
 
-def load_and_align_data(data_path, force_preprocess=False, num_data_sets=None, bad_data_sets=(), start_index=0,
+def load_and_align_data(data_path, force_preprocess=False, num_data_sets=None, start_index=0,
                         correct_photobleach=False, interpolate_nans=False, held_out_data=[]):
     # load all the recordings of neural activity
-    emissions_unaligned, inputs_unaligned, cell_ids_unaligned = \
+    data_train_unaligned, data_test_unaligned = \
         load_and_preprocess_data(data_path, num_data_sets=num_data_sets,
                                  force_preprocess=force_preprocess, start_index=start_index,
                                  correct_photobleach=correct_photobleach, interpolate_nans=interpolate_nans,
                                  held_out_data=held_out_data)
 
-    # remove recordings that are noisy
-    data_sets_to_remove = np.sort(bad_data_sets)[::-1]
-    for bd in data_sets_to_remove:
-        emissions_unaligned.pop(bd)
-        inputs_unaligned.pop(bd)
-        cell_ids_unaligned.pop(bd)
-
     # choose a subset of the data sets to maximize the number of recordings * the number of neurons included
-    emissions, inputs, cell_ids, = get_combined_dataset(emissions_unaligned, inputs_unaligned, cell_ids_unaligned)
+    data_train = {}
+    data_test = {}
+    data_train['emissions'], data_train['inputs'], data_train['cell_ids'] = get_combined_dataset(data_train_unaligned['emissions'], data_train_unaligned['inputs'], data_train_unaligned['cell_ids'])
+    data_test['emissions'], data_test['inputs'], data_test['cell_ids'], = get_combined_dataset(data_test_unaligned['emissions'], data_test_unaligned['inputs'], data_test_unaligned['cell_ids'])
 
-    return emissions, inputs, cell_ids
+    return data_train, data_test
 
 
 def load_and_preprocess_data(fun_atlas_path, num_data_sets=None, force_preprocess=False, start_index=0,
@@ -112,16 +108,14 @@ def load_and_preprocess_data(fun_atlas_path, num_data_sets=None, force_preproces
     fun_atlas_path = Path(fun_atlas_path)
 
     preprocess_filename = 'funcon_preprocessed_data.pkl'
-    emissions = []
-    inputs = []
-    cell_ids = []
-    num_loaded_data = 0
+    emissions_train = []
+    inputs_train = []
+    cell_ids_train = []
+    path_name = []
 
     # find all files in the folder that have francesco_green.npy
     for i in fun_atlas_path.rglob('francesco_green.npy'):
-        # skip any data that is being held out
-        if i.parts[-2] in held_out_data:
-            continue
+        path_name.append(i.parts[-2])
 
         # check if a processed version exists
         preprocess_path = i.parent / preprocess_filename
@@ -166,27 +160,51 @@ def load_and_preprocess_data(fun_atlas_path, num_data_sets=None, force_preproces
             print('Data set', i.parent, 'preprocessed')
             print('Took', time.time() - start, 's')
 
-        emissions.append(this_emissions)
-        inputs.append(this_inputs)
-        cell_ids.append(this_cell_ids)
+        emissions_train.append(this_emissions)
+        inputs_train.append(this_inputs)
+        cell_ids_train.append(this_cell_ids)
 
-        num_loaded_data += 1
+    emissions_test = []
+    inputs_test = []
+    cell_ids_test = []
 
-        if num_data_sets is not None:
-            if num_loaded_data >= num_data_sets:
-                break
+    for i in range(len(emissions_train)):
+        # skip any data that is being held out
+        if path_name[i] in held_out_data:
+            emissions_test.append(emissions_train.pop(i))
+            inputs_test.append(inputs_train.pop(i))
+            cell_ids_test.append(cell_ids_train.pop(i))
 
-    print('Size of data set:', len(emissions))
+    emissions_test += emissions_train[num_data_sets:]
+    inputs_test += inputs_train[num_data_sets:]
+    cell_ids_test += cell_ids_train[num_data_sets:]
 
-    return emissions, inputs, cell_ids
+    emissions_train = emissions_train[:num_data_sets]
+    inputs_train = inputs_train[:num_data_sets]
+    cell_ids_train = cell_ids_train[:num_data_sets]
+
+    print('Size of data set:', len(emissions_train))
+
+    data_train = {'emissions': emissions_train,
+                  'inputs': inputs_train,
+                  'cell_ids': cell_ids_train,
+                  }
+
+    data_test = {'emissions': emissions_test,
+                 'inputs': inputs_test,
+                 'cell_ids': cell_ids_test,
+                 }
+
+    return data_train, data_test
 
 
-def save_run(model_save_folder, model_trained, model_true=None, data=None, posterior=None,
+def save_run(model_save_folder, model_trained, model_true=None, data_train=None, data_test=None, posterior=None,
              run_params=None, initial_conditions=None, remove_old=False):
     model_save_folder = Path(model_save_folder)
     true_model_save_path = model_save_folder / 'model_true.pkl'
     trained_model_save_path = model_save_folder / 'model_trained.pkl'
-    data_save_path = model_save_folder / 'data.pkl'
+    data_train_save_path = model_save_folder / 'data_train.pkl'
+    data_test_save_path = model_save_folder / 'data_test.pkl'
     posterior_path = model_save_folder / 'posterior.pkl'
     params_save_path = model_save_folder / 'params.pkl'
     init_cond_save_path = model_save_folder / 'initial_conditions.pkl'
@@ -207,10 +225,15 @@ def save_run(model_save_folder, model_trained, model_true=None, data=None, poste
                 os.remove(true_model_save_path)
 
     # save the data
-    if data is not None:
-        data_file = open(data_save_path, 'wb')
-        pickle.dump(data, data_file)
-        data_file.close()
+    if data_train is not None:
+        data_train_file = open(data_train_save_path, 'wb')
+        pickle.dump(data_train, data_train_file)
+        data_train_file.close()
+
+    if data_test is not None:
+        data_test_file = open(data_test_save_path, 'wb')
+        pickle.dump(data_test, data_test_file)
+        data_test_file.close()
 
     if posterior is not None:
         means_file = open(posterior_path, 'wb')

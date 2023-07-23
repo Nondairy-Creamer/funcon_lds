@@ -7,7 +7,8 @@ from datetime import datetime, time
 from pathlib import Path
 
 if len(sys.argv) == 1:
-    param_name = 'synthetic_test'
+    # param_name = 'synthetic_test'
+    param_name = 'experimental_test'
 else:
     param_name = sys.argv[1]
 

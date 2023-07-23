@@ -116,14 +116,17 @@ def fit_experimental(param_name, save_folder):
         dtype = getattr(torch, run_params['dtype'])
 
         # load in the data for the model and do any preprocessing here
-        emissions, inputs, cell_ids = \
+        data_train, data_test = \
             lu.load_and_align_data(run_params['data_path'], num_data_sets=run_params['num_data_sets'],
-                                   bad_data_sets=run_params['bad_data_sets'],
                                    start_index=run_params['start_index'],
                                    force_preprocess=run_params['force_preprocess'],
                                    correct_photobleach=run_params['correct_photobleach'],
                                    interpolate_nans=run_params['interpolate_nans'],
                                    held_out_data=run_params['held_out_data'])
+
+        emissions = data_train['emissions']
+        inputs = data_train['inputs']
+        cell_ids = data_train['cell_ids']
 
         num_neurons = emissions[0].shape[1]
         # create a mask for the dynamics_input_weights. This allows us to fit dynamics weights that are diagonal
@@ -150,7 +153,7 @@ def fit_experimental(param_name, save_folder):
         model_trained.cell_ids = cell_ids
 
         lu.save_run(save_folder, model_trained, remove_old=True,
-                    data={'emissions': emissions, 'inputs': inputs, 'cell_ids': cell_ids}, run_params=run_params)
+                    data_train=data_train, data_test=data_test, run_params=run_params)
 
     else:
         # if you are a child node, just set everything to None and only calculate your sufficient statistics
