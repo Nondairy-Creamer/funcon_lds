@@ -64,7 +64,7 @@ def fit_synthetic(param_name, save_folder):
         model_trained.set_to_init()
 
         lu.save_run(save_folder, model_trained, model_true=model_true,
-                    data={'emissions': emissions, 'inputs': inputs, 'cell_ids': model_true.cell_ids},
+                    data_train={'emissions': emissions, 'inputs': inputs, 'cell_ids': model_true.cell_ids},
                     run_params=run_params, remove_old=True)
     else:
         emissions = None
