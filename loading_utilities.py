@@ -248,8 +248,9 @@ def save_run(model_save_folder, model_trained, model_true=None, data_train=None,
 
     # save the initial conditions
     if initial_conditions is not None:
+        init_out = {'init_mean': [i.numpy() for i in initial_conditions['init_mean']], 'init_cov': [i.numpy() for i in initial_conditions['init_cov']]}
         init_con_file = open(init_cond_save_path, 'wb')
-        pickle.dump(initial_conditions, init_con_file)
+        pickle.dump(init_out, init_con_file)
         init_con_file.close()
 
 
