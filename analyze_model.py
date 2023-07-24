@@ -72,7 +72,7 @@ else:
 
 posterior_file = open(posterior_path, 'rb')
 posterior = pickle.load(posterior_file)
-posterior = [(i @ model.emissions_weights.T).detach().cpu().numpy() for i in posterior]
+posterior = [i @ model.emissions_weights.T for i in posterior]
 posterior_file.close()
 
 # pull out specific data sets to show
@@ -84,7 +84,7 @@ else:
 # the inputs matrix doesn't match the emissions matrix size because some neurons were not stimulated
 # upscale the inputs here so that the location of the stimulation in the input matrix
 # matches the neuron that was stimulated
-dynamics_input_weights_mask = model.param_props['mask']['dynamics_input_weights'].numpy()
+dynamics_input_weights_mask = model.param_props['mask']['dynamics_input_weights']
 weights_loc = ~np.all(dynamics_input_weights_mask == 0, axis=1)
 inputs_full = []
 

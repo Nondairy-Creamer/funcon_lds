@@ -77,7 +77,7 @@ def plot_model_params(model, cell_ids, cell_ids_chosen=None):
     # plot the B matrix
     B_full = model_params['trained']['dynamics_input_weights'][:model.dynamics_dim, :]
     B = np.split(B_full, model.dynamics_input_lags, axis=1)
-    mask = model.param_props['mask']['dynamics_input_weights'].numpy().astype(bool)
+    mask = model.param_props['mask']['dynamics_input_weights'].astype(bool)
     B = [i[mask] for i in B]
     B = [i[:, None] for i in B]
     B = np.concatenate(B, axis=1)
@@ -260,20 +260,17 @@ def plot_missing_neuron(model, emissions, inputs, posterior, cell_ids, neuron_to
     # sample_rate = model.sample_rate
     sample_rate = 0.5
 
-    emissions_torch, inputs_torch = model.standardize_inputs([emissions], [inputs])
-    emissions_torch = emissions_torch[0]
-    inputs_torch = inputs_torch[0]
-    init_mean_torch = model.estimate_init_mean([emissions_torch])[0]
-    init_cov_torch = model.estimate_init_cov([emissions_torch])[0]
+    init_mean = model.estimate_init_mean([emissions])[0]
+    init_cov = model.estimate_init_cov([emissions])[0]
 
     missing_neuron_ind = cell_ids.index(neuron_to_remove)
 
     # plot the posterior with a neuron missing
     # get the posterior with a neuron missing
-    emissions_missing = emissions_torch
+    emissions_missing = emissions
     emissions_missing[:, missing_neuron_ind] = np.nan
-    posterior_missing = model.lgssm_smoother(emissions_missing, inputs_torch, init_mean_torch, init_cov_torch)[3]
-    posterior_missing = (posterior_missing @ model.emissions_weights.T).detach().cpu().numpy()
+    posterior_missing = model.lgssm_smoother(emissions_missing, inputs, init_mean, init_cov)[3]
+    posterior_missing = (posterior_missing @ model.emissions_weights.T)
     posterior_missing = posterior_missing[time_window[0]:time_window[1], missing_neuron_ind]
 
     posterior = posterior[time_window[0]:time_window[1], missing_neuron_ind]
@@ -422,7 +419,7 @@ def plot_stim_response(emissions, inputs_full, posterior, prior, cell_ids, cell_
 
 
 def plot_dynamics_eigs(model):
-    A = model.dynamics_weights.numpy()
+    A = model.dynamics_weights
 
     d_eigvals = np.linalg.eigvals(A)
 

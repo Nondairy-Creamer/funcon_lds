@@ -1,4 +1,3 @@
-import torch
 from ssm_classes import Lgssm
 import loading_utilities as lu
 import numpy as np
@@ -18,13 +17,11 @@ def fit_synthetic(param_name, save_folder):
     run_params = lu.get_run_params(param_name=param_name)
 
     if rank == 0:
-        device = run_params['device']
-        dtype = getattr(torch, run_params['dtype'])
         rng = np.random.default_rng(run_params['random_seed'])
 
         # define the model, setting specific parameters
         model_true = Lgssm(run_params['dynamics_dim'], run_params['emissions_dim'], run_params['input_dim'],
-                           dtype=dtype, device=device, param_props=run_params['param_props'],
+                           param_props=run_params['param_props'],
                            dynamics_lags=run_params['dynamics_lags'], dynamics_input_lags=run_params['dynamics_input_lags'])
         model_true.randomize_weights(rng=rng)
         model_true.emissions_weights_init = np.eye(model_true.emissions_dim, model_true.dynamics_dim_full)
@@ -61,7 +58,7 @@ def fit_synthetic(param_name, save_folder):
 
         # make a new model to fit to the random model
         model_trained = Lgssm(run_params['dynamics_dim'], run_params['emissions_dim'], run_params['input_dim'],
-                              dtype=dtype, device=device, verbose=run_params['verbose'], param_props=run_params['param_props'],
+                              verbose=run_params['verbose'], param_props=run_params['param_props'],
                               dynamics_lags=run_params['dynamics_lags'], dynamics_input_lags=run_params['dynamics_input_lags'],
                               ridge_lambda=run_params['ridge_lambda'])
         for k in model_trained.param_props['update'].keys():
@@ -118,10 +115,6 @@ def fit_experimental(param_name, save_folder):
 
     # rank 0 is the parent node which will send out the data to the children nodes
     if rank == 0:
-        # set the device (cpu / gpu) and data type
-        device = run_params['device']
-        dtype = getattr(torch, run_params['dtype'])
-
         # load in the data for the model and do any preprocessing here
         data_train, data_test = \
             lu.load_and_align_data(run_params['data_path'], num_data_sets=run_params['num_data_sets'],
@@ -137,7 +130,7 @@ def fit_experimental(param_name, save_folder):
 
         num_neurons = emissions[0].shape[1]
         # create a mask for the dynamics_input_weights. This allows us to fit dynamics weights that are diagonal
-        input_mask = torch.eye(num_neurons, dtype=dtype, device=device)
+        input_mask = np.eye(num_neurons)
         # get rid of any inputs that never receive stimulation
         has_stims = np.any(np.concatenate(inputs, axis=0), axis=0)
         inputs = [i[:, has_stims] for i in inputs]
@@ -151,13 +144,13 @@ def fit_experimental(param_name, save_folder):
         model_trained = Lgssm(num_neurons, num_neurons, input_dim,
                               dynamics_lags=run_params['dynamics_lags'],
                               dynamics_input_lags=run_params['dynamics_input_lags'],
-                              dtype=dtype, device=device, verbose=run_params['verbose'],
+                              verbose=run_params['verbose'],
                               param_props=run_params['param_props'],
                               ridge_lambda=run_params['ridge_lambda'],
                               cell_ids=cell_ids)
 
-        model_trained.emissions_weights = torch.eye(model_trained.emissions_dim, model_trained.dynamics_dim_full, device=device, dtype=dtype)
-        model_trained.emissions_input_weights = torch.zeros((model_trained.emissions_dim, model_trained.input_dim_full), device=device, dtype=dtype)
+        model_trained.emissions_weights = np.eye(model_trained.emissions_dim, model_trained.dynamics_dim_full)
+        model_trained.emissions_input_weights = np.zeros((model_trained.emissions_dim, model_trained.input_dim_full))
         model_trained.cell_ids = cell_ids
 
         lu.save_run(save_folder, model_trained, remove_old=True,
@@ -167,7 +160,6 @@ def fit_experimental(param_name, save_folder):
         # if you are a child node, just set everything to None and only calculate your sufficient statistics
         emissions = None
         inputs = None
-        cell_ids = None
         model_trained = None
 
     # fit the model using expectation maximization

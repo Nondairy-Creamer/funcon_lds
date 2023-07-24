@@ -1,4 +1,3 @@
-import torch
 import time
 from mpi4py import MPI
 from mpi4py.util import pkl5
@@ -9,9 +8,9 @@ import loading_utilities as lu
 def block(block_list, dims=(2, 1)):
     layer = []
     for i in block_list:
-        layer.append(torch.cat(i, dim=dims[0]))
+        layer.append(np.concatenate(i, axis=dims[0]))
 
-    return torch.cat(layer, dim=dims[1])
+    return np.concatenate(layer, axis=dims[1])
 
 
 def individual_scatter(data, root=0):
@@ -54,12 +53,10 @@ def individual_gather(data, root=0):
 
 def solve_masked(A, b, mask=None, ridge_penalty=None):
     # solves the linear equation b=Ax where x has 0's where mask == 0
-    dtype = A.dtype
-    device = A.device
-    x_hat = torch.zeros((A.shape[1], b.shape[1]), device=device, dtype=dtype)
+    x_hat = np.zeros((A.shape[1], b.shape[1]))
 
     if mask is None:
-        mask = torch.ones_like(x_hat)
+        mask = np.ones_like(x_hat)
 
     for i in range(b.shape[1]):
         non_zero_loc = mask[:, i] != 0
@@ -70,36 +67,31 @@ def solve_masked(A, b, mask=None, ridge_penalty=None):
             A_nonzero = A[:, non_zero_loc]
         else:
             r_size = ridge_penalty.shape[0]
-            penalty = ridge_penalty[i] * torch.eye(r_size, device=device, dtype=dtype)[:, non_zero_loc[:r_size]]
+            penalty = ridge_penalty[i] * np.eye(r_size)[:, non_zero_loc[:r_size]]
             A_nonzero = A[:, non_zero_loc]
             A_nonzero[:r_size, :penalty.shape[1]] += penalty
 
-        x_hat[non_zero_loc, i] = torch.linalg.lstsq(A_nonzero, b_i, rcond=None)[0]
+        x_hat[non_zero_loc, i] = np.linalg.lstsq(A_nonzero, b_i, rcond=None)[0]
 
     return x_hat
 
 
-def fit_em(model, emissions_list, inputs_list, init_mean=None, init_cov=None, num_steps=10,
+def fit_em(model, emissions, inputs, init_mean=None, init_cov=None, num_steps=10,
            save_folder='em_test', save_every=10):
     comm = pkl5.Intracomm(MPI.COMM_WORLD)
     rank = comm.Get_rank()
     size = comm.Get_size()
 
     if rank == 0:
-        emissions, inputs = model.standardize_inputs(emissions_list, inputs_list)
-
         # lag the inputs if the model has lags
         inputs = [model.get_lagged_data(i, model.dynamics_input_lags) for i in inputs]
 
         if init_mean is None:
             init_mean = model.estimate_init_mean(emissions)
-        else:
-            init_mean = [torch.tensor(i, device=model.device, dtype=model.dtype) for i in init_mean]
 
         if init_cov is None:
             init_cov = model.estimate_init_cov(emissions)
-        else:
-            init_cov = [torch.tensor(i, device=model.device, dtype=model.dtype) for i in init_cov]
+
     else:
         emissions = None
         inputs = None
@@ -126,7 +118,7 @@ def fit_em(model, emissions_list, inputs_list, init_mean=None, init_cov=None, nu
                 else:
                     init_cov[i] = smoothed_covs[i][0, :, :]
 
-            log_likelihood_out.append(ll.detach().cpu().numpy())
+            log_likelihood_out.append(ll)
             time_out.append(time.time() - start)
             model.log_likelihood = log_likelihood_out
             model.train_time = time_out

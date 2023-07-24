@@ -38,9 +38,6 @@ model_trained_file.close()
 model_true_path = model_folder / 'model_true.pkl'
 
 if model_true_path.exists():
-    dtype = model_trained.dtype
-    device = model_trained.device
-
     model_true_file = open(model_true_path, 'rb')
     model_true = pickle.load(model_true_file)
     model_true_file.close()

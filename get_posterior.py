@@ -1,14 +1,13 @@
 import sys
 from pathlib import Path
 import pickle
-import loading_utilities as lu
 import inference_utilities as iu
 import os
 from mpi4py import MPI
 import numpy as np
 
 comm = MPI.COMM_WORLD
-cpu_id = comm.Get_rank()
+rank = comm.Get_rank()
 num_cpus = comm.Get_size()
 
 if len(sys.argv) == 2:
@@ -36,7 +35,7 @@ model_file = open(model_path, 'rb')
 model = pickle.load(model_file)
 model_file.close()
 
-if cpu_id == 0:
+if rank == 0:
     # load in the model and the data
     data_path = model_folder / 'data.pkl'
 
@@ -44,12 +43,9 @@ if cpu_id == 0:
     data = pickle.load(data_file)
     data_file.close()
 
-    emissions_list = data['emissions']
-    inputs_list = data['inputs']
+    emissions = data['emissions']
+    inputs = data['inputs']
     cell_ids = data['cell_ids']
-
-    # convert the data to tensors
-    emissions, inputs = model.standardize_inputs(emissions_list, inputs_list)
 
     # if not provided with an initial mean / cov calculate them
     init_mean = model.estimate_init_mean(emissions)
@@ -58,14 +54,13 @@ if cpu_id == 0:
     # package the data to be sent out to each of the children
     # if there is more data than chilren, create groups of data to be sent to each
     data_out = list(zip(emissions, inputs, init_mean, init_cov))
-    num_data = len(emissions_list)
+    num_data = len(emissions)
     chunk_size = int(np.ceil(num_data / num_cpus))
     # split data out into a list of inputs
     data_out = [data_out[i:i + chunk_size] for i in range(0, num_data, chunk_size)]
 else:
     data_out = None
 
-print('Got to cpu:', cpu_id)
 data = iu.individual_scatter(data_out, root=0)
 posterior = []
 
@@ -77,11 +72,11 @@ for d in data:
     posterior.append(
         model.lgssm_smoother(this_emission, this_input, init_mean=this_init_mean, init_cov=this_init_cov)[3])
 
-print('Finished cpu:', cpu_id)
+print('Finished cpu:', rank)
 
 posterior = iu.individual_gather(posterior, root=0)
 
-if cpu_id == 0:
+if rank == 0:
     print('Gathered')
 
     posterior_out = []
