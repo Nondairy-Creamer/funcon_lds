@@ -168,7 +168,7 @@ def load_and_preprocess_data(fun_atlas_path, num_data_sets=None, force_preproces
     inputs_test = []
     cell_ids_test = []
 
-    for i in range(len(emissions_train)):
+    for i in reversed(range(len(emissions_train))):
         # skip any data that is being held out
         if path_name[i] in held_out_data:
             emissions_test.append(emissions_train.pop(i))
