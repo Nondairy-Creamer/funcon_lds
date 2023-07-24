@@ -14,8 +14,8 @@ rank = comm.Get_rank()
 is_parallel = size > 1
 
 if len(sys.argv) == 1:
-    param_name = 'synthetic_test'
-    # param_name = 'experimental_test'
+    # param_name = 'syn_test'
+    param_name = 'exp_test'
 else:
     param_name = sys.argv[1]
 
