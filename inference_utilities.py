@@ -102,6 +102,7 @@ def fit_em(model, emissions, inputs, init_mean=None, init_cov=None, num_steps=10
     time_out = []
     smoothed_means = None
 
+    print('Fitting with EM')
     start = time.time()
     for ep in range(num_steps):
         model = comm.bcast(model, root=0)

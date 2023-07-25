@@ -403,9 +403,11 @@ class Lgssm:
         ll, filtered_means, filtered_covs, converge_t = self.lgssm_filter(emissions, inputs, init_mean, init_cov)
 
         if converge_t < emissions.shape[0] / 2:
-                smoothed_means, smoothed_covs, smoothed_crosses = \
+            print('Fast smoother, converge time: ', converge_t, '/', emissions.shape[0])
+            smoothed_means, smoothed_covs, smoothed_crosses = \
                 self.lgssm_smoother_fast(emissions, inputs, filtered_means, filtered_covs, converge_t)
         else:
+            print('Slow smoother, converge time: ', converge_t, '/', emissions.shape[0])
             pad_covs = np.tile(filtered_covs[None, -1, :, :], (emissions.shape[0] - converge_t - 1, 1, 1))
             filtered_covs = np.concatenate((filtered_covs, pad_covs), axis=0)
             smoothed_means, smoothed_covs, smoothed_crosses = \
