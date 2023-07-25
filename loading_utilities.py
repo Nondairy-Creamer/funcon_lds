@@ -13,7 +13,7 @@ import warnings
 # utilities for loading and saving the data
 
 
-def get_run_params(param_name='params'):
+def get_run_params(param_name):
     # load in the parameters for the run which dictate how many data sets to use,
     # or how many time lags the model will fit etc
 
