@@ -325,9 +325,7 @@ class Lgssm:
 
         # determine if you're going to check for covariance convergence
         # save a lot of time and memory, but can only be done if each neuron is either all or no nans
-        any_nan_neurons = np.any(np.isnan(emissions), axis=0)
-        all_nan_neurons = np.all(np.isnan(emissions), axis=0)
-        check_convergence = np.all(any_nan_neurons == all_nan_neurons)
+        check_convergence = self._has_no_scattered_nans(emissions)
 
         # step through the loop and keep calculating the covariances until they converge
         for t in range(num_timesteps):
@@ -405,7 +403,7 @@ class Lgssm:
         ll, filtered_means, filtered_covs, converge_t = self.lgssm_filter(emissions, inputs, init_mean, init_cov)
 
         if converge_t < emissions.shape[0] / 2:
-            smoothed_means, smoothed_covs, smoothed_crosses = \
+                smoothed_means, smoothed_covs, smoothed_crosses = \
                 self.lgssm_smoother_fast(emissions, inputs, filtered_means, filtered_covs, converge_t)
         else:
             pad_covs = np.tile(filtered_covs[None, -1, :, :], (emissions.shape[0] - converge_t - 1, 1, 1))
@@ -513,7 +511,7 @@ class Lgssm:
 
         smoothed_covs_beginning.append(smoothed_covs_end[-1])
 
-        for ti, t in enumerate(reversed(range(0, converge_t + 1))):
+        for ti, t in enumerate(reversed(range(0, converge_t))):
             # Unpack the input
             filtered_mean = filtered_means[t, :]
             filtered_cov = filtered_covs[t, :, :]
@@ -761,6 +759,7 @@ class Lgssm:
                 warnings.warn('emissions_cov is not symmetric')
 
             return log_likelihood, smoothed_means, smoothed_covs
+
         return None, None, None
 
     def get_suff_stats(self, emissions, inputs, init_mean, init_cov):
@@ -801,36 +800,71 @@ class Lgssm:
         Muz_emis = inputs[0, :, None] * smoothed_means[0, None, :]  # reuse Muz
         Muy = inputs.T @ y  # E[uu@yy']
 
-        Mzy = np.zeros((smoothed_means.shape[1], y.shape[1]))
-        My = np.zeros((y.shape[1], y.shape[1]))
-
         num_time = y.shape[0]
-        for t in range(num_time):
-            y_nan_loc_t = y_nan_loc[t, :]
+        use_fast_version = self._has_no_scattered_nans(emissions)
+
+        if use_fast_version:
+            y_nan_loc_t = y_nan_loc[0, :]
             c_nan = self.emissions_weights[y_nan_loc_t, :]
             r_nan = self.emissions_cov[y_nan_loc_t, :][:, y_nan_loc_t]
 
             if type(smoothed_covs) is tuple:
                 # smoothed covs are only stored til they converge so we have covs for the beginning and end of the data
-                beginning_size = smoothed_covs[0].shape[0]
-                end_size = smoothed_covs[1].shape[0]
-                if t < beginning_size:
-                    this_cov = smoothed_covs[0][t, :, :]
-                elif num_time - t <= end_size:
-                    ti = end_size - (num_time - t)
-                    this_cov = smoothed_covs[1][ti, :, :]
-                else:
-                    this_cov = smoothed_covs[0][-1, :, :]
+                converge_size = smoothed_covs[0].shape[0]
+                num_middle_covs = num_time - 2 * converge_size
+
+                imputed_variance_my = np.sum(c_nan @ smoothed_covs[0] @ c_nan.T + r_nan, axis=0)
+                imputed_variance_my += np.sum(c_nan @ smoothed_covs[1] @ c_nan.T + r_nan, axis=0)
+                imputed_variance_my += num_middle_covs * (c_nan @ smoothed_covs[0][-1, :, :] @ c_nan.T + r_nan)
+
+                imputed_variance_mzy = np.sum(smoothed_covs[0] @ c_nan.T, axis=0)
+                imputed_variance_mzy += np.sum(smoothed_covs[1] @ c_nan.T, axis=0)
+                imputed_variance_mzy += num_middle_covs * (smoothed_covs[0][-1, :, :] @ c_nan.T)
             else:
-                this_cov = smoothed_covs[t, :, :]
+                imputed_variance_my = np.sum(c_nan @ smoothed_covs @ c_nan.T + r_nan, axis=0)
+                imputed_variance_mzy = np.sum(smoothed_covs @ c_nan.T, axis=0)
 
-            My_cov = np.zeros((y.shape[1], y.shape[1]))
-            My_cov[np.ix_(y_nan_loc_t, y_nan_loc_t)] = c_nan @ this_cov @ c_nan.T + r_nan
-            My += y[t, :, None] * y[t, :, None].T + My_cov
+            # add in the variance from y
+            # add in the variance from all the values of y you imputed
+            My = y.T @ y
+            My[np.ix_(y_nan_loc_t, y_nan_loc_t)] += imputed_variance_my
 
-            Mzy_cov = np.zeros((smoothed_means.shape[1], y.shape[1]))
-            Mzy_cov[:, y_nan_loc_t] = this_cov @ c_nan.T
-            Mzy += smoothed_means[t, :, None] * y[t, :, None].T + Mzy_cov
+            # add the covariance between the means and y
+            # additionally add the variance from the inferred neurons
+            Mzy = smoothed_means.T @ y
+            Mzy[:, y_nan_loc_t] += imputed_variance_mzy
+
+        else:
+            Mzy = np.zeros((smoothed_means.shape[1], y.shape[1]))
+            My = np.zeros((y.shape[1], y.shape[1]))
+
+            for t in range(num_time):
+                y_nan_loc_t = y_nan_loc[t, :]
+                c_nan = self.emissions_weights[y_nan_loc_t, :]
+                r_nan = self.emissions_cov[y_nan_loc_t, :][:, y_nan_loc_t]
+
+                if type(smoothed_covs) is tuple:
+                    # smoothed covs are only stored til they converge so we have covs for the beginning and end of the data
+                    converge_size = smoothed_covs[0].shape[0]
+                    if t < converge_size:
+                        this_cov = smoothed_covs[0][t, :, :]
+                    elif num_time - t <= converge_size:
+                        ti = converge_size - (num_time - t)
+                        this_cov = smoothed_covs[1][ti, :, :]
+                    else:
+                        this_cov = smoothed_covs[0][-1, :, :]
+                else:
+                    this_cov = smoothed_covs[t, :, :]
+
+                # add in the variance from y
+                My += y[t, :, None] * y[t, :, None].T
+                # add in the variance from all the values of y you imputed
+                My[np.ix_(y_nan_loc_t, y_nan_loc_t)] += c_nan @ this_cov @ c_nan.T + r_nan
+
+                # add the covariance between the means and y
+                Mzy += smoothed_means[t, :, None] * y[t, :, None].T
+                # additionally add the variance from the inferred neurons
+                Mzy[:, y_nan_loc_t] += this_cov @ c_nan.T
 
         Mz = Mz1 + Mz_emis
         Mu2 = Mu1 + Mu_emis
@@ -940,4 +974,11 @@ class Lgssm:
         zero_pad = np.zeros(zeros_shape)
 
         return np.concatenate((weights, zero_pad), axis)
+
+    @staticmethod
+    def _has_no_scattered_nans(emissions):
+        any_nan_neurons = np.any(np.isnan(emissions), axis=0)
+        all_nan_neurons = np.all(np.isnan(emissions), axis=0)
+        return np.all(any_nan_neurons == all_nan_neurons)
+
 
