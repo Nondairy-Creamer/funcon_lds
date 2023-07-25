@@ -19,13 +19,14 @@ if len(sys.argv) == 1:
 else:
     param_name = sys.argv[1]
 
+param_name = Path(param_name)
 run_params = lu.get_run_params(param_name=param_name)
 
 if rank == 0:
     current_date = datetime.today().strftime('%Y%m%d_%H%M%S')
 
     full_path = Path(__file__).parent.resolve()
-    save_folder = full_path / 'trained_models' / Path(param_name) / current_date
+    save_folder = full_path / 'trained_models' / param_name.stem / current_date
     os.makedirs(save_folder)
 else:
     save_folder = None
