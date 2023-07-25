@@ -479,37 +479,27 @@ class Lgssm:
 
         # Run the smoother backward in time
         # converge_t + 1 is the number of time steps before convergence
+        pred_means = filtered_means[:-1] @ self.dynamics_weights.T + dynamics_inputs[1:] + self.dynamics_offset
+        pred_covs = self.dynamics_weights @ filtered_covs @ self.dynamics_weights.T + self.dynamics_cov
+        G = np.transpose(np.linalg.solve(pred_covs, self.dynamics_weights @ filtered_covs), (0, 2, 1))
         for ti, t in enumerate(reversed(range(num_timesteps - (converge_t + 1), num_timesteps - 1))):
             # Unpack the input
-            filtered_mean = filtered_means[t, :].copy()
-            filtered_cov = filtered_covs[-1, :, :].copy()
             smoothed_cov_next = smoothed_covs_end[ti].copy()
             smoothed_mean_next = smoothed_means[t + 1, :].copy()
 
-            # Compute the smoothed mean and covariance
-            pred_mean = self.dynamics_weights @ filtered_mean + dynamics_inputs[t+1, :] + self.dynamics_offset
-            pred_cov = self.dynamics_weights @ filtered_cov @ self.dynamics_weights.T + self.dynamics_cov
-
-            # This is like the Kalman gain but in reverse
-            # See Eq 8.11 of Saarka's "Bayesian Filtering and Smoothing"
-            G = np.linalg.solve(pred_cov, self.dynamics_weights @ filtered_cov).T
-            smoothed_covs_end.append(filtered_cov + G @ (smoothed_cov_next - pred_cov) @ G.T)
-            smoothed_means[t, :] = filtered_mean + G @ (smoothed_mean_next - pred_mean)
+            smoothed_covs_end.append(filtered_covs[-1] + G[-1] @ (smoothed_cov_next - pred_covs[-1]) @ G[-1].T)
+            smoothed_means[t, :] = filtered_means[t] + G[-1] @ (smoothed_mean_next - pred_means[t])
 
             # Compute the smoothed expectation of x_t x_{t+1}^T
-            smoothed_crosses_end.append(G @ smoothed_cov_next)
+            smoothed_crosses_end.append(G[-1] @ smoothed_cov_next)
 
         for t in reversed(range(converge_t, num_timesteps - (converge_t + 1))):
             # Unpack the input
-            filtered_mean = filtered_means[t, :].copy()
-            smoothed_mean_next = smoothed_means[t + 1, :].copy()
-
             # Compute the smoothed mean and covariance
-            pred_mean = self.dynamics_weights @ filtered_mean + dynamics_inputs[t+1, :] + self.dynamics_offset
 
             # This is like the Kalman gain but in reverse
             # See Eq 8.11 of Saarka's "Bayesian Filtering and Smoothing"
-            smoothed_means[t, :] = filtered_mean + G @ (smoothed_mean_next - pred_mean)
+            smoothed_means[t, :] = filtered_means[t] + G[-1] @ (filtered_means[t+1] - pred_means[t])
 
         smoothed_covs_beginning.append(smoothed_covs_end[-1])
 
@@ -521,14 +511,13 @@ class Lgssm:
             smoothed_mean_next = smoothed_means[t + 1, :].copy()
 
             # Compute the smoothed mean and covariance
-            pred_mean = self.dynamics_weights @ filtered_mean + dynamics_inputs[t+1, :] + self.dynamics_offset
             pred_cov = self.dynamics_weights @ filtered_cov @ self.dynamics_weights.T + self.dynamics_cov
 
             # This is like the Kalman gain but in reverse
             # See Eq 8.11 of Saarka's "Bayesian Filtering and Smoothing"
             G = np.linalg.solve(pred_cov, self.dynamics_weights @ filtered_cov).T
             smoothed_covs_beginning.append(filtered_cov + G @ (smoothed_cov_next - pred_cov) @ G.T)
-            smoothed_means[t, :] = filtered_mean + G @ (smoothed_mean_next - pred_mean)
+            smoothed_means[t, :] = filtered_mean + G @ (smoothed_mean_next - pred_means[t])
 
             # Compute the smoothed expectation of x_t x_{t+1}^T
             smoothed_crosses_beginning.append(G @ smoothed_cov_next)
