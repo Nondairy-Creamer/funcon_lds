@@ -22,7 +22,7 @@ else:
 run_params = lu.get_run_params(param_name=param_name)
 
 if rank == 0:
-    current_date = datetime.today().strftime('%Y_%m_%d')
+    current_date = datetime.today().strftime('%Y%m%d_%H%M%S')
     now = datetime.now()
     beginning_of_day = datetime.combine(now.date(), time(0))
     seconds_of_day = (now - beginning_of_day).seconds
