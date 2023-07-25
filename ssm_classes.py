@@ -497,7 +497,7 @@ class Lgssm:
             # Compute the smoothed expectation of x_t x_{t+1}^T
             smoothed_crosses_end.append(G @ smoothed_cov_next)
 
-        for t in reversed(range(converge_t + 1, num_timesteps - (converge_t + 1))):
+        for t in reversed(range(converge_t, num_timesteps - (converge_t + 1))):
             # Unpack the input
             filtered_mean = filtered_means[t, :]
             smoothed_mean_next = smoothed_means[t + 1, :]
