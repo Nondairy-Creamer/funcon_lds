@@ -34,7 +34,7 @@ else:
 if 'slurm' in run_params.keys():
     if rank == 0:
         # default values that should be the same for
-        slurm = Slurm(**run_params['slurm'], output=save_folder/'slurm_%A.out', job_name=param_name)
+        slurm = Slurm(**run_params['slurm'], output=save_folder/'slurm_%A.out', job_name=param_name.stem)
 
         run_command = ['module purge',
                        'module load anaconda3/2022.10',

@@ -424,17 +424,17 @@ class Lgssm:
         # Run the Kalman filter
         dynamics_inputs = inputs @ self.dynamics_input_weights.T
 
-        smoothed_means = filtered_means
-        smoothed_covs = filtered_covs
-        smoothed_crosses = filtered_covs[:-1, :, :]
+        smoothed_means = filtered_means.copy()
+        smoothed_covs = filtered_covs.copy()
+        smoothed_crosses = filtered_covs[:-1, :, :].copy()
 
         # Run the smoother backward in time
         for t in reversed(range(num_timesteps - 1)):
             # Unpack the input
-            filtered_mean = filtered_means[t, :]
-            filtered_cov = filtered_covs[t, :, :]
-            smoothed_cov_next = smoothed_covs[t + 1, :, :]
-            smoothed_mean_next = smoothed_means[t + 1, :]
+            filtered_mean = filtered_means[t, :].copy()
+            filtered_cov = filtered_covs[t, :, :].copy()
+            smoothed_cov_next = smoothed_covs[t + 1, :, :].copy()
+            smoothed_mean_next = smoothed_means[t + 1, :].copy()
 
             # Compute the smoothed mean and covariance
             pred_mean = self.dynamics_weights @ filtered_mean + dynamics_inputs[t+1, :] + self.dynamics_offset
@@ -469,8 +469,8 @@ class Lgssm:
         # Run the Kalman filter
         dynamics_inputs = inputs @ self.dynamics_input_weights.T
 
-        smoothed_means = filtered_means
-        smoothed_covs_end = [filtered_covs[-1, :, :]]
+        smoothed_means = filtered_means.copy()
+        smoothed_covs_end = [filtered_covs[-1, :, :].copy()]
         smoothed_covs_beginning = []
         smoothed_crosses_end = []
         smoothed_crosses_beginning = []
@@ -479,10 +479,10 @@ class Lgssm:
         # converge_t + 1 is the number of time steps before convergence
         for ti, t in enumerate(reversed(range(num_timesteps - (converge_t + 1), num_timesteps - 1))):
             # Unpack the input
-            filtered_mean = filtered_means[t, :]
-            filtered_cov = filtered_covs[-1, :, :]
-            smoothed_cov_next = smoothed_covs_end[ti]
-            smoothed_mean_next = smoothed_means[t + 1, :]
+            filtered_mean = filtered_means[t, :].copy()
+            filtered_cov = filtered_covs[-1, :, :].copy()
+            smoothed_cov_next = smoothed_covs_end[ti].copy()
+            smoothed_mean_next = smoothed_means[t + 1, :].copy()
 
             # Compute the smoothed mean and covariance
             pred_mean = self.dynamics_weights @ filtered_mean + dynamics_inputs[t+1, :] + self.dynamics_offset
@@ -499,8 +499,8 @@ class Lgssm:
 
         for t in reversed(range(converge_t, num_timesteps - (converge_t + 1))):
             # Unpack the input
-            filtered_mean = filtered_means[t, :]
-            smoothed_mean_next = smoothed_means[t + 1, :]
+            filtered_mean = filtered_means[t, :].copy()
+            smoothed_mean_next = smoothed_means[t + 1, :].copy()
 
             # Compute the smoothed mean and covariance
             pred_mean = self.dynamics_weights @ filtered_mean + dynamics_inputs[t+1, :] + self.dynamics_offset
@@ -513,10 +513,10 @@ class Lgssm:
 
         for ti, t in enumerate(reversed(range(0, converge_t))):
             # Unpack the input
-            filtered_mean = filtered_means[t, :]
-            filtered_cov = filtered_covs[t, :, :]
-            smoothed_cov_next = smoothed_covs_beginning[ti]
-            smoothed_mean_next = smoothed_means[t + 1, :]
+            filtered_mean = filtered_means[t, :].copy()
+            filtered_cov = filtered_covs[t, :, :].copy()
+            smoothed_cov_next = smoothed_covs_beginning[ti].copy()
+            smoothed_mean_next = smoothed_means[t + 1, :].copy()
 
             # Compute the smoothed mean and covariance
             pred_mean = self.dynamics_weights @ filtered_mean + dynamics_inputs[t+1, :] + self.dynamics_offset
@@ -801,28 +801,24 @@ class Lgssm:
         Muy = inputs.T @ y  # E[uu@yy']
 
         num_time = y.shape[0]
-        use_fast_version = self._has_no_scattered_nans(emissions)
+        use_fast_version = type(smoothed_covs) is tuple
 
         if use_fast_version:
             y_nan_loc_t = y_nan_loc[0, :]
             c_nan = self.emissions_weights[y_nan_loc_t, :]
             r_nan = self.emissions_cov[y_nan_loc_t, :][:, y_nan_loc_t]
 
-            if type(smoothed_covs) is tuple:
-                # smoothed covs are only stored til they converge so we have covs for the beginning and end of the data
-                converge_size = smoothed_covs[0].shape[0]
-                num_middle_covs = num_time - 2 * converge_size
+            # smoothed covs are only stored til they converge so we have covs for the beginning and end of the data
+            converge_size = smoothed_covs[0].shape[0]
+            num_middle_covs = num_time - 2 * converge_size
 
-                imputed_variance_my = np.sum(c_nan @ smoothed_covs[0] @ c_nan.T + r_nan, axis=0)
-                imputed_variance_my += np.sum(c_nan @ smoothed_covs[1] @ c_nan.T + r_nan, axis=0)
-                imputed_variance_my += num_middle_covs * (c_nan @ smoothed_covs[0][-1, :, :] @ c_nan.T + r_nan)
+            imputed_variance_my = np.sum(c_nan @ smoothed_covs[0] @ c_nan.T + r_nan, axis=0)
+            imputed_variance_my += np.sum(c_nan @ smoothed_covs[1] @ c_nan.T + r_nan, axis=0)
+            imputed_variance_my += num_middle_covs * (c_nan @ smoothed_covs[0][-1, :, :] @ c_nan.T + r_nan)
 
-                imputed_variance_mzy = np.sum(smoothed_covs[0] @ c_nan.T, axis=0)
-                imputed_variance_mzy += np.sum(smoothed_covs[1] @ c_nan.T, axis=0)
-                imputed_variance_mzy += num_middle_covs * (smoothed_covs[0][-1, :, :] @ c_nan.T)
-            else:
-                imputed_variance_my = np.sum(c_nan @ smoothed_covs @ c_nan.T + r_nan, axis=0)
-                imputed_variance_mzy = np.sum(smoothed_covs @ c_nan.T, axis=0)
+            imputed_variance_mzy = np.sum(smoothed_covs[0] @ c_nan.T, axis=0)
+            imputed_variance_mzy += np.sum(smoothed_covs[1] @ c_nan.T, axis=0)
+            imputed_variance_mzy += num_middle_covs * (smoothed_covs[0][-1, :, :] @ c_nan.T)
 
             # add in the variance from y
             # add in the variance from all the values of y you imputed
@@ -843,18 +839,7 @@ class Lgssm:
                 c_nan = self.emissions_weights[y_nan_loc_t, :]
                 r_nan = self.emissions_cov[y_nan_loc_t, :][:, y_nan_loc_t]
 
-                if type(smoothed_covs) is tuple:
-                    # smoothed covs are only stored til they converge so we have covs for the beginning and end of the data
-                    converge_size = smoothed_covs[0].shape[0]
-                    if t < converge_size:
-                        this_cov = smoothed_covs[0][t, :, :]
-                    elif num_time - t <= converge_size:
-                        ti = converge_size - (num_time - t)
-                        this_cov = smoothed_covs[1][ti, :, :]
-                    else:
-                        this_cov = smoothed_covs[0][-1, :, :]
-                else:
-                    this_cov = smoothed_covs[t, :, :]
+                this_cov = smoothed_covs[t, :, :].copy()
 
                 # add in the variance from y
                 My += y[t, :, None] * y[t, :, None].T
