@@ -14,11 +14,11 @@ def plot_model_params(model_trained, model_true=None):
     # Plots
     # Plot the log likelihood
     plt.figure()
-    plt.plot(model_trained.log_likelihood)
+    plt.plot(model_trained.log_likelihood, label='model')
 
     if ll_true_params is not None:
-        plt.axhline(ll_true_params, color='k', linestyle=':', label="true")
-        plt.legend({'log likelihood for model', 'log likelihood for true parameters'})
+        plt.axhline(ll_true_params, color='k', linestyle=':', label='true')
+        plt.legend()
 
     plt.xlabel('iterations')
     plt.ylabel('log likelihood')

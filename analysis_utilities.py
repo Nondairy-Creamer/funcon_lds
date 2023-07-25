@@ -278,11 +278,11 @@ def plot_missing_neuron(model, emissions, inputs, posterior, cell_ids, neuron_to
 
     plot_x = np.arange(emissions.shape[0]) * sample_rate
     plt.figure()
-    plt.plot(plot_x, emissions)
-    plt.plot(plot_x, posterior)
-    plt.plot(plot_x, posterior_missing)
+    plt.plot(plot_x, emissions, label='measured')
+    plt.plot(plot_x, posterior, label='full posterior')
+    plt.plot(plot_x, posterior_missing, label='posterior w missing neuron')
     plt.xlabel('time (s)')
-    plt.legend(['measured', 'full posterior', 'posterior missing'])
+    plt.legend()
     plt.title(neuron_to_remove + ' missing')
     plt.show()
 
@@ -403,16 +403,16 @@ def plot_stim_response(emissions, inputs_full, posterior, prior, cell_ids, cell_
 
     for i in range(measured_stim_responses.shape[1]):
         plt.figure()
-        plt.plot(plot_x, measured_stim_responses[:, i, neuron_to_stim_ind])
-        plt.plot(plot_x, posterior_stim_responses[:, i, neuron_to_stim_ind])
-        plt.plot(plot_x, prior_stim_responses[:, i, neuron_to_stim_ind])
+        plt.plot(plot_x, measured_stim_responses[:, i, neuron_to_stim_ind], label='measured')
+        plt.plot(plot_x, posterior_stim_responses[:, i, neuron_to_stim_ind], label='smoothed')
+        plt.plot(plot_x, prior_stim_responses[:, i, neuron_to_stim_ind], label='model')
         plt.axvline(0, color='k', linestyle='--')
         plt.axhline(0, color='k', linestyle='--')
         plt.ylim(ylim)
         plt.ylabel(cell_ids_chosen[i])
         plt.xlabel('time (s)')
 
-        plt.legend(['measured', 'smoothed', 'model'])
+        plt.legend()
         plt.title('average responses to stimulation of: ' + neuron_to_stim)
 
     plt.show()

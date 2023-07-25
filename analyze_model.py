@@ -21,7 +21,7 @@ colormap = mpl.colormaps['coolwarm']
 
 # load in the model and the data
 model_path = model_folder / 'model_trained.pkl'
-data_path = model_folder / 'data.pkl'
+data_path = model_folder / 'data_train.pkl'
 posterior_path = model_folder / 'posterior.pkl'
 prior_path = model_folder / 'prior.pkl'
 prior_w_noise_path = model_folder / 'prior_w_noise.pkl'
