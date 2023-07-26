@@ -114,7 +114,7 @@ def load_and_preprocess_data(fun_atlas_path, num_data_sets=None, force_preproces
     path_name = []
 
     # find all files in the folder that have francesco_green.npy
-    for i in fun_atlas_path.rglob('francesco_green.npy'):
+    for i in sorted(fun_atlas_path.rglob('francesco_green.npy')):
         path_name.append(i.parts[-2])
 
         # check if a processed version exists
