@@ -40,6 +40,7 @@ if 'slurm' in run_params.keys():
                        'module load anaconda3/2022.10',
                        'module load openmpi/gcc/4.1.2',
                        'conda activate fast-mpi4py',
+                       'export OPENBLAS_NUM_THREADS=1'
                        'srun python -uc \"import fit_data; fit_data.' + run_params['fit_file'] + '(\'' + str(param_name) + '\',\'' + str(save_folder) + '\')\"',
                        ]
 
