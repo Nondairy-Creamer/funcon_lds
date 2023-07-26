@@ -555,9 +555,9 @@ class Lgssm:
         init_mean = data[2]
         init_cov = data[3]
 
-        ll, suff_stats, smoothed_means, smoothed_covs = self.get_suff_stats(emissions, inputs, init_mean, init_cov)
+        ll, suff_stats, smoothed_means, new_init_covs = self.get_suff_stats(emissions, inputs, init_mean, init_cov)
 
-        return ll, suff_stats, smoothed_means, smoothed_covs
+        return ll, suff_stats, smoothed_means, new_init_covs
 
     def em_step(self, emissions_list, inputs_list, init_mean_list, init_cov_list, cpu_id=0, num_cpus=1):
         # mm = runMstep_LDSgaussian(yy,uu,mm,zzmu,zzcov,zzcov_d1,optsEM)
@@ -619,7 +619,7 @@ class Lgssm:
             log_likelihood = np.sum(np.stack(log_likelihood))
             suff_stats = [i[1] for i in ll_suff_stats_smoothed_means]
             smoothed_means = [i[2] for i in ll_suff_stats_smoothed_means]
-            smoothed_covs = [i[3] for i in ll_suff_stats_smoothed_means]
+            new_init_covs = [i[3] for i in ll_suff_stats_smoothed_means]
 
             Mz1_list = [i['Mz1'] for i in suff_stats]
             Mz2_list = [i['Mz2'] for i in suff_stats]
@@ -760,7 +760,7 @@ class Lgssm:
             if not np.all(self.emissions_cov == self.emissions_cov.T):
                 warnings.warn('emissions_cov is not symmetric')
 
-            return log_likelihood, smoothed_means, smoothed_covs
+            return log_likelihood, smoothed_means, new_init_covs
 
         return None, None, None
 
@@ -874,7 +874,12 @@ class Lgssm:
                       'nt': nt,
                       }
 
-        return ll, suff_stats, smoothed_means, smoothed_covs
+        if type(smoothed_covs) is tuple:
+            new_init_covs = smoothed_covs[0][0, :, :]
+        else:
+            new_init_covs = smoothed_covs[0, :, :]
+
+        return ll, suff_stats, smoothed_means, new_init_covs
 
     def _pad_init_for_lags(self):
         self.dynamics_weights_init = self._get_lagged_weights(self.dynamics_weights_init, self.dynamics_lags, fill='eye')

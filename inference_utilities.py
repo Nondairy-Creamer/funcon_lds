@@ -111,17 +111,17 @@ def fit_em(model, emissions, inputs, init_mean=None, init_cov=None, num_steps=10
     for ep in range(num_steps):
         model = comm.bcast(model, root=0)
 
-        ll, smoothed_means, smoothed_covs = \
+        ll, smoothed_means, new_init_covs = \
             model.em_step(emissions, inputs, init_mean, init_cov, cpu_id=rank, num_cpus=size)
 
         if rank == 0:
             # set the initial mean and cov to the first smoothed mean / cov
             for i in range(len(smoothed_means)):
                 init_mean[i] = smoothed_means[i][0, :]
-                if type(smoothed_covs[i]) is tuple:
-                    init_cov[i] = smoothed_covs[i][0][0, :, :]
+                if type(new_init_covs[i]) is tuple:
+                    init_cov[i] = new_init_covs[i][0]
                 else:
-                    init_cov[i] = smoothed_covs[i][0, :, :]
+                    init_cov[i] = new_init_covs[i]
 
             log_likelihood_out.append(ll)
             time_out.append(time.time() - start)
