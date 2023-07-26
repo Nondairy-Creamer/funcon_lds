@@ -82,10 +82,10 @@ def fit_em(model, emissions, inputs, init_mean=None, init_cov=None, num_steps=10
     rank = comm.Get_rank()
     size = comm.Get_size()
 
-    if len(emissions) < size:
-        raise Exception('More CPUs requested than number of data sets. Number of cpus must be <= number of data sets')
-
     if rank == 0:
+        if len(emissions) < size:
+            raise Exception('Number of cpus must be <= number of data sets')
+
         # lag the inputs if the model has lags
         inputs = [model.get_lagged_data(i, model.dynamics_input_lags) for i in inputs]
 
