@@ -554,6 +554,7 @@ class Lgssm:
         inputs = data[1]
         init_mean = data[2]
         init_cov = data[3]
+
         ll, suff_stats, smoothed_means, smoothed_covs = self.get_suff_stats(emissions, inputs, init_mean, init_cov)
 
         return ll, suff_stats, smoothed_means, smoothed_covs
@@ -597,10 +598,9 @@ class Lgssm:
         else:
             data_out = None
 
-        ll_suff_stats_smoothed_means = []
-
         data = iu.individual_scatter(data_out, root=0)
 
+        ll_suff_stats_smoothed_means = []
         for d in data:
             ll_suff_stats_smoothed_means.append(self.parallel_suff_stats(d))
 
