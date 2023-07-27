@@ -36,13 +36,15 @@ if 'slurm' in run_params.keys():
         # default values that should be the same for
         slurm = Slurm(**run_params['slurm'], output=save_folder/'slurm_%A.out', job_name=param_name.stem)
 
+        cpus_per_job = run_params['cpus_per_job']
+
         run_command = ['module purge',
                        'module load anaconda3/2022.10',
                        'module load openmpi/gcc/4.1.2',
                        'conda activate fast-mpi4py',
-                       'export MKL_NUM_THREADS=1',
-                       'export OPENBLAS_NUM_THREADS=1',
-                       'export OMP_NUM_THREADS=1',
+                       'export MKL_NUM_THREADS=' + str(cpus_per_job),
+                       'export OPENBLAS_NUM_THREADS=' + str(cpus_per_job),
+                       'export OMP_NUM_THREADS=' + str(cpus_per_job),
                        'srun python -uc \"import fit_data; fit_data.' + run_params['fit_file'] + '(\'' + str(param_name) + '\',\'' + str(save_folder) + '\')\"',
                        ]
 
