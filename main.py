@@ -36,7 +36,7 @@ if 'slurm' in run_params.keys():
         # default values that should be the same for
         slurm = Slurm(**run_params['slurm'], output=save_folder/'slurm_%A.out', job_name=param_name.stem)
 
-        cpus_per_task = run_params['cpus_per_task']
+        cpus_per_task = run_params['slurm']['cpus_per_task']
 
         run_command = ['module purge',
                        'module load anaconda3/2022.10',
