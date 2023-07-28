@@ -139,6 +139,7 @@ def fit_experimental(param_name, save_folder):
         run_params['param_props']['mask']['dynamics_input_weights'] = input_mask
         # get the input dimension after removing the neurons that were never stimulated
         input_dim = inputs[0].shape[1]
+        data_train['inputs'] = inputs
 
         # initialize the model and set model weights
         model_trained = Lgssm(num_neurons, num_neurons, input_dim,
