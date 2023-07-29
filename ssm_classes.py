@@ -302,7 +302,7 @@ class Lgssm:
 
         return data_dict
 
-    def lgssm_filter(self, emissions, inputs, init_mean, init_cov):
+    def lgssm_filter(self, emissions, inputs, init_mean, init_cov, use_memmap=False):
         """Run a Kalman filter to produce the marginal likelihood and filtered state estimates.
         adapted from Dynamax.
         This function can deal with missing data if the data is missing the entire time trace
@@ -319,13 +319,13 @@ class Lgssm:
         dynamics_inputs = inputs @ self.dynamics_input_weights.T
         emissions_inputs = inputs @ self.emissions_input_weights.T
 
-        filtered_means_list = []
-        filtered_covs_list = []
-        converge_t = num_timesteps - 1
-
-        # determine if you're going to check for covariance convergence
-        # save a lot of time and memory, but can only be done if each neuron is either all or no nans
-        check_convergence = self._has_no_scattered_nans(emissions)
+        filtered_means = np.zeros((num_timesteps, self.dynamics_dim_full))
+        if use_memmap:
+            file_path = '/tmp/filtered_covs.tmp'
+            filtered_covs = np.memmap(file_path, dtype='float64', mode='w+',
+                                      shape=((num_timesteps, self.dynamics_dim_full, self.dynamics_dim_full)))
+        else:
+            filtered_covs = np.zeros((num_timesteps, self.dynamics_dim_full, self.dynamics_dim_full))
 
         # step through the loop and keep calculating the covariances until they converge
         for t in range(num_timesteps):
@@ -358,64 +358,12 @@ class Lgssm:
             filtered_cov = pred_cov - K @ ll_cov @ K.T
 
             filtered_mean = pred_mean + K @ mean_diff
-            filtered_means_list.append(filtered_mean)
-            filtered_covs_list.append(filtered_cov)
+            filtered_means[t, :] = filtered_mean
+            filtered_covs[t, :, :] = filtered_cov
 
-            # check if covariance has converged
-            if check_convergence and t > 0:
-                max_abs_diff_cov = np.max(np.abs(filtered_covs_list[-1] - filtered_covs_list[-2]))
-                if max_abs_diff_cov < 1 / self.epsilon:
-                    converge_t = t
-                    break
+        return ll, filtered_means, filtered_covs
 
-        # once the covariances converge, don't recalculate them
-        for t in range(converge_t + 1, num_timesteps):
-            # Shorthand: get parameters and input for time index t
-            y = emissions[t, :]
-
-            # locate nans and set covariance at their location to a large number to marginalize over them
-            nan_loc = np.isnan(y)
-            y = np.where(nan_loc, 0, y)
-
-            # Predict the next state
-            pred_mean = self.dynamics_weights @ filtered_mean + dynamics_inputs[t, :] + self.dynamics_offset
-
-            # Update the log likelihood
-            ll_mu = self.emissions_weights @ pred_mean + emissions_inputs[t, :] + self.emissions_offset
-
-            mean_diff = y - ll_mu
-            ll += -1 / 2 * (emissions.shape[1] * np.log(2 * np.pi) + ll_cov_logdet +
-                            np.dot(mean_diff, ll_cov_inv @ mean_diff))
-
-            filtered_mean = pred_mean + K @ mean_diff
-
-            filtered_means_list.append(filtered_mean)
-
-        filtered_means_list = np.stack(filtered_means_list)
-        filtered_covs_list = np.stack(filtered_covs_list)
-
-        return ll, filtered_means_list, filtered_covs_list, converge_t
-
-    def lgssm_smoother(self, emissions, inputs, init_mean, init_cov):
-        if inputs.shape[1] < self.input_dim_full:
-            inputs = self.get_lagged_data(inputs, self.dynamics_input_lags)
-
-        ll, filtered_means, filtered_covs, converge_t = self.lgssm_filter(emissions, inputs, init_mean, init_cov)
-
-        if converge_t < emissions.shape[0] / 2:
-            # print('Fast smoother, converge time: ', converge_t, '/', emissions.shape[0] - 1)
-            smoothed_means, smoothed_covs, smoothed_crosses = \
-                self.lgssm_smoother_fast(emissions, inputs, filtered_means, filtered_covs, converge_t)
-        else:
-            # print('Slow smoother, converge time: ', converge_t, '/', emissions.shape[0] - 1)
-            pad_covs = np.tile(filtered_covs[None, -1, :, :], (emissions.shape[0] - converge_t - 1, 1, 1))
-            filtered_covs = np.concatenate((filtered_covs, pad_covs), axis=0)
-            smoothed_means, smoothed_covs, smoothed_crosses = \
-                self.lgssm_smoother_complete(emissions, inputs, filtered_means, filtered_covs)
-
-        return ll, filtered_means, filtered_covs, smoothed_means, smoothed_covs, smoothed_crosses
-
-    def lgssm_smoother_complete(self, emissions, inputs, filtered_means, filtered_covs):
+    def lgssm_smoother(self, emissions, inputs, init_mean, init_cov, use_memmap=False):
         r"""Run forward-filtering, backward-smoother to compute expectations
         under the posterior distribution on latent states. Technically, this
         implements the Rauch-Tung-Striebel (RTS) smoother.
@@ -423,20 +371,28 @@ class Lgssm:
         """
         num_timesteps = emissions.shape[0]
 
-        # Run the Kalman filter
+        if inputs.shape[1] < self.input_dim_full:
+            inputs = self.get_lagged_data(inputs, self.dynamics_input_lags)
+
+        # first run the kalman forward pass
+        ll, filtered_means, filtered_covs = self.lgssm_filter(emissions, inputs, init_mean, init_cov, use_memmap=use_memmap)
+
         dynamics_inputs = inputs @ self.dynamics_input_weights.T
 
         smoothed_means = filtered_means.copy()
-        smoothed_covs = filtered_covs.copy()
-        smoothed_crosses = filtered_covs[:-1, :, :].copy()
+        last_cov = filtered_covs[-1, :, :]
+        smoothed_cov_next = last_cov.copy()
+        smoothed_covs_sum = np.zeros((self.dynamics_dim_full, self.dynamics_dim_full))
+        smoothed_crosses_sum = last_cov.copy()
+        my_correction = np.zeros((self.emissions_dim, self.emissions_dim))
+        mzy_correction = np.zeros((self.dynamics_dim_full, self.emissions_dim))
 
         # Run the smoother backward in time
         for t in reversed(range(num_timesteps - 1)):
             # Unpack the input
-            filtered_mean = filtered_means[t, :].copy()
-            filtered_cov = filtered_covs[t, :, :].copy()
-            smoothed_cov_next = smoothed_covs[t + 1, :, :].copy()
-            smoothed_mean_next = smoothed_means[t + 1, :].copy()
+            filtered_mean = filtered_means[t, :]
+            filtered_cov = filtered_covs[t, :, :]
+            smoothed_mean_next = smoothed_means[t + 1, :]
 
             # Compute the smoothed mean and covariance
             pred_mean = self.dynamics_weights @ filtered_mean + dynamics_inputs[t+1, :] + self.dynamics_offset
@@ -445,100 +401,34 @@ class Lgssm:
             # This is like the Kalman gain but in reverse
             # See Eq 8.11 of Saarka's "Bayesian Filtering and Smoothing"
             G = np.linalg.solve(pred_cov, self.dynamics_weights @ filtered_cov).T
-            smoothed_covs[t, :, :] = filtered_cov + G @ (smoothed_cov_next - pred_cov) @ G.T
+            smoothed_cov_this = filtered_cov + G @ (smoothed_cov_next - pred_cov) @ G.T
             smoothed_means[t, :] = filtered_mean + G @ (smoothed_mean_next - pred_mean)
+
+            smoothed_cov_next = smoothed_cov_this.copy()
+            smoothed_covs_sum += smoothed_cov_this
 
             # Compute the smoothed expectation of x_t x_{t+1}^T
             # TODO: ask why the second expression is not in jonathan's code
-            smoothed_crosses[t, :, :] = G @ smoothed_cov_next #+ smoothed_means[:, t, :, None] * smoothed_mean_next[:, None, :]
+            smoothed_crosses_sum += G @ smoothed_cov_next #+ smoothed_means[:, t, :, None] * smoothed_mean_next[:, None, :]
 
-        return smoothed_means, smoothed_covs, smoothed_crosses
+            # now calculate the correction for my and mzy
+            y_nan_loc_t = np.isnan(emissions[t, :])
+            c_nan = self.emissions_weights[y_nan_loc_t, :]
+            r_nan = self.emissions_cov[np.ix_(y_nan_loc_t, y_nan_loc_t)]
 
-    def lgssm_smoother_fast(self, emissions, inputs, filtered_means, filtered_covs, converge_t):
-        r"""Run forward-filtering, backward-smoother to compute expectations
-        under the posterior distribution on latent states. Technically, this
-        implements the Rauch-Tung-Striebel (RTS) smoother.
-        Adopted from Dynamax
-        """
-        # runs the kalman smooth in 3 dicrete chunks
-        # 1) at the end of the data where the smoothed covariance has not converged
-        # 2) in the middle of the data where both the filtered and smoothed covs have converged
-        #    so we don't need to keep recalculating the covariance and inverting it
-        # 3) at the beginning of the data where the filtered covariance and smoothed covariance have not converged
+            # add in the variance from all the values of y you imputed
+            my_correction[np.ix_(y_nan_loc_t, y_nan_loc_t)] += c_nan @ smoothed_cov_this @ c_nan.T + r_nan
+            mzy_correction[:, y_nan_loc_t] += smoothed_cov_this @ c_nan.T
 
-        num_timesteps = emissions.shape[0]
+        suff_stats = {}
+        suff_stats['smoothed_covs_sum'] = smoothed_covs_sum
+        suff_stats['smoothed_crosses_sum'] = smoothed_crosses_sum
+        suff_stats['first_cov'] = smoothed_cov_this
+        suff_stats['last_cov'] = last_cov
+        suff_stats['my_correction'] = my_correction
+        suff_stats['mzy_correction'] = mzy_correction
 
-        # Run the Kalman filter
-        dynamics_inputs = inputs @ self.dynamics_input_weights.T
-
-        smoothed_means = filtered_means.copy()
-        smoothed_covs_end = [filtered_covs[-1, :, :].copy()]
-        smoothed_covs_beginning = []
-        smoothed_crosses_end = []
-        smoothed_crosses_beginning = []
-
-        # Run the smoother backward in time
-        # converge_t + 1 is the number of time steps before convergence
-        for ti, t in enumerate(reversed(range(num_timesteps - (converge_t + 1), num_timesteps - 1))):
-            # Unpack the input
-            filtered_mean = filtered_means[t, :].copy()
-            filtered_cov = filtered_covs[-1, :, :].copy()
-            smoothed_cov_next = smoothed_covs_end[ti].copy()
-            smoothed_mean_next = smoothed_means[t + 1, :].copy()
-
-            # Compute the smoothed mean and covariance
-            pred_mean = self.dynamics_weights @ filtered_mean + dynamics_inputs[t+1, :] + self.dynamics_offset
-            pred_cov = self.dynamics_weights @ filtered_cov @ self.dynamics_weights.T + self.dynamics_cov
-
-            # This is like the Kalman gain but in reverse
-            # See Eq 8.11 of Saarka's "Bayesian Filtering and Smoothing"
-            G = np.linalg.solve(pred_cov, self.dynamics_weights @ filtered_cov).T
-            smoothed_covs_end.append(filtered_cov + G @ (smoothed_cov_next - pred_cov) @ G.T)
-            smoothed_means[t, :] = filtered_mean + G @ (smoothed_mean_next - pred_mean)
-
-            # Compute the smoothed expectation of x_t x_{t+1}^T
-            smoothed_crosses_end.append(G @ smoothed_cov_next)
-
-        for t in reversed(range(converge_t, num_timesteps - (converge_t + 1))):
-            # Unpack the input
-            filtered_mean = filtered_means[t, :].copy()
-            smoothed_mean_next = smoothed_means[t + 1, :].copy()
-
-            # Compute the smoothed mean and covariance
-            pred_mean = self.dynamics_weights @ filtered_mean + dynamics_inputs[t+1, :] + self.dynamics_offset
-
-            # This is like the Kalman gain but in reverse
-            # See Eq 8.11 of Saarka's "Bayesian Filtering and Smoothing"
-            smoothed_means[t, :] = filtered_mean + G @ (smoothed_mean_next - pred_mean)
-
-        smoothed_covs_beginning.append(smoothed_covs_end[-1])
-
-        for ti, t in enumerate(reversed(range(0, converge_t))):
-            # Unpack the input
-            filtered_mean = filtered_means[t, :].copy()
-            filtered_cov = filtered_covs[t, :, :].copy()
-            smoothed_cov_next = smoothed_covs_beginning[ti].copy()
-            smoothed_mean_next = smoothed_means[t + 1, :].copy()
-
-            # Compute the smoothed mean and covariance
-            pred_mean = self.dynamics_weights @ filtered_mean + dynamics_inputs[t+1, :] + self.dynamics_offset
-            pred_cov = self.dynamics_weights @ filtered_cov @ self.dynamics_weights.T + self.dynamics_cov
-
-            # This is like the Kalman gain but in reverse
-            # See Eq 8.11 of Saarka's "Bayesian Filtering and Smoothing"
-            G = np.linalg.solve(pred_cov, self.dynamics_weights @ filtered_cov).T
-            smoothed_covs_beginning.append(filtered_cov + G @ (smoothed_cov_next - pred_cov) @ G.T)
-            smoothed_means[t, :] = filtered_mean + G @ (smoothed_mean_next - pred_mean)
-
-            # Compute the smoothed expectation of x_t x_{t+1}^T
-            smoothed_crosses_beginning.append(G @ smoothed_cov_next)
-
-        smoothed_covs_beginning = np.flip(np.stack(smoothed_covs_beginning), axis=0)
-        smoothed_covs_end = np.flip(np.stack(smoothed_covs_end), axis=0)
-        smoothed_crosses_beginning = np.flip(np.stack(smoothed_crosses_beginning), axis=0)
-        smoothed_crosses_end = np.flip(np.stack(smoothed_crosses_end), axis=0)
-
-        return smoothed_means, (smoothed_covs_beginning, smoothed_covs_end), (smoothed_crosses_beginning, smoothed_crosses_end)
+        return ll, smoothed_means, suff_stats
 
     def get_ll(self, emissions, inputs, init_mean, init_cov):
         # get the log-likelihood of the data
@@ -549,18 +439,18 @@ class Lgssm:
 
         return ll
 
-    def parallel_suff_stats(self, data):
+    def parallel_suff_stats(self, data, use_memmap=False):
         emissions = data[0]
         inputs = data[1]
         init_mean = data[2]
         init_cov = data[3]
 
-        ll, suff_stats, smoothed_means, new_init_covs = self.get_suff_stats(emissions, inputs, init_mean, init_cov)
+        ll, suff_stats, smoothed_means, new_init_covs = self.get_suff_stats(emissions, inputs, init_mean, init_cov,
+                                                                            use_memmap=use_memmap)
 
         return ll, suff_stats, smoothed_means, new_init_covs
 
-    def em_step(self, emissions_list, inputs_list, init_mean_list, init_cov_list, cpu_id=0, num_cpus=1):
-        # mm = runMstep_LDSgaussian(yy,uu,mm,zzmu,zzcov,zzcov_d1,optsEM)
+    def em_step(self, emissions_list, inputs_list, init_mean_list, init_cov_list, cpu_id=0, num_cpus=1, use_memmap=False):
         #
         # Run M-step updates for LDS-Gaussian model
         #
@@ -602,7 +492,7 @@ class Lgssm:
 
         ll_suff_stats_smoothed_means = []
         for d in data:
-            ll_suff_stats_smoothed_means.append(self.parallel_suff_stats(d))
+            ll_suff_stats_smoothed_means.append(self.parallel_suff_stats(d, use_memmap=use_memmap))
 
         ll_suff_stats_smoothed_means = iu.individual_gather(ll_suff_stats_smoothed_means, root=0)
 
@@ -764,31 +654,27 @@ class Lgssm:
 
         return None, None, None
 
-    def get_suff_stats(self, emissions, inputs, init_mean, init_cov):
+    def get_suff_stats(self, emissions, inputs, init_mean, init_cov, use_memmap=False):
         nt = emissions.shape[0]
 
-        ll, filtered_means, filtered_covs, smoothed_means, smoothed_covs, smoothed_crosses = \
-            self.lgssm_smoother(emissions, inputs, init_mean, init_cov)
+        ll, smoothed_means, suff_stats = \
+            self.lgssm_smoother(emissions, inputs, init_mean, init_cov, use_memmap=use_memmap)
+
+        smoothed_covs_sum = suff_stats['smoothed_covs_sum']
+        smoothed_crosses_sum = suff_stats['smoothed_crosses_sum']
+        first_cov = suff_stats['first_cov']
+        last_cov = suff_stats['last_cov']
+        my_correction = suff_stats['my_correction']
+        mzy_correction = suff_stats['mzy_correction']
 
         y_nan_loc = np.isnan(emissions)
         y = np.where(y_nan_loc, (self.emissions_weights @ smoothed_means.T).T, emissions)
 
         # =============== Update dynamics parameters ==============
         # Compute sufficient statistics for latents
-        if type(smoothed_covs) is tuple:
-            covs_summed = smoothed_covs[0][1:, :, :].sum(0) + smoothed_covs[1][:-1, :, :].sum(0) + smoothed_covs[0][-1, :, :] * (nt - 2 * smoothed_covs[0].shape[0])
-            crosses_summed = smoothed_crosses[0].sum(0) + smoothed_crosses[1].sum(0) + smoothed_crosses[0][-1, :, :] * (nt - 2 * smoothed_crosses[0].shape[0] - 1)
-            first_cov = smoothed_covs[0][0, :, :]
-            last_cov = smoothed_covs[1][-1, :, :]
-        else:
-            covs_summed = smoothed_covs[1:-1, :, :].sum(0)
-            crosses_summed = smoothed_crosses[1:-1, :, :].sum(0)
-            first_cov = smoothed_covs[0, :, :]
-            last_cov = smoothed_covs[-1, :, :]
-
-        Mz1 = covs_summed + first_cov + smoothed_means[:-1, :].T @ smoothed_means[:-1, :]  # E[zz@zz'] for 1 to T-1
-        Mz2 = covs_summed + last_cov + smoothed_means[1:, :].T @ smoothed_means[1:, :]  # E[zz@zz'] for 2 to T
-        Mz12 = crosses_summed + smoothed_means[:-1, :].T @ smoothed_means[1:, :]  # E[zz_t@zz_{t+1}'] (above-diag)
+        Mz1 = smoothed_covs_sum + first_cov + smoothed_means[:-1, :].T @ smoothed_means[:-1, :]  # E[zz@zz'] for 1 to T-1
+        Mz2 = smoothed_covs_sum + last_cov + smoothed_means[1:, :].T @ smoothed_means[1:, :]  # E[zz@zz'] for 2 to T
+        Mz12 = smoothed_crosses_sum + smoothed_means[:-1, :].T @ smoothed_means[1:, :]  # E[zz_t@zz_{t+1}'] (above-diag)
 
         # Compute sufficient statistics for inputs x latents
         Mu1 = inputs[1:, :].T @ inputs[1:, :]  # E[uu@uu'] for 2 to T
@@ -802,56 +688,8 @@ class Lgssm:
         Muz_emis = inputs[0, :, None] * smoothed_means[0, None, :]  # reuse Muz
         Muy = inputs.T @ y  # E[uu@yy']
 
-        num_time = y.shape[0]
-        use_fast_version = type(smoothed_covs) is tuple
-
-        if use_fast_version:
-            y_nan_loc_t = y_nan_loc[0, :]
-            c_nan = self.emissions_weights[y_nan_loc_t, :]
-            r_nan = self.emissions_cov[y_nan_loc_t, :][:, y_nan_loc_t]
-
-            # smoothed covs are only stored til they converge so we have covs for the beginning and end of the data
-            converge_size = smoothed_covs[0].shape[0]
-            num_middle_covs = num_time - 2 * converge_size
-
-            imputed_variance_my = np.sum(c_nan @ smoothed_covs[0] @ c_nan.T + r_nan, axis=0)
-            imputed_variance_my += np.sum(c_nan @ smoothed_covs[1] @ c_nan.T + r_nan, axis=0)
-            imputed_variance_my += num_middle_covs * (c_nan @ smoothed_covs[0][-1, :, :] @ c_nan.T + r_nan)
-
-            imputed_variance_mzy = np.sum(smoothed_covs[0] @ c_nan.T, axis=0)
-            imputed_variance_mzy += np.sum(smoothed_covs[1] @ c_nan.T, axis=0)
-            imputed_variance_mzy += num_middle_covs * (smoothed_covs[0][-1, :, :] @ c_nan.T)
-
-            # add in the variance from y
-            # add in the variance from all the values of y you imputed
-            My = y.T @ y
-            My[np.ix_(y_nan_loc_t, y_nan_loc_t)] += imputed_variance_my
-
-            # add the covariance between the means and y
-            # additionally add the variance from the inferred neurons
-            Mzy = smoothed_means.T @ y
-            Mzy[:, y_nan_loc_t] += imputed_variance_mzy
-
-        else:
-            Mzy = np.zeros((smoothed_means.shape[1], y.shape[1]))
-            My = np.zeros((y.shape[1], y.shape[1]))
-
-            for t in range(num_time):
-                y_nan_loc_t = y_nan_loc[t, :]
-                c_nan = self.emissions_weights[y_nan_loc_t, :]
-                r_nan = self.emissions_cov[y_nan_loc_t, :][:, y_nan_loc_t]
-
-                this_cov = smoothed_covs[t, :, :].copy()
-
-                # add in the variance from y
-                My += y[t, :, None] * y[t, :, None].T
-                # add in the variance from all the values of y you imputed
-                My[np.ix_(y_nan_loc_t, y_nan_loc_t)] += c_nan @ this_cov @ c_nan.T + r_nan
-
-                # add the covariance between the means and y
-                Mzy += smoothed_means[t, :, None] * y[t, :, None].T
-                # additionally add the variance from the inferred neurons
-                Mzy[:, y_nan_loc_t] += this_cov @ c_nan.T
+        My = y.T @ y + my_correction
+        Mzy = smoothed_means.T @ y + mzy_correction
 
         Mz = Mz1 + Mz_emis
         Mu2 = Mu1 + Mu_emis
@@ -874,12 +712,7 @@ class Lgssm:
                       'nt': nt,
                       }
 
-        if type(smoothed_covs) is tuple:
-            new_init_covs = smoothed_covs[0][0, :, :]
-        else:
-            new_init_covs = smoothed_covs[0, :, :]
-
-        return ll, suff_stats, smoothed_means, new_init_covs
+        return ll, suff_stats, smoothed_means, first_cov
 
     def _pad_init_for_lags(self):
         self.dynamics_weights_init = self._get_lagged_weights(self.dynamics_weights_init, self.dynamics_lags, fill='eye')

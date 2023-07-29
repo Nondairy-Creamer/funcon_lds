@@ -77,7 +77,7 @@ def solve_masked(A, b, mask=None, ridge_penalty=None):
 
 
 def fit_em(model, emissions, inputs, init_mean=None, init_cov=None, num_steps=10,
-           save_folder='em_test', save_every=10):
+           save_folder='em_test', save_every=10, use_memmap=False):
     comm = pkl5.Intracomm(MPI.COMM_WORLD)
     rank = comm.Get_rank()
     size = comm.Get_size()
@@ -112,7 +112,7 @@ def fit_em(model, emissions, inputs, init_mean=None, init_cov=None, num_steps=10
         model = comm.bcast(model, root=0)
 
         ll, smoothed_means, new_init_covs = \
-            model.em_step(emissions, inputs, init_mean, init_cov, cpu_id=rank, num_cpus=size)
+            model.em_step(emissions, inputs, init_mean, init_cov, cpu_id=rank, num_cpus=size, use_memmap=use_memmap)
 
         if rank == 0:
             # set the initial mean and cov to the first smoothed mean / cov
