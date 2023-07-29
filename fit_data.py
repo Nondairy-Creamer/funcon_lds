@@ -92,8 +92,9 @@ def fit_synthetic(param_name, save_folder):
         lu.save_run(save_folder, model_trained, posterior=smoothed_means,
                     initial_conditions=initial_coniditons)
 
-        for i in range(size):
-            os.remove('/tmp/filtered_covs_' + str(i) + '.tmp')
+        if run_params['use_memmap']:
+            for i in range(size):
+                os.remove('/tmp/filtered_covs_' + str(i) + '.tmp')
 
         if not is_parallel and run_params['plot_figures']:
             plotting.plot_model_params(model_trained, model_true=model_true)
@@ -189,8 +190,9 @@ def fit_experimental(param_name, save_folder):
         lu.save_run(save_folder, model_trained, posterior=smoothed_means,
                     initial_conditions=initial_coniditons)
 
-        for i in range(size):
-            os.remove('/tmp/filtered_covs_' + str(i) + '.tmp')
+        if run_params['use_memmap']:
+            for i in range(size):
+                os.remove('/tmp/filtered_covs_' + str(i) + '.tmp')
 
         if not is_parallel and run_params['plot_figures']:
             plotting.plot_model_params(model_trained)
