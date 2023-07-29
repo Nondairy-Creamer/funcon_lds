@@ -6,6 +6,7 @@ from mpi4py import MPI
 from mpi4py.util import pkl5
 import inference_utilities as iu
 import plotting
+import os
 
 
 def fit_synthetic(param_name, save_folder):
@@ -76,14 +77,23 @@ def fit_synthetic(param_name, save_folder):
         model_trained = None
         model_true = None
 
+    # if memory gets to big, use memmap. Reduces speed but significantly reduces memory
+    if run_params['use_memmap']:
+        memmap_rank = rank
+    else:
+        memmap_rank = None
+
     model_trained, smoothed_means, init_mean, init_cov = \
         iu.fit_em(model_trained, emissions, inputs, num_steps=run_params['num_train_steps'],
-                  save_folder=save_folder, use_memmap=run_params['use_memmap'])
+                  save_folder=save_folder, memmap_rank=memmap_rank)
 
     if rank == 0:
         initial_coniditons = {'init_mean': init_mean, 'init_cov': init_cov}
         lu.save_run(save_folder, model_trained, posterior=smoothed_means,
                     initial_conditions=initial_coniditons)
+
+        for i in range(size):
+            os.remove('/tmp/filtered_covs_' + str(i) + '.tmp')
 
         if not is_parallel and run_params['plot_figures']:
             plotting.plot_model_params(model_trained, model_true=model_true)
@@ -163,15 +173,24 @@ def fit_experimental(param_name, save_folder):
         inputs = None
         model_trained = None
 
+    # if memory gets to big, use memmap. Reduces speed but significantly reduces memory
+    if run_params['use_memmap']:
+        memmap_rank = rank
+    else:
+        memmap_rank = None
+
     # fit the model using expectation maximization
     model_trained, smoothed_means, init_mean, init_cov = \
         iu.fit_em(model_trained, emissions, inputs, num_steps=run_params['num_train_steps'],
-                  save_folder=save_folder, use_memmap=run_params['use_memmap'])
+                  save_folder=save_folder, memmap_rank=memmap_rank)
 
     if rank == 0:
         initial_coniditons = {'init_mean': init_mean, 'init_cov': init_cov}
         lu.save_run(save_folder, model_trained, posterior=smoothed_means,
                     initial_conditions=initial_coniditons)
+
+        for i in range(size):
+            os.remove('/tmp/filtered_covs_' + str(i) + '.tmp')
 
         if not is_parallel and run_params['plot_figures']:
             plotting.plot_model_params(model_trained)

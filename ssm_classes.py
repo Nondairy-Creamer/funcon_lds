@@ -302,7 +302,7 @@ class Lgssm:
 
         return data_dict
 
-    def lgssm_filter(self, emissions, inputs, init_mean, init_cov, use_memmap=False):
+    def lgssm_filter(self, emissions, inputs, init_mean, init_cov, memmap_rank=None):
         """Run a Kalman filter to produce the marginal likelihood and filtered state estimates.
         adapted from Dynamax.
         This function can deal with missing data if the data is missing the entire time trace
@@ -320,12 +320,12 @@ class Lgssm:
         emissions_inputs = inputs @ self.emissions_input_weights.T
 
         filtered_means = np.zeros((num_timesteps, self.dynamics_dim_full))
-        if use_memmap:
-            file_path = '/tmp/filtered_covs.tmp'
+        if memmap_rank is None:
+            filtered_covs = np.zeros((num_timesteps, self.dynamics_dim_full, self.dynamics_dim_full))
+        else:
+            file_path = '/tmp/filtered_covs_' + str(memmap_rank) + '.tmp'
             filtered_covs = np.memmap(file_path, dtype='float64', mode='w+',
                                       shape=((num_timesteps, self.dynamics_dim_full, self.dynamics_dim_full)))
-        else:
-            filtered_covs = np.zeros((num_timesteps, self.dynamics_dim_full, self.dynamics_dim_full))
 
         # step through the loop and keep calculating the covariances until they converge
         for t in range(num_timesteps):
@@ -363,7 +363,7 @@ class Lgssm:
 
         return ll, filtered_means, filtered_covs
 
-    def lgssm_smoother(self, emissions, inputs, init_mean, init_cov, use_memmap=False):
+    def lgssm_smoother(self, emissions, inputs, init_mean, init_cov, memmap_rank=None):
         r"""Run forward-filtering, backward-smoother to compute expectations
         under the posterior distribution on latent states. Technically, this
         implements the Rauch-Tung-Striebel (RTS) smoother.
@@ -375,7 +375,7 @@ class Lgssm:
             inputs = self.get_lagged_data(inputs, self.dynamics_input_lags)
 
         # first run the kalman forward pass
-        ll, filtered_means, filtered_covs = self.lgssm_filter(emissions, inputs, init_mean, init_cov, use_memmap=use_memmap)
+        ll, filtered_means, filtered_covs = self.lgssm_filter(emissions, inputs, init_mean, init_cov, memmap_rank=memmap_rank)
 
         dynamics_inputs = inputs @ self.dynamics_input_weights.T
 
@@ -439,18 +439,18 @@ class Lgssm:
 
         return ll
 
-    def parallel_suff_stats(self, data, use_memmap=False):
+    def parallel_suff_stats(self, data, memmap_rank=None):
         emissions = data[0]
         inputs = data[1]
         init_mean = data[2]
         init_cov = data[3]
 
         ll, suff_stats, smoothed_means, new_init_covs = self.get_suff_stats(emissions, inputs, init_mean, init_cov,
-                                                                            use_memmap=use_memmap)
+                                                                            memmap_rank=memmap_rank)
 
         return ll, suff_stats, smoothed_means, new_init_covs
 
-    def em_step(self, emissions_list, inputs_list, init_mean_list, init_cov_list, cpu_id=0, num_cpus=1, use_memmap=False):
+    def em_step(self, emissions_list, inputs_list, init_mean_list, init_cov_list, cpu_id=0, num_cpus=1, memmap_rank=None):
         #
         # Run M-step updates for LDS-Gaussian model
         #
@@ -492,7 +492,7 @@ class Lgssm:
 
         ll_suff_stats_smoothed_means = []
         for d in data:
-            ll_suff_stats_smoothed_means.append(self.parallel_suff_stats(d, use_memmap=use_memmap))
+            ll_suff_stats_smoothed_means.append(self.parallel_suff_stats(d, memmap_rank=memmap_rank))
 
         ll_suff_stats_smoothed_means = iu.individual_gather(ll_suff_stats_smoothed_means, root=0)
 
@@ -654,11 +654,11 @@ class Lgssm:
 
         return None, None, None
 
-    def get_suff_stats(self, emissions, inputs, init_mean, init_cov, use_memmap=False):
+    def get_suff_stats(self, emissions, inputs, init_mean, init_cov, memmap_rank=None):
         nt = emissions.shape[0]
 
         ll, smoothed_means, suff_stats = \
-            self.lgssm_smoother(emissions, inputs, init_mean, init_cov, use_memmap=use_memmap)
+            self.lgssm_smoother(emissions, inputs, init_mean, init_cov, memmap_rank=memmap_rank)
 
         smoothed_covs_sum = suff_stats['smoothed_covs_sum']
         smoothed_crosses_sum = suff_stats['smoothed_crosses_sum']
