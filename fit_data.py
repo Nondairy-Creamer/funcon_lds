@@ -78,7 +78,7 @@ def fit_synthetic(param_name, save_folder):
 
     model_trained, smoothed_means, init_mean, init_cov = \
         iu.fit_em(model_trained, emissions, inputs, num_steps=run_params['num_train_steps'],
-                  save_folder=save_folder)
+                  save_folder=save_folder, use_memmap=run_params['use_memmap'])
 
     if rank == 0:
         initial_coniditons = {'init_mean': init_mean, 'init_cov': init_cov}
@@ -166,7 +166,7 @@ def fit_experimental(param_name, save_folder):
     # fit the model using expectation maximization
     model_trained, smoothed_means, init_mean, init_cov = \
         iu.fit_em(model_trained, emissions, inputs, num_steps=run_params['num_train_steps'],
-                  save_folder=save_folder)
+                  save_folder=save_folder, use_memmap=run_params['use_memmap'])
 
     if rank == 0:
         initial_coniditons = {'init_mean': init_mean, 'init_cov': init_cov}
