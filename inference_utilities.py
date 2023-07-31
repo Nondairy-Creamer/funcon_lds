@@ -133,9 +133,11 @@ def fit_em(model, emissions, inputs, init_mean=None, init_cov=None, num_steps=10
                 lu.save_run(save_folder, model, posterior=smoothed_means, initial_conditions=initial_conditions)
 
             if model.verbose:
-                print('Finished step ' + str(ep + 1) + '/' + str(num_steps))
-                print('log likelihood = ' + str(log_likelihood_out[-1]))
-                print('Time elapsed = ' + str(time_out[-1]))
+                print('Finished step', ep + 1, '/', num_steps)
+                print('log likelihood =', log_likelihood_out[-1])
+                print('Time elapsed =', time_out[-1], 's')
+                time_remaining = time_out[-1] / (ep + 1) * (num_steps - ep - 1)
+                print('Estimated remaining =', time_remaining, 's')
 
     return model, smoothed_means, init_mean, init_cov
 
