@@ -198,59 +198,24 @@ def load_and_preprocess_data(fun_atlas_path, num_data_sets=None, force_preproces
     return data_train, data_test
 
 
-def save_run(model_save_folder, model_trained, model_true=None, data_train=None, data_test=None, posterior=None,
-             run_params=None, initial_conditions=None, remove_old=False):
+def save_run(model_save_folder, model_trained, model_true=None, **vars_to_save):
     model_save_folder = Path(model_save_folder)
-    true_model_save_path = model_save_folder / 'model_true.pkl'
-    trained_model_save_path = model_save_folder / 'model_trained.pkl'
-    data_train_save_path = model_save_folder / 'data_train.pkl'
-    data_test_save_path = model_save_folder / 'data_test.pkl'
-    posterior_path = model_save_folder / 'posterior.pkl'
-    params_save_path = model_save_folder / 'params.pkl'
-    init_cond_save_path = model_save_folder / 'initial_conditions.pkl'
-
-    if not model_save_folder.exists():
-        os.makedirs(model_save_folder)
 
     # save the trained model
+    trained_model_save_path = model_save_folder / 'model_trained.pkl'
     model_trained.save(path=trained_model_save_path)
 
     # save the true model, if it exists
     if model_true is not None:
+        true_model_save_path = model_save_folder / 'model_true.pkl'
         model_true.save(path=true_model_save_path)
-    else:
-        if remove_old:
-            # if there is an old "true" model delete it because it doesn't correspond to this trained model
-            if os.path.exists(true_model_save_path):
-                os.remove(true_model_save_path)
 
-    # save the data
-    if data_train is not None:
-        data_train_file = open(data_train_save_path, 'wb')
-        pickle.dump(data_train, data_train_file)
-        data_train_file.close()
+    for k, v in vars_to_save.items():
+        save_path = model_save_folder / (k + '.pkl')
 
-    if data_test is not None:
-        data_test_file = open(data_test_save_path, 'wb')
-        pickle.dump(data_test, data_test_file)
-        data_test_file.close()
-
-    if posterior is not None:
-        means_file = open(posterior_path, 'wb')
-        pickle.dump(posterior, means_file)
-        means_file.close()
-
-    # save the input parameters
-    if run_params is not None:
-        params_file = open(params_save_path, 'wb')
-        pickle.dump(run_params, params_file)
-        params_file.close()
-
-    # save the initial conditions
-    if initial_conditions is not None:
-        init_con_file = open(init_cond_save_path, 'wb')
-        pickle.dump(initial_conditions, init_con_file)
-        init_con_file.close()
+        save_file = open(save_path, 'wb')
+        pickle.dump(v, save_file)
+        save_file.close()
 
 
 def get_combined_dataset(emissions, inputs, cell_ids):

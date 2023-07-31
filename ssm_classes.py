@@ -198,10 +198,6 @@ class Lgssm:
         emissions_list = []
         init_mean_list = []
         init_cov_list = []
-        if add_noise:
-            noise_mult = 1
-        else:
-            noise_mult = 0
 
         if type(num_time) is not list:
             num_time = [num_time] * num_data_sets
@@ -237,8 +233,8 @@ class Lgssm:
             inputs = inputs_lagged[d]
 
             # get the initial observations
-            dynamics_noise = noise_mult * rng.multivariate_normal(np.zeros(self.dynamics_dim_full), self.dynamics_cov, size=num_time[d])
-            emissions_noise = noise_mult * rng.multivariate_normal(np.zeros(self.emissions_dim), self.emissions_cov, size=num_time[d])
+            dynamics_noise = add_noise * rng.multivariate_normal(np.zeros(self.dynamics_dim_full), self.dynamics_cov, size=num_time[d])
+            emissions_noise = add_noise * rng.multivariate_normal(np.zeros(self.emissions_dim), self.emissions_cov, size=num_time[d])
             dynamics_inputs = (self.dynamics_input_weights @ inputs[:, :, None])[:, :, 0]
             emissions_inputs = (self.emissions_input_weights @ inputs[:, :, None])[:, :, 0]
             latent_init = rng.multivariate_normal(init_mean, init_cov)

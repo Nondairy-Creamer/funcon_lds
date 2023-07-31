@@ -70,7 +70,7 @@ def fit_synthetic(param_name, save_folder):
 
         lu.save_run(save_folder, model_trained, model_true=model_true,
                     data_train=data_train_dict, data_test=data_test_dict,
-                    run_params=run_params, remove_old=True)
+                    params=run_params)
     else:
         emissions = None
         inputs = None
@@ -89,7 +89,7 @@ def fit_synthetic(param_name, save_folder):
 
     if rank == 0:
         initial_coniditons = {'init_mean': init_mean, 'init_cov': init_cov}
-        lu.save_run(save_folder, model_trained, posterior=smoothed_means,
+        lu.save_run(save_folder, model_trained, posterior_train=smoothed_means,
                     initial_conditions=initial_coniditons)
 
         if run_params['use_memmap']:
@@ -165,8 +165,7 @@ def fit_experimental(param_name, save_folder):
         model_trained.emissions_input_weights = np.zeros((model_trained.emissions_dim, model_trained.input_dim_full))
         model_trained.cell_ids = cell_ids
 
-        lu.save_run(save_folder, model_trained, remove_old=True,
-                    data_train=data_train, data_test=data_test, run_params=run_params)
+        lu.save_run(save_folder, model_trained, data_train=data_train, data_test=data_test, params=run_params)
 
     else:
         # if you are a child node, just set everything to None and only calculate your sufficient statistics
@@ -187,7 +186,7 @@ def fit_experimental(param_name, save_folder):
 
     if rank == 0:
         initial_coniditons = {'init_mean': init_mean, 'init_cov': init_cov}
-        lu.save_run(save_folder, model_trained, posterior=smoothed_means,
+        lu.save_run(save_folder, model_trained, posterior_train=smoothed_means,
                     initial_conditions=initial_coniditons)
 
         if run_params['use_memmap']:

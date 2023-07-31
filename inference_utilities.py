@@ -130,7 +130,7 @@ def fit_em(model, emissions, inputs, init_mean=None, init_cov=None, num_steps=10
 
             if np.mod(ep, save_every-1) == 0:
                 initial_conditions = {'init_mean': init_mean, 'init_cov': init_cov}
-                lu.save_run(save_folder, model, posterior=smoothed_means, initial_conditions=initial_conditions)
+                lu.save_run(save_folder, model, posterior_train=smoothed_means, initial_conditions=initial_conditions)
 
             if model.verbose:
                 print('Finished step', ep + 1, '/', num_steps)
