@@ -12,7 +12,7 @@ class Lgssm:
     """
 
     def __init__(self, dynamics_dim, emissions_dim, input_dim, dynamics_lags=1, dynamics_input_lags=1, cell_ids=None,
-                 param_props=None, verbose=True, nan_fill=1e8, ridge_lambda=0):
+                 param_props=None, verbose=True, epsilon=1e8, ridge_lambda=0):
         self.dynamics_lags = dynamics_lags
         self.dynamics_input_lags = dynamics_input_lags
         self.dynamics_dim = dynamics_dim
@@ -23,7 +23,7 @@ class Lgssm:
         self.verbose = verbose
         self.log_likelihood = None
         self.train_time = None
-        self.epsilon = nan_fill
+        self.epsilon = epsilon
         self.sample_rate = 0.5  # default is 2 Hz
         self.ridge_lambda = ridge_lambda
         if cell_ids is None:

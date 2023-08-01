@@ -178,6 +178,9 @@ def load_and_preprocess_data(fun_atlas_path, num_data_sets=None, force_preproces
     emissions_test += emissions_train[num_data_sets:]
     inputs_test += inputs_train[num_data_sets:]
     cell_ids_test += cell_ids_train[num_data_sets:]
+    emissions_test = emissions_test[:num_data_sets]
+    inputs_test = inputs_test[:num_data_sets]
+    cell_ids_test = cell_ids_test[:num_data_sets]
 
     emissions_train = emissions_train[:num_data_sets]
     inputs_train = inputs_train[:num_data_sets]

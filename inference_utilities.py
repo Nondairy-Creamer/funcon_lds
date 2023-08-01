@@ -13,9 +13,10 @@ def block(block_list, dims=(2, 1)):
     return np.concatenate(layer, axis=dims[1])
 
 
-def individual_scatter(data, root=0):
+def individual_scatter(data, root=0, num_data=None):
     comm = pkl5.Intracomm(MPI.COMM_WORLD)
     rank = comm.Get_rank()
+    size = comm.Get_size()
 
     if rank == root:
         item = None
@@ -26,7 +27,13 @@ def individual_scatter(data, root=0):
             else:
                 comm.send(attr, dest=i)
     else:
-        item = comm.recv(source=root)
+        if num_data is None:
+            num_data = size
+
+        if rank < num_data:
+            item = comm.recv(source=root)
+        else:
+            item = None
 
     return item
 
@@ -79,7 +86,7 @@ def solve_masked(A, b, mask=None, ridge_penalty=None):
     return x_hat
 
 
-def fit_em(model, emissions, inputs, init_mean=None, init_cov=None, num_steps=10,
+def fit_em(model, emissions, inputs, data_test, init_mean=None, init_cov=None, num_steps=10,
            save_folder='em_test', save_every=10, memmap_rank=None):
     comm = pkl5.Intracomm(MPI.COMM_WORLD)
     rank = comm.Get_rank()
@@ -94,6 +101,8 @@ def fit_em(model, emissions, inputs, init_mean=None, init_cov=None, num_steps=10
         # lag the inputs if the model has lags
         inputs = [model.get_lagged_data(i, model.dynamics_input_lags) for i in inputs]
 
+        test_size = len(data_test['emissions'])
+
         if init_mean is None:
             init_mean = model.estimate_init_mean(emissions)
 
@@ -105,11 +114,15 @@ def fit_em(model, emissions, inputs, init_mean=None, init_cov=None, num_steps=10
         inputs = None
         init_mean = None
         init_cov = None
+        test_size = None
 
     log_likelihood_out = []
     time_out = []
     smoothed_means = None
     ll = None
+    init_mean_test = None
+    init_cov_test = None
+    test_size = comm.bcast(test_size, root=0)
 
     start = time.time()
     for ep in range(num_steps):
@@ -132,14 +145,6 @@ def fit_em(model, emissions, inputs, init_mean=None, init_cov=None, num_steps=10
             model.log_likelihood = log_likelihood_out
             model.train_time = time_out
 
-            if np.mod(ep, save_every-1) == 0:
-                inference_train = {'ll': ll,
-                                   'posterior': smoothed_means,
-                                   'init_mean': init_mean,
-                                   'init_cov': init_cov,
-                                   }
-                lu.save_run(save_folder, model, inference_train=inference_train)
-
             if model.verbose:
                 print('Finished step', ep + 1, '/', num_steps)
                 print('log likelihood =', log_likelihood_out[-1])
@@ -147,17 +152,38 @@ def fit_em(model, emissions, inputs, init_mean=None, init_cov=None, num_steps=10
                 time_remaining = time_out[-1] / (ep + 1) * (num_steps - ep - 1)
                 print('Estimated remaining =', time_remaining, 's')
 
+        if np.mod(ep + 1, save_every) == 0:
+            if rank == 0:
+                print('saving intermediate posterior of the test data')
+
+            inference_test = parallel_get_post(model, data_test,
+                                               init_mean=init_mean_test, init_cov=init_cov_test)
+
+            if rank == 0:
+                init_mean_test = inference_test['init_mean']
+                init_cov_test = inference_test['init_cov']
+
+                inference_train = {'ll': ll,
+                                   'posterior': smoothed_means,
+                                   'init_mean': init_mean,
+                                   'init_cov': init_cov,
+                                   }
+
+                lu.save_run(save_folder, model, inference_train=inference_train, inference_test=inference_test)
+
     return ll, model, smoothed_means, init_mean, init_cov
 
 
-def parallel_get_post(model, emissions, inputs, init_mean=None, init_cov=None, converge_check=1e8):
+def parallel_get_post(model, data_test, init_mean=None, init_cov=None):
     comm = pkl5.Intracomm(MPI.COMM_WORLD)
     rank = comm.Get_rank()
     size = comm.Get_size()
 
     if rank == 0:
+        emissions = data_test['emissions']
+        inputs = data_test['inputs']
         # get the cpu_ids for running the model on the test data
-        size_test = np.min((size, len(emissions)))
+        data_test_size = np.min((size, len(emissions)))
 
         if init_mean is None:
             init_mean = model.estimate_init_mean(emissions)
@@ -165,47 +191,50 @@ def parallel_get_post(model, emissions, inputs, init_mean=None, init_cov=None, c
         if init_cov is None:
             init_cov = model.estimate_init_cov(emissions)
 
-        test_data_packaged = model.package_data_mpi(emissions, inputs, init_mean, init_cov, size_test)
+        test_data_packaged = model.package_data_mpi(emissions, inputs, init_mean, init_cov, data_test_size)
     else:
-        size_test = None
+        data_test_size = None
         test_data_packaged = None
 
     # get posterior on test data
-    size_test = comm.bcast(size_test)
+    data_test_size = comm.bcast(data_test_size)
     model = comm.bcast(model)
-    data_test_out = individual_scatter(test_data_packaged)
+    data_test_out = individual_scatter(test_data_packaged, num_data=data_test_size)
 
-    ll_smeans = []
-    for i in data_test_out:
-        emissions = i[0]
-        inputs = i[1]
-        init_mean = i[2]
-        init_cov = i[3]
-        converged = False
-        iter_num = 1
+    if data_test_out is not None:
+        ll_smeans = []
+        for ii, i in enumerate(data_test_out):
+            emissions = i[0]
+            inputs = i[1]
+            init_mean = i[2]
+            init_cov = i[3]
+            converged = False
+            iter_num = 1
 
-        while not converged:
-            ll, smoothed_means, suff_stats = model.lgssm_smoother(emissions, inputs, init_mean, init_cov)
+            while not converged:
+                ll, smoothed_means, suff_stats = model.lgssm_smoother(emissions, inputs, init_mean, init_cov)
 
-            init_mean_new = smoothed_means[0, :]
-            init_cov_new = suff_stats['first_cov']
+                init_mean_new = smoothed_means[0, :]
+                init_cov_new = suff_stats['first_cov']
 
-            init_mean_same = np.max(np.abs(init_mean - init_mean_new)) < converge_check
-            init_cov_same = np.max(np.abs(init_cov - init_cov_new)) < converge_check
-            if init_mean_same and init_cov_same:
-                converged = True
-            else:
-                init_mean = init_mean_new
-                init_cov = init_cov_new
+                init_mean_same = np.max(np.abs(init_mean - init_mean_new)) < 1 / model.epsilon
+                init_cov_same = np.max(np.abs(init_cov - init_cov_new)) < 1 / model.epsilon
+                if init_mean_same and init_cov_same:
+                    converged = True
+                else:
+                    init_mean = init_mean_new
+                    init_cov = init_cov_new
 
-            print('Posterior iteration:', iter_num, ', converged:', converged)
+                print('rank', rank + 1, '/', size, 'data #', ii + 1, '/', len(data_test_out),
+                      'posterior iteration:', iter_num, ', converged:', converged)
+                iter_num += 1
 
-        post_pred = model.sample(num_time=emissions.shape[0], inputs_list=[inputs], init_mean=init_mean, init_cov=init_cov, add_noise=False)
-        post_pred_noise = model.sample(num_time=emissions.shape[0], inputs_list=[inputs], init_mean=init_mean, init_cov=init_cov)
+            post_pred = model.sample(num_time=emissions.shape[0], inputs_list=[inputs], init_mean=init_mean, init_cov=init_cov, add_noise=False)
+            post_pred_noise = model.sample(num_time=emissions.shape[0], inputs_list=[inputs], init_mean=init_mean, init_cov=init_cov)
 
-        ll_smeans.append((ll, smoothed_means, post_pred, post_pred_noise, init_mean, init_cov))
+            ll_smeans.append((ll, smoothed_means, post_pred, post_pred_noise, init_mean, init_cov))
 
-    ll_smeans = individual_gather(ll_smeans, num_data=size_test)
+        ll_smeans = individual_gather(ll_smeans, num_data=data_test_size)
 
     if rank == 0:
         ll_smeans_out = []

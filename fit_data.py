@@ -31,27 +31,28 @@ def fit_synthetic(param_name, save_folder):
 
         start = time.time()
         # sample from the randomized model
-        data_train_dict = \
+        data_train = \
             model_true.sample(num_time=run_params['num_time'],
                               num_data_sets=run_params['num_data_sets'],
                               scattered_nan_freq=run_params['scattered_nan_freq'],
                               lost_emission_freq=run_params['lost_emission_freq'],
                               input_time_scale=run_params['input_time_scale'],
                               rng=rng)
-        data_test_dict = \
+        data_test = \
             model_true.sample(num_time=run_params['num_time'],
-                              num_data_sets=run_params['num_data_sets'],
+                              num_data_sets=2,
+                              # num_data_sets=run_params['num_data_sets'],
                               scattered_nan_freq=run_params['scattered_nan_freq'],
                               lost_emission_freq=run_params['lost_emission_freq'],
                               input_time_scale=run_params['input_time_scale'],
                               rng=rng)
         print('Time to sample:', time.time() - start, 's')
 
-        emissions = data_train_dict['emissions']
-        inputs = data_train_dict['inputs']
-        latents_true = data_train_dict['latents']
-        init_mean_true = data_train_dict['init_mean']
-        init_cov_true = data_train_dict['init_cov']
+        emissions = data_train['emissions']
+        inputs = data_train['inputs']
+        latents_true = data_train['latents']
+        init_mean_true = data_train['init_mean']
+        init_cov_true = data_train['init_cov']
 
         # get the log likelihood of the true data
         ll_true_params = model_true.get_ll(emissions, inputs, init_mean_true, init_cov_true)
@@ -69,13 +70,14 @@ def fit_synthetic(param_name, save_folder):
         model_trained.set_to_init()
 
         lu.save_run(save_folder, model_trained, model_true=model_true,
-                    data_train=data_train_dict, data_test=data_test_dict,
+                    data_train=data_train, data_test=data_test,
                     params=run_params)
     else:
         emissions = None
         inputs = None
         model_trained = None
         model_true = None
+        data_test = None
 
     # if memory gets to big, use memmap. Reduces speed but significantly reduces memory
     if run_params['use_memmap']:
@@ -84,10 +86,10 @@ def fit_synthetic(param_name, save_folder):
         memmap_rank = None
 
     ll, model_trained, smoothed_means, init_mean, init_cov = \
-        iu.fit_em(model_trained, emissions, inputs, num_steps=run_params['num_train_steps'],
+        iu.fit_em(model_trained, emissions, inputs, data_test=data_test, num_steps=run_params['num_train_steps'],
                   save_folder=save_folder, memmap_rank=memmap_rank)
 
-    inference_test = iu.parallel_get_post(model_trained, emissions, inputs)
+    inference_test = iu.parallel_get_post(model_trained, data_test)
 
     if rank == 0:
         inference_train = {'ll': ll,
@@ -178,6 +180,7 @@ def fit_experimental(param_name, save_folder):
         emissions = None
         inputs = None
         model_trained = None
+        data_test = None
 
     # if memory gets to big, use memmap. Reduces speed but significantly reduces memory
     if run_params['use_memmap']:
@@ -187,10 +190,10 @@ def fit_experimental(param_name, save_folder):
 
     # fit the model using expectation maximization
     ll, model_trained, smoothed_means, init_mean, init_cov = \
-        iu.fit_em(model_trained, emissions, inputs, num_steps=run_params['num_train_steps'],
+        iu.fit_em(model_trained, emissions, inputs, data_test, num_steps=run_params['num_train_steps'],
                   save_folder=save_folder, memmap_rank=memmap_rank)
 
-    inference_test = iu.parallel_get_post(model_trained, emissions, inputs)
+    inference_test = iu.parallel_get_post(model_trained, data_test['emissions'], data_test['inputs'])
 
     if rank == 0:
         inference_train = {'ll': ll,
@@ -204,9 +207,6 @@ def fit_experimental(param_name, save_folder):
         if run_params['use_memmap']:
             for i in range(size):
                 os.remove('/tmp/filtered_covs_' + str(i) + '.tmp')
-
-        # run the posterior and posterior predictive on the test data
-
 
         if not is_parallel and run_params['plot_figures']:
             plotting.plot_model_params(model_trained)
