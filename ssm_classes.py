@@ -359,7 +359,7 @@ class Lgssm:
 
         return ll, filtered_means, filtered_covs
 
-    def lgssm_smoother(self, emissions, inputs, init_mean, init_cov, memmap_rank=None):
+    def lgssm_smoother(self, emissions, inputs, init_mean=None, init_cov=None, memmap_rank=None):
         r"""Run forward-filtering, backward-smoother to compute expectations
         under the posterior distribution on latent states. Technically, this
         implements the Rauch-Tung-Striebel (RTS) smoother.
@@ -369,6 +369,12 @@ class Lgssm:
 
         if inputs.shape[1] < self.input_dim_full:
             inputs = self.get_lagged_data(inputs, self.dynamics_input_lags)
+
+        if init_mean is None:
+            init_mean = self.estimate_init_mean([emissions])[0]
+
+        if init_cov is None:
+            init_mean = self.estimate_init_cov([emissions])[0]
 
         # first run the kalman forward pass
         ll, filtered_means, filtered_covs = self.lgssm_filter(emissions, inputs, init_mean, init_cov, memmap_rank=memmap_rank)
@@ -476,11 +482,7 @@ class Lgssm:
         nz = self.dynamics_dim_full  # number of latents
 
         if cpu_id == 0:
-            data_out = list(zip(emissions_list, inputs_list, init_mean_list, init_cov_list))
-            num_data = len(emissions_list)
-            chunk_size = int(np.ceil(num_data / num_cpus))
-            # split data out into a list of inputs
-            data_out = [data_out[i:i+chunk_size] for i in range(0, num_data, chunk_size)]
+            data_out = self.package_data_mpi(emissions_list, inputs_list, init_mean_list, init_cov_list, num_cpus)
         else:
             data_out = None
 
@@ -500,7 +502,6 @@ class Lgssm:
 
             ll_suff_stats_smoothed_means = ll_suff_stats_out
 
-        if cpu_id == 0:
             log_likelihood = [i[0] for i in ll_suff_stats_smoothed_means]
             log_likelihood = np.sum(np.stack(log_likelihood))
             suff_stats = [i[1] for i in ll_suff_stats_smoothed_means]
@@ -801,5 +802,16 @@ class Lgssm:
         any_nan_neurons = np.any(np.isnan(emissions), axis=0)
         all_nan_neurons = np.all(np.isnan(emissions), axis=0)
         return np.all(any_nan_neurons == all_nan_neurons)
+
+    @staticmethod
+    def package_data_mpi(emissions_list, inputs_list, init_mean_list, init_cov_list, num_cpus):
+        # packages data for sending using MPI
+        data_out = list(zip(emissions_list, inputs_list, init_mean_list, init_cov_list))
+        num_data = len(emissions_list)
+        chunk_size = int(np.ceil(num_data / num_cpus))
+        # split data out into a list of inputs
+        data_out = [data_out[i:i + chunk_size] for i in range(0, num_data, chunk_size)]
+
+        return data_out
 
 

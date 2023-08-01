@@ -83,14 +83,20 @@ def fit_synthetic(param_name, save_folder):
     else:
         memmap_rank = None
 
-    model_trained, smoothed_means, init_mean, init_cov = \
+    ll, model_trained, smoothed_means, init_mean, init_cov = \
         iu.fit_em(model_trained, emissions, inputs, num_steps=run_params['num_train_steps'],
                   save_folder=save_folder, memmap_rank=memmap_rank)
 
+    inference_test = iu.parallel_get_post(model_trained, emissions, inputs)
+
     if rank == 0:
-        initial_coniditons = {'init_mean': init_mean, 'init_cov': init_cov}
-        lu.save_run(save_folder, model_trained, posterior_train=smoothed_means,
-                    initial_conditions=initial_coniditons)
+        inference_train = {'ll': ll,
+                           'posterior': smoothed_means,
+                           'init_mean': init_mean,
+                           'init_cov': init_cov,
+                           }
+
+        lu.save_run(save_folder, model_trained, inference_train=inference_train, inference_test=inference_test)
 
         if run_params['use_memmap']:
             for i in range(size):
@@ -180,18 +186,27 @@ def fit_experimental(param_name, save_folder):
         memmap_rank = None
 
     # fit the model using expectation maximization
-    model_trained, smoothed_means, init_mean, init_cov = \
+    ll, model_trained, smoothed_means, init_mean, init_cov = \
         iu.fit_em(model_trained, emissions, inputs, num_steps=run_params['num_train_steps'],
                   save_folder=save_folder, memmap_rank=memmap_rank)
 
+    inference_test = iu.parallel_get_post(model_trained, emissions, inputs)
+
     if rank == 0:
-        initial_coniditons = {'init_mean': init_mean, 'init_cov': init_cov}
-        lu.save_run(save_folder, model_trained, posterior_train=smoothed_means,
-                    initial_conditions=initial_coniditons)
+        inference_train = {'ll': ll,
+                           'posterior': smoothed_means,
+                           'init_mean': init_mean,
+                           'init_cov': init_cov,
+                           }
+
+        lu.save_run(save_folder, model_trained, inference_train=inference_train, inference_test=inference_test)
 
         if run_params['use_memmap']:
             for i in range(size):
                 os.remove('/tmp/filtered_covs_' + str(i) + '.tmp')
+
+        # run the posterior and posterior predictive on the test data
+
 
         if not is_parallel and run_params['plot_figures']:
             plotting.plot_model_params(model_trained)
