@@ -153,6 +153,7 @@ def fit_experimental(param_name, save_folder):
         # get rid of any inputs that never receive stimulation
         has_stims = np.any(np.concatenate(inputs, axis=0), axis=0)
         inputs = [i[:, has_stims] for i in inputs]
+        data_test['inputs'] = [i[:, has_stims] for i in data_test['inputs']]
         input_mask = input_mask[:, has_stims]
         # set the model properties so the model fits with this mask
         run_params['param_props']['mask']['dynamics_input_weights'] = input_mask
@@ -193,7 +194,7 @@ def fit_experimental(param_name, save_folder):
         iu.fit_em(model_trained, emissions, inputs, data_test, num_steps=run_params['num_train_steps'],
                   save_folder=save_folder, memmap_rank=memmap_rank)
 
-    inference_test = iu.parallel_get_post(model_trained, data_test['emissions'], data_test['inputs'])
+    inference_test = iu.parallel_get_post(model_trained, data_test)
 
     if rank == 0:
         inference_train = {'ll': ll,
