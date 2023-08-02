@@ -158,7 +158,7 @@ def fit_em(model, emissions, inputs, init_mean=None, init_cov=None, num_steps=10
     return ll, model, smoothed_means, init_mean, init_cov
 
 
-def parallel_get_post(model, data_test, init_mean=None, init_cov=None, max_iter=1, converge_res=1e-3):
+def parallel_get_post(model, data_test, init_mean=None, init_cov=None, max_iter=1, converge_res=1e-2):
     comm = pkl5.Intracomm(MPI.COMM_WORLD)
     cpu_id = comm.Get_rank()
     size = comm.Get_size()
