@@ -158,7 +158,7 @@ def fit_em(model, emissions, inputs, init_mean=None, init_cov=None, num_steps=10
     return ll, model, smoothed_means, init_mean, init_cov
 
 
-def parallel_get_post(model, data_test, init_mean=None, init_cov=None, max_iter=1):
+def parallel_get_post(model, data_test, init_mean=None, init_cov=None, max_iter=1, converge_res=1e-3):
     comm = pkl5.Intracomm(MPI.COMM_WORLD)
     cpu_id = comm.Get_rank()
     size = comm.Get_size()
@@ -201,8 +201,8 @@ def parallel_get_post(model, data_test, init_mean=None, init_cov=None, max_iter=
                 init_mean_new = smoothed_means[0, :]
                 init_cov_new = suff_stats['first_cov']
 
-                init_mean_same = np.max(np.abs(init_mean - init_mean_new)) < 1e-3
-                init_cov_same = np.max(np.abs(init_cov - init_cov_new)) < 1e-3
+                init_mean_same = np.max(np.abs(init_mean - init_mean_new)) < converge_res
+                init_cov_same = np.max(np.abs(init_cov - init_cov_new)) < converge_res
                 if init_mean_same and init_cov_same:
                     converged = True
                 else:
