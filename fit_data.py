@@ -87,10 +87,10 @@ def fit_synthetic(param_name, save_folder):
         memmap_cpu_id = None
 
     ll, model_trained, smoothed_means, init_mean, init_cov = \
-        iu.fit_em(model_trained, emissions, inputs, data_test=data_test, num_steps=run_params['num_train_steps'],
+        iu.fit_em(model_trained, emissions, inputs, num_steps=run_params['num_train_steps'],
                   save_folder=save_folder, memmap_cpu_id=memmap_cpu_id)
 
-    inference_test = iu.parallel_get_post(model_trained, data_test)
+    inference_test = iu.parallel_get_post(model_trained, data_test, max_iter=200)
 
     if cpu_id == 0:
         inference_train = {'ll': ll,
@@ -192,10 +192,10 @@ def fit_experimental(param_name, save_folder):
 
     # fit the model using expectation maximization
     ll, model_trained, smoothed_means, init_mean, init_cov = \
-        iu.fit_em(model_trained, emissions, inputs, data_test, num_steps=run_params['num_train_steps'],
+        iu.fit_em(model_trained, emissions, inputs, num_steps=run_params['num_train_steps'],
                   save_folder=save_folder, memmap_cpu_id=memmap_cpu_id)
 
-    inference_test = iu.parallel_get_post(model_trained, data_test)
+    inference_test = iu.parallel_get_post(model_trained, data_test, max_iter=200)
 
     if cpu_id == 0:
         inference_train = {'ll': ll,

@@ -86,7 +86,7 @@ def solve_masked(A, b, mask=None, ridge_penalty=None):
     return x_hat
 
 
-def fit_em(model, emissions, inputs, data_test, init_mean=None, init_cov=None, num_steps=10,
+def fit_em(model, emissions, inputs, init_mean=None, init_cov=None, num_steps=10,
            save_folder='em_test', save_every=20, memmap_cpu_id=None):
     comm = pkl5.Intracomm(MPI.COMM_WORLD)
     cpu_id = comm.Get_rank()
@@ -101,8 +101,6 @@ def fit_em(model, emissions, inputs, data_test, init_mean=None, init_cov=None, n
         # lag the inputs if the model has lags
         inputs = [model.get_lagged_data(i, model.dynamics_input_lags) for i in inputs]
 
-        test_size = len(data_test['emissions'])
-
         if init_mean is None:
             init_mean = model.estimate_init_mean(emissions)
 
@@ -114,15 +112,11 @@ def fit_em(model, emissions, inputs, data_test, init_mean=None, init_cov=None, n
         inputs = None
         init_mean = None
         init_cov = None
-        test_size = None
 
     log_likelihood_out = []
     time_out = []
     smoothed_means = None
     ll = None
-    init_mean_test = None
-    init_cov_test = None
-    test_size = comm.bcast(test_size, root=0)
 
     start = time.time()
     for ep in range(num_steps):
@@ -145,31 +139,21 @@ def fit_em(model, emissions, inputs, data_test, init_mean=None, init_cov=None, n
             model.log_likelihood = log_likelihood_out
             model.train_time = time_out
 
-            if model.verbose:
-                print('Finished step', ep + 1, '/', num_steps)
-                print('log likelihood =', log_likelihood_out[-1])
-                print('Time elapsed =', time_out[-1], 's')
-                time_remaining = time_out[-1] / (ep + 1) * (num_steps - ep - 1)
-                print('Estimated remaining =', time_remaining, 's')
-
-        if np.mod(ep + 1, save_every) == 0:
-            if cpu_id == 0:
-                print('saving intermediate posterior of the test data')
-
-            inference_test = parallel_get_post(model, data_test,
-                                               init_mean=init_mean_test, init_cov=init_cov_test)
-
-            if cpu_id == 0:
-                init_mean_test = inference_test['init_mean']
-                init_cov_test = inference_test['init_cov']
-
+            if np.mod(ep + 1, save_every) == 0:
                 inference_train = {'ll': ll,
                                    'posterior': smoothed_means,
                                    'init_mean': init_mean,
                                    'init_cov': init_cov,
                                    }
 
-                lu.save_run(save_folder, model_trained=model, inference_train=inference_train, inference_test=inference_test)
+                lu.save_run(save_folder, model_trained=model, inference_train=inference_train)
+
+            if model.verbose:
+                print('Finished step', ep + 1, '/', num_steps)
+                print('log likelihood =', log_likelihood_out[-1])
+                print('Time elapsed =', time_out[-1], 's')
+                time_remaining = time_out[-1] / (ep + 1) * (num_steps - ep - 1)
+                print('Estimated remaining =', time_remaining, 's')
 
     return ll, model, smoothed_means, init_mean, init_cov
 
