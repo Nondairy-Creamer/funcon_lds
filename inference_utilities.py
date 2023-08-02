@@ -15,10 +15,10 @@ def block(block_list, dims=(2, 1)):
 
 def individual_scatter(data, root=0, num_data=None):
     comm = pkl5.Intracomm(MPI.COMM_WORLD)
-    rank = comm.Get_rank()
+    cpu_id = comm.Get_rank()
     size = comm.Get_size()
 
-    if rank == root:
+    if cpu_id == root:
         item = None
 
         for i, attr in enumerate(data):
@@ -30,7 +30,7 @@ def individual_scatter(data, root=0, num_data=None):
         if num_data is None:
             num_data = size
 
-        if rank < num_data:
+        if cpu_id < num_data:
             item = comm.recv(source=root)
         else:
             item = None
@@ -40,12 +40,12 @@ def individual_scatter(data, root=0, num_data=None):
 
 def individual_gather(data, root=0, num_data=None):
     comm = pkl5.Intracomm(MPI.COMM_WORLD)
-    rank = comm.Get_rank()
+    cpu_id = comm.Get_rank()
     size = comm.Get_size()
 
     item = []
 
-    if rank == root:
+    if cpu_id == root:
         if num_data is None:
             num_data = size
 
@@ -87,12 +87,12 @@ def solve_masked(A, b, mask=None, ridge_penalty=None):
 
 
 def fit_em(model, emissions, inputs, data_test, init_mean=None, init_cov=None, num_steps=10,
-           save_folder='em_test', save_every=20, memmap_rank=None):
+           save_folder='em_test', save_every=20, memmap_cpu_id=None):
     comm = pkl5.Intracomm(MPI.COMM_WORLD)
-    rank = comm.Get_rank()
+    cpu_id = comm.Get_rank()
     size = comm.Get_size()
 
-    if rank == 0:
+    if cpu_id == 0:
         print('Fitting with EM')
 
         if len(emissions) < size:
@@ -129,9 +129,9 @@ def fit_em(model, emissions, inputs, data_test, init_mean=None, init_cov=None, n
         model = comm.bcast(model, root=0)
 
         ll, smoothed_means, new_init_covs = \
-            model.em_step(emissions, inputs, init_mean, init_cov, cpu_id=rank, num_cpus=size, memmap_rank=memmap_rank)
+            model.em_step(emissions, inputs, init_mean, init_cov, cpu_id=cpu_id, num_cpus=size, memmap_cpu_id=memmap_cpu_id)
 
-        if rank == 0:
+        if cpu_id == 0:
             # set the initial mean and cov to the first smoothed mean / cov
             for i in range(len(smoothed_means)):
                 init_mean[i] = smoothed_means[i][0, :]
@@ -153,13 +153,13 @@ def fit_em(model, emissions, inputs, data_test, init_mean=None, init_cov=None, n
                 print('Estimated remaining =', time_remaining, 's')
 
         if np.mod(ep + 1, save_every) == 0:
-            if rank == 0:
+            if cpu_id == 0:
                 print('saving intermediate posterior of the test data')
 
             inference_test = parallel_get_post(model, data_test,
                                                init_mean=init_mean_test, init_cov=init_cov_test)
 
-            if rank == 0:
+            if cpu_id == 0:
                 init_mean_test = inference_test['init_mean']
                 init_cov_test = inference_test['init_cov']
 
@@ -169,17 +169,17 @@ def fit_em(model, emissions, inputs, data_test, init_mean=None, init_cov=None, n
                                    'init_cov': init_cov,
                                    }
 
-                lu.save_run(save_folder, model, inference_train=inference_train, inference_test=inference_test)
+                lu.save_run(save_folder, model_trained=model, inference_train=inference_train, inference_test=inference_test)
 
     return ll, model, smoothed_means, init_mean, init_cov
 
 
-def parallel_get_post(model, data_test, init_mean=None, init_cov=None):
+def parallel_get_post(model, data_test, init_mean=None, init_cov=None, max_iter=1):
     comm = pkl5.Intracomm(MPI.COMM_WORLD)
-    rank = comm.Get_rank()
+    cpu_id = comm.Get_rank()
     size = comm.Get_size()
 
-    if rank == 0:
+    if cpu_id == 0:
         emissions = data_test['emissions']
         inputs = data_test['inputs']
         # get the cpu_ids for running the model on the test data
@@ -211,7 +211,7 @@ def parallel_get_post(model, data_test, init_mean=None, init_cov=None):
             converged = False
             iter_num = 1
 
-            while not converged:
+            while not converged and iter_num <= max_iter:
                 ll, smoothed_means, suff_stats = model.lgssm_smoother(emissions, inputs, init_mean, init_cov)
 
                 init_mean_new = smoothed_means[0, :]
@@ -225,7 +225,7 @@ def parallel_get_post(model, data_test, init_mean=None, init_cov=None):
                     init_mean = init_mean_new
                     init_cov = init_cov_new
 
-                print('rank', rank + 1, '/', size, 'data #', ii + 1, '/', len(data_test_out),
+                print('cpu_id', cpu_id + 1, '/', size, 'data #', ii + 1, '/', len(data_test_out),
                       'posterior iteration:', iter_num, ', converged:', converged)
                 iter_num += 1
 
@@ -236,7 +236,7 @@ def parallel_get_post(model, data_test, init_mean=None, init_cov=None):
 
         ll_smeans = individual_gather(ll_smeans, num_data=data_test_size)
 
-    if rank == 0:
+    if cpu_id == 0:
         ll_smeans_out = []
         for i in ll_smeans:
             for j in i:

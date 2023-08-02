@@ -227,12 +227,13 @@ def load_and_preprocess_data(fun_atlas_path, num_data_sets=None, force_preproces
     return data_train, data_test
 
 
-def save_run(model_save_folder, model_trained, model_true=None, **vars_to_save):
+def save_run(model_save_folder, model_trained=None, model_true=None, **vars_to_save):
     model_save_folder = Path(model_save_folder)
 
     # save the trained model
-    trained_model_save_path = model_save_folder / 'model_trained.pkl'
-    model_trained.save(path=trained_model_save_path)
+    if model_trained is not None:
+        trained_model_save_path = model_save_folder / 'model_trained.pkl'
+        model_trained.save(path=trained_model_save_path)
 
     # save the true model, if it exists
     if model_true is not None:

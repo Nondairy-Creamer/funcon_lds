@@ -7,17 +7,19 @@ from mpi4py.util import pkl5
 import inference_utilities as iu
 import plotting
 import os
+import pickle
+from pathlib import Path
 
 
 def fit_synthetic(param_name, save_folder):
     comm = pkl5.Intracomm(MPI.COMM_WORLD)
     size = comm.Get_size()
-    rank = comm.Get_rank()
+    cpu_id = comm.Get_rank()
     is_parallel = size > 1
 
     run_params = lu.get_run_params(param_name=param_name)
 
-    if rank == 0:
+    if cpu_id == 0:
         rng = np.random.default_rng(run_params['random_seed'])
 
         # define the model, setting specific parameters
@@ -40,8 +42,7 @@ def fit_synthetic(param_name, save_folder):
                               rng=rng)
         data_test = \
             model_true.sample(num_time=run_params['num_time'],
-                              num_data_sets=2,
-                              # num_data_sets=run_params['num_data_sets'],
+                              num_data_sets=run_params['num_data_sets'],
                               scattered_nan_freq=run_params['scattered_nan_freq'],
                               lost_emission_freq=run_params['lost_emission_freq'],
                               input_time_scale=run_params['input_time_scale'],
@@ -69,7 +70,7 @@ def fit_synthetic(param_name, save_folder):
                 setattr(model_trained, init_key, getattr(model_true, init_key))
         model_trained.set_to_init()
 
-        lu.save_run(save_folder, model_trained, model_true=model_true,
+        lu.save_run(save_folder, model_trained=model_trained, model_true=model_true,
                     data_train=data_train, data_test=data_test,
                     params=run_params)
     else:
@@ -81,24 +82,24 @@ def fit_synthetic(param_name, save_folder):
 
     # if memory gets to big, use memmap. Reduces speed but significantly reduces memory
     if run_params['use_memmap']:
-        memmap_rank = rank
+        memmap_cpu_id = cpu_id
     else:
-        memmap_rank = None
+        memmap_cpu_id = None
 
     ll, model_trained, smoothed_means, init_mean, init_cov = \
         iu.fit_em(model_trained, emissions, inputs, data_test=data_test, num_steps=run_params['num_train_steps'],
-                  save_folder=save_folder, memmap_rank=memmap_rank)
+                  save_folder=save_folder, memmap_cpu_id=memmap_cpu_id)
 
     inference_test = iu.parallel_get_post(model_trained, data_test)
 
-    if rank == 0:
+    if cpu_id == 0:
         inference_train = {'ll': ll,
                            'posterior': smoothed_means,
                            'init_mean': init_mean,
                            'init_cov': init_cov,
                            }
 
-        lu.save_run(save_folder, model_trained, inference_train=inference_train, inference_test=inference_test)
+        lu.save_run(save_folder, model_trained=model_trained, inference_train=inference_train, inference_test=inference_test)
 
         if run_params['use_memmap']:
             for i in range(size):
@@ -127,13 +128,13 @@ def fit_experimental(param_name, save_folder):
     # set up the option to parallelize the model fitting over CPUs
     comm = pkl5.Intracomm(MPI.COMM_WORLD)
     size = comm.Get_size()
-    rank = comm.Get_rank()
+    cpu_id = comm.Get_rank()
     is_parallel = size > 1
 
     run_params = lu.get_run_params(param_name=param_name)
 
-    # rank 0 is the parent node which will send out the data to the children nodes
-    if rank == 0:
+    # cpu_id 0 is the parent node which will send out the data to the children nodes
+    if cpu_id == 0:
         # load in the data for the model and do any preprocessing here
         data_train, data_test = \
             lu.load_and_align_data(run_params['data_path'], num_data_sets=run_params['num_data_sets'],
@@ -174,7 +175,7 @@ def fit_experimental(param_name, save_folder):
         model_trained.emissions_input_weights = np.zeros((model_trained.emissions_dim, model_trained.input_dim_full))
         model_trained.cell_ids = cell_ids
 
-        lu.save_run(save_folder, model_trained, data_train=data_train, data_test=data_test, params=run_params)
+        lu.save_run(save_folder, model_trained=model_trained, data_train=data_train, data_test=data_test, params=run_params)
 
     else:
         # if you are a child node, just set everything to None and only calculate your sufficient statistics
@@ -185,25 +186,25 @@ def fit_experimental(param_name, save_folder):
 
     # if memory gets to big, use memmap. Reduces speed but significantly reduces memory
     if run_params['use_memmap']:
-        memmap_rank = rank
+        memmap_cpu_id = cpu_id
     else:
-        memmap_rank = None
+        memmap_cpu_id = None
 
     # fit the model using expectation maximization
     ll, model_trained, smoothed_means, init_mean, init_cov = \
         iu.fit_em(model_trained, emissions, inputs, data_test, num_steps=run_params['num_train_steps'],
-                  save_folder=save_folder, memmap_rank=memmap_rank)
+                  save_folder=save_folder, memmap_cpu_id=memmap_cpu_id)
 
     inference_test = iu.parallel_get_post(model_trained, data_test)
 
-    if rank == 0:
+    if cpu_id == 0:
         inference_train = {'ll': ll,
                            'posterior': smoothed_means,
                            'init_mean': init_mean,
                            'init_cov': init_cov,
                            }
 
-        lu.save_run(save_folder, model_trained, inference_train=inference_train, inference_test=inference_test)
+        lu.save_run(save_folder, model_trained=model_trained, inference_train=inference_train, inference_test=inference_test)
 
         if run_params['use_memmap']:
             for i in range(size):
@@ -212,3 +213,35 @@ def fit_experimental(param_name, save_folder):
         if not is_parallel and run_params['plot_figures']:
             plotting.plot_model_params(model_trained)
 
+
+def infer_posterior(param_name, save_folder):
+    # fit a posterior to test data
+    # set up the option to parallelize the model fitting over CPUs
+    comm = pkl5.Intracomm(MPI.COMM_WORLD)
+    cpu_id = comm.Get_rank()
+
+    run_params = lu.get_run_params(param_name=param_name)
+
+    # cpu_id 0 is the parent node which will send out the data to the children nodes
+    if cpu_id == 0:
+        model_folder = Path(run_params['data_folder'])
+        model_path = model_folder / 'model_trained.pkl'
+        data_test_path = model_folder / 'data_test.pkl'
+
+        # load in the model
+        model_file = open(model_path, 'rb')
+        model = pickle.load(model_file)
+        model_file.close()
+
+        # load in the data for the model and do any preprocessing here
+        data_test_file = open(data_test_path, 'rb')
+        data_test = pickle.load(data_test_file)
+        data_test_file.close()
+    else:
+        model = None
+        data_test = None
+
+    inference_test = iu.parallel_get_post(model, data_test, max_iter=run_params['max_iter'])
+
+    if cpu_id == 0:
+        lu.save_run(model_folder, inference_test=inference_test)

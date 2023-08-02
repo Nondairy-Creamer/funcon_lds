@@ -10,19 +10,20 @@ from mpi4py.util import pkl5
 
 comm = pkl5.Intracomm(MPI.COMM_WORLD)
 size = comm.Get_size()
-rank = comm.Get_rank()
+cpu_id = comm.Get_rank()
 is_parallel = size > 1
 
 if len(sys.argv) == 1:
     # param_name = 'submission_scripts/syn_test.yml'
-    param_name = 'submission_scripts/exp_test.yml'
+    # param_name = 'submission_scripts/exp_test.yml'
+    param_name = 'submission_scripts/infer_test_data.yml'
 else:
     param_name = sys.argv[1]
 
 param_name = Path(param_name)
 run_params = lu.get_run_params(param_name=param_name)
 
-if rank == 0:
+if cpu_id == 0:
     current_date = datetime.today().strftime('%Y%m%d_%H%M%S')
 
     full_path = Path(__file__).parent.resolve()
@@ -32,7 +33,7 @@ else:
     save_folder = None
 
 if 'slurm' in run_params.keys():
-    if rank == 0:
+    if cpu_id == 0:
         # default values that should be the same for
         slurm = Slurm(**run_params['slurm'], output=save_folder/'slurm_%A.out', job_name=param_name.stem)
 

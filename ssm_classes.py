@@ -298,7 +298,7 @@ class Lgssm:
 
         return data_dict
 
-    def lgssm_filter(self, emissions, inputs, init_mean, init_cov, memmap_rank=None):
+    def lgssm_filter(self, emissions, inputs, init_mean, init_cov, memmap_cpu_id=None):
         """Run a Kalman filter to produce the marginal likelihood and filtered state estimates.
         adapted from Dynamax.
         This function can deal with missing data if the data is missing the entire time trace
@@ -316,10 +316,10 @@ class Lgssm:
         emissions_inputs = inputs @ self.emissions_input_weights.T
 
         filtered_means = np.zeros((num_timesteps, self.dynamics_dim_full))
-        if memmap_rank is None:
+        if memmap_cpu_id is None:
             filtered_covs = np.zeros((num_timesteps, self.dynamics_dim_full, self.dynamics_dim_full))
         else:
-            file_path = '/tmp/filtered_covs_' + str(memmap_rank) + '.tmp'
+            file_path = '/tmp/filtered_covs_' + str(memmap_cpu_id) + '.tmp'
             filtered_covs = np.memmap(file_path, dtype='float64', mode='w+',
                                       shape=((num_timesteps, self.dynamics_dim_full, self.dynamics_dim_full)))
 
@@ -359,7 +359,7 @@ class Lgssm:
 
         return ll, filtered_means, filtered_covs
 
-    def lgssm_smoother(self, emissions, inputs, init_mean=None, init_cov=None, memmap_rank=None):
+    def lgssm_smoother(self, emissions, inputs, init_mean=None, init_cov=None, memmap_cpu_id=None):
         r"""Run forward-filtering, backward-smoother to compute expectations
         under the posterior distribution on latent states. Technically, this
         implements the Rauch-Tung-Striebel (RTS) smoother.
@@ -377,7 +377,7 @@ class Lgssm:
             init_mean = self.estimate_init_cov([emissions])[0]
 
         # first run the kalman forward pass
-        ll, filtered_means, filtered_covs = self.lgssm_filter(emissions, inputs, init_mean, init_cov, memmap_rank=memmap_rank)
+        ll, filtered_means, filtered_covs = self.lgssm_filter(emissions, inputs, init_mean, init_cov, memmap_cpu_id=memmap_cpu_id)
 
         dynamics_inputs = inputs @ self.dynamics_input_weights.T
 
@@ -441,18 +441,18 @@ class Lgssm:
 
         return ll
 
-    def parallel_suff_stats(self, data, memmap_rank=None):
+    def parallel_suff_stats(self, data, memmap_cpu_id=None):
         emissions = data[0]
         inputs = data[1]
         init_mean = data[2]
         init_cov = data[3]
 
         ll, suff_stats, smoothed_means, new_init_covs = self.get_suff_stats(emissions, inputs, init_mean, init_cov,
-                                                                            memmap_rank=memmap_rank)
+                                                                            memmap_cpu_id=memmap_cpu_id)
 
         return ll, suff_stats, smoothed_means, new_init_covs
 
-    def em_step(self, emissions_list, inputs_list, init_mean_list, init_cov_list, cpu_id=0, num_cpus=1, memmap_rank=None):
+    def em_step(self, emissions_list, inputs_list, init_mean_list, init_cov_list, cpu_id=0, num_cpus=1, memmap_cpu_id=None):
         #
         # Run M-step updates for LDS-Gaussian model
         #
@@ -490,7 +490,7 @@ class Lgssm:
 
         ll_suff_stats_smoothed_means = []
         for d in data:
-            ll_suff_stats_smoothed_means.append(self.parallel_suff_stats(d, memmap_rank=memmap_rank))
+            ll_suff_stats_smoothed_means.append(self.parallel_suff_stats(d, memmap_cpu_id=memmap_cpu_id))
 
         ll_suff_stats_smoothed_means = iu.individual_gather(ll_suff_stats_smoothed_means, root=0)
 
@@ -651,11 +651,11 @@ class Lgssm:
 
         return None, None, None
 
-    def get_suff_stats(self, emissions, inputs, init_mean, init_cov, memmap_rank=None):
+    def get_suff_stats(self, emissions, inputs, init_mean, init_cov, memmap_cpu_id=None):
         nt = emissions.shape[0]
 
         ll, smoothed_means, suff_stats = \
-            self.lgssm_smoother(emissions, inputs, init_mean, init_cov, memmap_rank=memmap_rank)
+            self.lgssm_smoother(emissions, inputs, init_mean, init_cov, memmap_cpu_id=memmap_cpu_id)
 
         smoothed_covs_sum = suff_stats['smoothed_covs_sum']
         smoothed_crosses_sum = suff_stats['smoothed_crosses_sum']
