@@ -14,9 +14,9 @@ cpu_id = comm.Get_rank()
 is_parallel = size > 1
 
 if len(sys.argv) == 1:
-    # param_name = 'submission_scripts/syn_test.yml'
+    param_name = 'submission_scripts/syn_test.yml'
     # param_name = 'submission_scripts/exp_test.yml'
-    param_name = 'submission_scripts/infer_test_data.yml'
+    # param_name = 'submission_scripts/infer_test_data.yml'
 else:
     param_name = sys.argv[1]
 

@@ -6,14 +6,12 @@ from pathlib import Path
 
 
 # load in the model and training data
-# model_folder = Path('/home/mcreamer/Documents/data_sets/fun_con_models/48203609_DL5_IL60/')
-model_folder = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/48196084_DL3_IL45/')
-# model_folder = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/48713174_DL3_IL45/')
-cell_ids_chosen = ['AVAL', 'AVAR', 'AVEL', 'AVER', 'AFDL', 'AFDR', 'AVJL', 'AVJR', 'AVDL', 'AVDR']
-# cell_ids_chosen = ['AVAL', 'AVAR', 'ADAL', 'ADAR', 'AFDL', 'AFDR', 'AVJL', 'AVJR', 'ADLL', 'ADLR']
+model_folder = Path('C:/Users/mcreamer/Documents/python/funcon_lds/trained_models/exp_test/20230802_001959')
+# cell_ids_chosen = ['AVAL', 'AVAR', 'AVEL', 'AVER', 'AFDL', 'AFDR', 'AVJL', 'AVJR', 'AVDL', 'AVDR']
+cell_ids_chosen = ['AVAL', 'AVAR', 'AVEL', 'AVER', 'AFDL', 'AFDR', 'AVJR', 'AVDR']
 # cell_ids_chosen = ['AVDR', 'AVER', 'AVJR', 'RMDL', 'SAADL']
 neuron_to_remove = 'AVJR'
-neuron_to_stim = 'AFDR'
+neuron_to_stim = 'AVJR'
 sample_rate = 0.5
 
 window_size = 1000
@@ -21,65 +19,30 @@ colormap = mpl.colormaps['coolwarm']
 
 # load in the model and the data
 model_path = model_folder / 'model_trained.pkl'
-data_path = model_folder / 'data_train.pkl'
-posterior_path = model_folder / 'posterior.pkl'
-prior_path = model_folder / 'prior.pkl'
-prior_w_noise_path = model_folder / 'prior_w_noise.pkl'
+data_test_path = model_folder / 'data_train.pkl'
+inference_test_path = model_folder / 'inference_test.pkl'
 
 model_file = open(model_path, 'rb')
 model = pickle.load(model_file)
 model_file.close()
 
-data_file = open(data_path, 'rb')
-data = pickle.load(data_file)
-data_file.close()
+data_test_file = open(data_test_path, 'rb')
+data_test = pickle.load(data_test_file)
+data_test_file.close()
 
-emissions = data['emissions']
-inputs = data['inputs']
-cell_ids = data['cell_ids']
-cell_ids = [i for i in cell_ids]
+inference_test_file = open(inference_test_path, 'rb')
+inference_test = pickle.load(inference_test_file)
+inference_test_file.close()
 
-# check if prior has been generated yet. if not generate it
-if prior_path.exists():
-    prior_file = open(prior_path, 'rb')
-    prior = pickle.load(prior_file)
-    prior_file.close()
+emissions = data_test['emissions']
+inputs = data_test['inputs']
+cell_ids = data_test['cell_ids']
 
-else:
-    print('Prior has not been sampled yet, this will take several minutes')
-    print('Output will be saved and will not need to be generated again')
-    prior = model.sample([i.shape[0] for i in emissions], num_data_sets=len(inputs),
-                         inputs_list=inputs, add_noise=False)['emissions']
+post_pred = inference_test['post_pred']
+post_pred_noise = inference_test['post_pred_noise']
+posterior = inference_test['posterior']
 
-    prior_file = open(prior_path, 'wb')
-    pickle.dump(prior, prior_file)
-    prior_file.close()
-
-if prior_w_noise_path.exists():
-    prior_w_noise_file = open(prior_w_noise_path, 'rb')
-    prior_w_noise = pickle.load(prior_w_noise_file)
-    prior_w_noise_file.close()
-
-else:
-    print('Prior with noise has not been sampled yet, this will take several minutes')
-    print('Output will be saved and will not need to be generated again')
-    prior_w_noise = model.sample([i.shape[0] for i in emissions], num_data_sets=len(inputs),
-                                 inputs_list=inputs, add_noise=True)['emissions']
-
-    prior_w_noise_file = open(prior_w_noise_path, 'wb')
-    pickle.dump(prior_w_noise, prior_w_noise_file)
-    prior_w_noise_file.close()
-
-posterior_file = open(posterior_path, 'rb')
-posterior = pickle.load(posterior_file)
-posterior = [i @ model.emissions_weights.T for i in posterior]
-posterior_file.close()
-
-# pull out specific data sets to show
-if cell_ids_chosen is not None:
-    neuron_inds_chosen = np.array([cell_ids.index(i) for i in cell_ids_chosen])
-else:
-    neuron_inds_chosen = np.arange(len(cell_ids))
+neuron_inds_chosen = np.array([cell_ids.index(i) for i in cell_ids_chosen])
 
 # the inputs matrix doesn't match the emissions matrix size because some neurons were not stimulated
 # upscale the inputs here so that the location of the stimulation in the input matrix
@@ -95,19 +58,18 @@ for i in inputs:
 # get all the inputs but with only the chosen neurons
 inputs_truncated = [i[:, neuron_inds_chosen] for i in inputs_full]
 data_ind_chosen, time_window = au.find_stim_events(inputs_truncated, window_size=window_size)
-data_ind_chosen += 1
 
 emissions_chosen = emissions[data_ind_chosen][time_window[0]:time_window[1], neuron_inds_chosen]
 inputs_chosen = inputs_full[data_ind_chosen][time_window[0]:time_window[1], neuron_inds_chosen]
 posterior_chosen = posterior[data_ind_chosen][time_window[0]:time_window[1], neuron_inds_chosen]
-prior_chosen = prior_w_noise[data_ind_chosen][time_window[0]:time_window[1], neuron_inds_chosen]
+post_pred_chosen = post_pred_noise[data_ind_chosen][time_window[0]:time_window[1], neuron_inds_chosen]
 
 au.plot_log_likelihood(model)
 au.plot_model_params(model, cell_ids, cell_ids_chosen=cell_ids_chosen)
 au.plot_dynamics_eigs(model)
-au.plot_posterior(emissions_chosen, inputs_chosen, posterior_chosen, prior_chosen, cell_ids_chosen)
+au.plot_posterior(emissions_chosen, inputs_chosen, posterior_chosen, post_pred_chosen, cell_ids_chosen)
 au.plot_missing_neuron(model, emissions[data_ind_chosen], inputs[data_ind_chosen], posterior[data_ind_chosen], cell_ids, neuron_to_remove, time_window)
-au.plot_stim_l2_norm(model, emissions, inputs_full, posterior, prior, cell_ids, cell_ids_chosen, window=(0, 120))
-au.plot_stim_response(emissions, inputs_full, posterior, prior, cell_ids, cell_ids_chosen, neuron_to_stim, window=(-60, 120))
+au.plot_stim_l2_norm(model, emissions, inputs_full, posterior, post_pred, cell_ids, cell_ids_chosen, window=(0, 120))
+au.plot_stim_response(emissions, inputs_full, posterior, post_pred, cell_ids, cell_ids_chosen, neuron_to_stim, window=(-60, 120))
 
 
