@@ -90,7 +90,7 @@ def fit_synthetic(param_name, save_folder):
         iu.fit_em(model_trained, emissions, inputs, num_steps=run_params['num_train_steps'],
                   save_folder=save_folder, memmap_cpu_id=memmap_cpu_id)
 
-    inference_test = iu.parallel_get_post(model_trained, data_test, max_iter=200)
+    inference_test = iu.parallel_get_post(model_trained, data_test, max_iter=100)
 
     if cpu_id == 0:
         inference_train = {'ll': ll,
@@ -195,7 +195,7 @@ def fit_experimental(param_name, save_folder):
         iu.fit_em(model_trained, emissions, inputs, num_steps=run_params['num_train_steps'],
                   save_folder=save_folder, memmap_cpu_id=memmap_cpu_id)
 
-    inference_test = iu.parallel_get_post(model_trained, data_test, max_iter=200)
+    inference_test = iu.parallel_get_post(model_trained, data_test, max_iter=100)
 
     if cpu_id == 0:
         inference_train = {'ll': ll,

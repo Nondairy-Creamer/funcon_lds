@@ -216,6 +216,9 @@ def parallel_get_post(model, data_test, init_mean=None, init_cov=None, max_iter=
             post_pred = model.sample(num_time=emissions.shape[0], inputs_list=[inputs], init_mean=init_mean, init_cov=init_cov, add_noise=False)
             post_pred_noise = model.sample(num_time=emissions.shape[0], inputs_list=[inputs], init_mean=init_mean, init_cov=init_cov)
 
+            post_pred = post_pred[0]['latents'][0]
+            post_pred_noise = post_pred_noise[0]['latents'][0]
+
             ll_smeans.append((ll, smoothed_means, post_pred, post_pred_noise, init_mean, init_cov))
 
         ll_smeans = individual_gather(ll_smeans, num_data=data_test_size)
