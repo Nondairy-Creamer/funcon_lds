@@ -419,7 +419,7 @@ class Lgssm:
 
             if t > 0:
                 smoothed_covs_sum += smoothed_cov_this
-                
+
             # add in the variance from all the values of y you imputed
             my_correction[np.ix_(y_nan_loc_t, y_nan_loc_t)] += c_nan @ smoothed_cov_this @ c_nan.T + r_nan
             mzy_correction[:, y_nan_loc_t] += smoothed_cov_this @ c_nan.T

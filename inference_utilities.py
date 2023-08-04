@@ -162,7 +162,6 @@ def parallel_get_post(model, data_test, init_mean=None, init_cov=None, max_iter=
     comm = pkl5.Intracomm(MPI.COMM_WORLD)
     cpu_id = comm.Get_rank()
     size = comm.Get_size()
-    size = 40
 
     if cpu_id == 0:
         emissions = data_test['emissions']
