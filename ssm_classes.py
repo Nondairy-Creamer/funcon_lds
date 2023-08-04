@@ -407,7 +407,9 @@ class Lgssm:
             smoothed_means[t, :] = filtered_mean + G @ (smoothed_mean_next - pred_mean)
 
             smoothed_cov_next = smoothed_cov_this.copy()
-            smoothed_covs_sum += smoothed_cov_this
+
+            if t > 0:
+                smoothed_covs_sum += smoothed_cov_this
 
             # Compute the smoothed expectation of x_t x_{t+1}^T
             # TODO: ask why the second expression is not in jonathan's code
