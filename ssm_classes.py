@@ -408,9 +408,6 @@ class Lgssm:
 
             smoothed_cov_next = smoothed_cov_this.copy()
 
-            if t > 0:
-                smoothed_covs_sum += smoothed_cov_this
-
             # Compute the smoothed expectation of x_t x_{t+1}^T
             # TODO: ask why the second expression is not in jonathan's code
             smoothed_crosses_sum += G @ smoothed_cov_next #+ smoothed_means[:, t, :, None] * smoothed_mean_next[:, None, :]
@@ -420,9 +417,11 @@ class Lgssm:
             c_nan = self.emissions_weights[y_nan_loc_t, :]
             r_nan = self.emissions_cov[np.ix_(y_nan_loc_t, y_nan_loc_t)]
 
-            # add in the variance from all the values of y you imputed
-            my_correction[np.ix_(y_nan_loc_t, y_nan_loc_t)] += c_nan @ smoothed_cov_this @ c_nan.T + r_nan
-            mzy_correction[:, y_nan_loc_t] += smoothed_cov_this @ c_nan.T
+            if t > 0:
+                smoothed_covs_sum += smoothed_cov_this
+                # add in the variance from all the values of y you imputed
+                my_correction[np.ix_(y_nan_loc_t, y_nan_loc_t)] += c_nan @ smoothed_cov_this @ c_nan.T + r_nan
+                mzy_correction[:, y_nan_loc_t] += smoothed_cov_this @ c_nan.T
 
         suff_stats = {}
         suff_stats['smoothed_covs_sum'] = smoothed_covs_sum
