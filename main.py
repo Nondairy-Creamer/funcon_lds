@@ -59,8 +59,6 @@ if 'slurm' in run_params.keys():
         submit_slurm(run_params['slurm'], save_folder, param_name, run_params['fit_file'])
 
         # infer the posterior of the test data and iterate to fit the initial conditions
-        run_params_test = {'data_folder': str(save_folder),
-                           'max_iter': 100}
         slurm_params_test = run_params['slurm'].copy()
         slurm_params_test['nodes'] = 1
         slurm_params_test['dependency'] = 'singleton'
