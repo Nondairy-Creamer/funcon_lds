@@ -27,7 +27,7 @@ class Lgssm:
         self.sample_rate = 0.5  # default is 2 Hz
         self.ridge_lambda = ridge_lambda
         if cell_ids is None:
-            self.cell_ids = ['S' + str(i) for i in range(self.dynamics_dim)]
+            self.cell_ids = [str(i) for i in range(self.dynamics_dim)]
         else:
             self.cell_ids = cell_ids
 
