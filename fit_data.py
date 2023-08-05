@@ -210,7 +210,7 @@ def fit_experimental(param_name, save_folder):
             plotting.plot_model_params(model_trained)
 
 
-def infer_posterior(param_name, save_folder):
+def infer_posterior(param_name, model_folder):
     # fit a posterior to test data
     # set up the option to parallelize the model fitting over CPUs
     comm = pkl5.Intracomm(MPI.COMM_WORLD)
@@ -220,10 +220,9 @@ def infer_posterior(param_name, save_folder):
 
     # cpu_id 0 is the parent node which will send out the data to the children nodes
     if cpu_id == 0:
-        if save_folder is None:
-            model_folder = Path(run_params['data_folder'])
-        else:
-            model_folder = save_folder
+        if 'model_folder' in run_params.keys():
+            model_folder = run_params['model_folder']
+        model_folder = Path(model_folder)
         model_path = model_folder / 'model_trained.pkl'
         data_test_path = model_folder / 'data_test.pkl'
 
