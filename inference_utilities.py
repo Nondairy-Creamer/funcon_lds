@@ -13,7 +13,7 @@ def block(block_list, dims=(2, 1)):
     return np.concatenate(layer, axis=dims[1])
 
 
-def individual_scatter(data, root=0, num_data=None):
+def individual_scatter(data, root=0):
     comm = pkl5.Intracomm(MPI.COMM_WORLD)
     cpu_id = comm.Get_rank()
     size = comm.Get_size()
@@ -26,19 +26,16 @@ def individual_scatter(data, root=0, num_data=None):
                 item = attr
             else:
                 comm.send(attr, dest=i)
-    else:
-        if num_data is None:
-            num_data = size
 
-        if cpu_id < num_data:
-            item = comm.recv(source=root)
-        else:
-            item = None
+        for i in range(len(data), size):
+            comm.send(None, dest=i)
+    else:
+        item = comm.recv(source=root)
 
     return item
 
 
-def individual_gather(data, root=0, num_data=None):
+def individual_gather(data, root=0):
     comm = pkl5.Intracomm(MPI.COMM_WORLD)
     cpu_id = comm.Get_rank()
     size = comm.Get_size()
@@ -46,10 +43,7 @@ def individual_gather(data, root=0, num_data=None):
     item = []
 
     if cpu_id == root:
-        if num_data is None:
-            num_data = size
-
-        for i in range(num_data):
+        for i in range(size):
             if i == root:
                 item.append(data)
             else:
@@ -175,15 +169,13 @@ def parallel_get_post(model, data_test, init_mean=None, init_cov=None, max_iter=
         if init_cov is None:
             init_cov = model.estimate_init_cov(emissions)
 
-        test_data_packaged = model.package_data_mpi(emissions, inputs, init_mean, init_cov, data_test_size)
+        test_data_packaged = model.package_data_mpi(emissions, inputs, init_mean, init_cov, size)
     else:
-        data_test_size = None
         test_data_packaged = None
 
     # get posterior on test data
-    data_test_size = comm.bcast(data_test_size)
     model = comm.bcast(model)
-    data_test_out = individual_scatter(test_data_packaged, num_data=data_test_size)
+    data_test_out = individual_scatter(test_data_packaged)
 
     if data_test_out is not None:
         ll_smeans = []
@@ -220,8 +212,11 @@ def parallel_get_post(model, data_test, init_mean=None, init_cov=None, max_iter=
             post_pred_noise = post_pred_noise['latents'][0]
 
             ll_smeans.append((ll, smoothed_means, post_pred, post_pred_noise, init_mean, init_cov))
+    else:
+        ll_smeans = None
 
-        ll_smeans = individual_gather(ll_smeans, num_data=data_test_size)
+    ll_smeans = individual_gather(ll_smeans)
+    ll_smeans = [i for i in ll_smeans if i is not None]
 
     if cpu_id == 0:
         ll_smeans_out = []

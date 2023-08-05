@@ -34,10 +34,11 @@ else:
 
 if 'slurm' in run_params.keys():
     if cpu_id == 0:
-        # default values that should be the same for
-        slurm = Slurm(**run_params['slurm'], output=save_folder/'slurm_%A.out', job_name=param_name.stem)
+        # Fit the model using EM
+        slurm_fit = Slurm(**run_params['slurm'], output=save_folder/'slurm_%A.out', job_name=param_name.stem)
 
         cpus_per_task = run_params['slurm']['cpus_per_task']
+        fit_model_command = 'fit_data.' + run_params['fit_file'] + '(\'' + str(param_name) + '\',\'' + str(save_folder) + '\')\"'
 
         run_command = ['module purge',
                        'module load anaconda3/2022.10',
@@ -46,10 +47,32 @@ if 'slurm' in run_params.keys():
                        'export MKL_NUM_THREADS=' + str(cpus_per_task),
                        'export OPENBLAS_NUM_THREADS=' + str(cpus_per_task),
                        'export OMP_NUM_THREADS=' + str(cpus_per_task),
-                       'srun python -uc \"import fit_data; fit_data.' + run_params['fit_file'] + '(\'' + str(param_name) + '\',\'' + str(save_folder) + '\')\"',
+                       'srun python -uc \"import fit_data; ' + fit_model_command,
                        ]
 
-        slurm.sbatch('\n'.join(run_command))
+        slurm_fit.sbatch('\n'.join(run_command))
+
+        # infer the posterior of the test data and iterate to fit the initial conditions
+        run_params_test = {'data_folder': str(save_folder),
+                           'max_iter': 100}
+        run_params_test_slurm = run_params['slurm'].copy()
+        run_params_test_slurm['nodes'] = 1
+        run_params_test_slurm['dependency'] = 'singleton'
+        slurm_test = Slurm(**run_params_test_slurm['slurm'], output=save_folder/'slurm_%A.out', job_name=param_name.stem)
+
+        fit_test_command = 'fit_data.infer_posterior(\'' + str(param_name) + '\',\'' + str(save_folder) + '\')\"'
+
+        run_command = ['module purge',
+                       'module load anaconda3/2022.10',
+                       'module load openmpi/gcc/4.1.2',
+                       'conda activate fast-mpi4py',
+                       'export MKL_NUM_THREADS=' + str(cpus_per_task),
+                       'export OPENBLAS_NUM_THREADS=' + str(cpus_per_task),
+                       'export OMP_NUM_THREADS=' + str(cpus_per_task),
+                       'srun python -uc \"import fit_data; ' + fit_test_command,
+                       ]
+
+        slurm_fit.sbatch('\n'.join(run_command))
 
 else:
     method = getattr(fit_data, run_params['fit_file'])
