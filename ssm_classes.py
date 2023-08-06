@@ -808,12 +808,16 @@ class Lgssm:
     @staticmethod
     def package_data_mpi(emissions_list, inputs_list, init_mean_list, init_cov_list, num_cpus):
         # packages data for sending using MPI
-        data_out = list(zip(emissions_list, inputs_list, init_mean_list, init_cov_list))
+        data_zipped = list(zip(emissions_list, inputs_list, init_mean_list, init_cov_list))
         num_data = len(emissions_list)
-        chunk_size = int(np.ceil(num_data / num_cpus))
-        # split data out into a list of inputs
-        data_out = [data_out[i:i + chunk_size] for i in range(0, num_data, chunk_size)]
+        overflow = np.mod(num_data, num_cpus)
+        num_data_truncated = num_data - overflow
+        chunk_size = int(num_data_truncated / num_cpus)
+        split_data = [data_zipped[i:i + chunk_size] for i in range(0, num_data_truncated, chunk_size)]
 
-        return data_out
+        for i in range(overflow):
+            split_data[i].append(data_zipped[chunk_size * num_data_truncated + i])
+
+        return split_data
 
 

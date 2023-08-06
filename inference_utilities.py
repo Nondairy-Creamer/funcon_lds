@@ -160,8 +160,6 @@ def parallel_get_post(model, data_test, init_mean=None, init_cov=None, max_iter=
     if cpu_id == 0:
         emissions = data_test['emissions']
         inputs = data_test['inputs']
-        # get the cpu_ids for running the model on the test data
-        data_test_size = np.min((size, len(emissions)))
 
         if init_mean is None:
             init_mean = model.estimate_init_mean(emissions)
