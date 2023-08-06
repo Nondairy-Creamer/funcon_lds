@@ -178,18 +178,18 @@ def parallel_get_post(model, data_test, init_mean=None, init_cov=None, max_iter=
     if data_test_out is not None:
         ll_smeans = []
         for ii, i in enumerate(data_test_out):
-            emissions = i[0]
-            inputs = i[1]
-            init_mean = i[2]
-            init_cov = i[3]
+            emissions = i[0].copy()
+            inputs = i[1].copy()
+            init_mean = i[2].copy()
+            init_cov = i[3].copy()
             converged = False
             iter_num = 1
 
             while not converged and iter_num <= max_iter:
                 ll, smoothed_means, suff_stats = model.lgssm_smoother(emissions, inputs, init_mean, init_cov)
 
-                init_mean_new = smoothed_means[0, :]
-                init_cov_new = suff_stats['first_cov']
+                init_mean_new = smoothed_means[0, :].copy()
+                init_cov_new = suff_stats['first_cov'].copy()
 
                 init_mean_same = np.max(np.abs(init_mean - init_mean_new)) < converge_res
                 init_cov_same = np.max(np.abs(init_cov - init_cov_new)) < converge_res
