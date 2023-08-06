@@ -3,7 +3,7 @@ import fit_data
 import sys
 import os
 from simple_slurm import Slurm
-from datetime import datetime, time
+from datetime import datetime
 from pathlib import Path
 from mpi4py import MPI
 from mpi4py.util import pkl5

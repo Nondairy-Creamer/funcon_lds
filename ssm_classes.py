@@ -199,42 +199,53 @@ class Lgssm:
         init_mean_list = []
         init_cov_list = []
 
-        if type(num_time) is not list:
-            num_time = [num_time] * num_data_sets
+        if init_mean is None:
+            generate_mean = True
+        else:
+            generate_mean = False
 
-        for nt in num_time:
-            if inputs_list is None:
-                if input_time_scale != 0:
-                    stims_per_data_set = int(nt / input_time_scale)
-                    num_stims = num_data_sets * stims_per_data_set
-                    sparse_inputs_init = np.eye(self.input_dim)[rng.choice(self.input_dim, num_stims, replace=True)]
+        if init_cov is None:
+            generate_cov = True
+        else:
+            generate_cov = False
 
-                    # upsample to full time
-                    total_time = nt * num_data_sets
-                    inputs_list = np.zeros((total_time, self.emissions_dim))
-                    inputs_list[::input_time_scale, :] = sparse_inputs_init
-                    inputs_list = np.split(inputs_list, num_data_sets)
-                else:
-                    inputs_list = [rng.standard_normal((nt, self.input_dim)) for i in range(num_data_sets)]
+        if inputs_list is None:
+            generate_inputs = True
+        else:
+            generate_inputs = False
+
+        if generate_inputs:
+            if input_time_scale != 0:
+                stims_per_data_set = int(num_time / input_time_scale)
+                num_stims = num_data_sets * stims_per_data_set
+                sparse_inputs_init = np.eye(self.input_dim)[rng.choice(self.input_dim, num_stims, replace=True)]
+
+                # upsample to full time
+                total_time = num_time * num_data_sets
+                inputs_list = np.zeros((total_time, self.emissions_dim))
+                inputs_list[::input_time_scale, :] = sparse_inputs_init
+                inputs_list = np.split(inputs_list, num_data_sets)
+            else:
+                inputs_list = [rng.standard_normal((num_time, self.input_dim)) for i in range(num_data_sets)]
 
         inputs_lagged = [self.get_lagged_data(i, self.dynamics_input_lags, add_pad=True) for i in inputs_list]
 
         for d in range(num_data_sets):
             # generate a random initial mean and covariance
-            if init_mean is None:
+            if generate_mean:
                 init_mean = rng.standard_normal(self.dynamics_dim_full)
 
-            if init_cov is None:
+            if generate_cov:
                 init_cov = rng.standard_normal((self.dynamics_dim_full, self.dynamics_dim_full))
                 init_cov = init_cov.T @ init_cov
 
-            latents = np.zeros((num_time[d], self.dynamics_dim_full))
-            emissions = np.zeros((num_time[d], self.emissions_dim))
+            latents = np.zeros((num_time, self.dynamics_dim_full))
+            emissions = np.zeros((num_time, self.emissions_dim))
             inputs = inputs_lagged[d]
 
             # get the initial observations
-            dynamics_noise = add_noise * rng.multivariate_normal(np.zeros(self.dynamics_dim_full), self.dynamics_cov, size=num_time[d])
-            emissions_noise = add_noise * rng.multivariate_normal(np.zeros(self.emissions_dim), self.emissions_cov, size=num_time[d])
+            dynamics_noise = add_noise * rng.multivariate_normal(np.zeros(self.dynamics_dim_full), self.dynamics_cov, size=num_time)
+            emissions_noise = add_noise * rng.multivariate_normal(np.zeros(self.emissions_dim), self.emissions_cov, size=num_time)
             dynamics_inputs = (self.dynamics_input_weights @ inputs[:, :, None])[:, :, 0]
             emissions_inputs = (self.emissions_input_weights @ inputs[:, :, None])[:, :, 0]
             latent_init = rng.multivariate_normal(init_mean, init_cov)
@@ -250,7 +261,7 @@ class Lgssm:
                               emissions_noise[0, :]
 
             # loop through time and generate the latents and emissions
-            for t in range(1, num_time[d]):
+            for t in range(1, num_time):
                 latents[t, :] = (self.dynamics_weights @ latents[t-1, :]) + \
                                  dynamics_inputs[t, :] + \
                                  self.dynamics_offset + \
@@ -267,7 +278,7 @@ class Lgssm:
             init_cov_list.append(init_cov)
 
         # add in nans
-        scattered_nans_mask = [rng.random((num_time[i], self.emissions_dim)) < scattered_nan_freq for i in range(num_data_sets)]
+        scattered_nans_mask = [rng.random((num_time, self.emissions_dim)) < scattered_nan_freq for i in range(num_data_sets)]
         lost_emission_mask = [rng.random((1, self.emissions_dim)) < lost_emission_freq for i in range(num_data_sets)]
         nan_mask = [scattered_nans_mask[i] | lost_emission_mask[i] for i in range(num_data_sets)]
 
