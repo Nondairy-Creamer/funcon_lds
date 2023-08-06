@@ -812,11 +812,19 @@ class Lgssm:
         num_data = len(emissions_list)
         overflow = np.mod(num_data, num_cpus)
         num_data_truncated = num_data - overflow
-        chunk_size = int(num_data_truncated / num_cpus)
-        split_data = [data_zipped[i:i + chunk_size] for i in range(0, num_data_truncated, chunk_size)]
+        # this kind of round about way of distributing the data is to make sure they stay in order
+        # when you stack them back up
+        chunk_size = [int(num_data_truncated / num_cpus)] * num_cpus
 
         for i in range(overflow):
-            split_data[i].append(data_zipped[chunk_size * num_data_truncated + i])
+            chunk_size[i] += 1
+
+        split_data = []
+        pos = 0
+
+        for i in range(len(chunk_size)):
+            split_data.append(data_zipped[pos : pos + chunk_size[i]])
+            pos += chunk_size[i]
 
         return split_data
 

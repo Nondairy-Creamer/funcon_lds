@@ -196,8 +196,8 @@ def parallel_get_post(model, data_test, init_mean=None, init_cov=None, max_iter=
                 if init_mean_same and init_cov_same:
                     converged = True
                 else:
-                    init_mean = init_mean_new
-                    init_cov = init_cov_new
+                    init_mean = init_mean_new.copy()
+                    init_cov = init_cov_new.copy()
 
                 print('cpu_id', cpu_id + 1, '/', size, 'data #', ii + 1, '/', len(data_test_out),
                       'posterior iteration:', iter_num, ', converged:', converged)
