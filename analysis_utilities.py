@@ -4,7 +4,7 @@ import numpy as np
 
 
 def rms(data, axis=-1):
-    return np.sqrt(np.mean(data**2, axis=axis))
+    return np.sqrt(np.nanmean(data**2, axis=axis))
 
 
 def nan_convolve(data, filter):
@@ -127,6 +127,9 @@ def get_stim_response(emissions, inputs, window=(-20, 60)):
     # get structure which is responding neuron x stimulated neuron
     stim_responses = np.zeros((window[1] - window[0], num_neurons, num_neurons))
     num_stims = np.zeros((num_neurons, num_neurons))
+    responses = []
+    for n in range(num_neurons):
+        responses.append([])
 
     for e, i in zip(emissions, inputs):
         num_time = e.shape[0]
@@ -134,16 +137,19 @@ def get_stim_response(emissions, inputs, window=(-20, 60)):
 
         for time, target in zip(stim_events[0], stim_events[1]):
             if window[0] + time >= 0 and window[1] + time < num_time:
-                responses = e[window[0]+time:window[1]+time, :]
-                nan_responses = np.any(np.isnan(responses), axis=0)
-                responses[:, nan_responses] = 0
-                num_stims[~nan_responses, target] += 1
-                stim_responses[:, :, target] += responses
+                responses[target].append(e[window[0]+time:window[1]+time, :])
 
-    num_stims[num_stims == 0] = np.nan
-    stim_responses = stim_responses / num_stims[None, :, :]
+    for ri, r in enumerate(responses):
+        if len(r) > 0:
+            responses[ri] = np.stack(r)
+        else:
+            responses[ri] = np.zeros((0, window[1] - window[0], num_neurons))
 
-    return stim_responses
+    ave_responses = [np.nanmean(j, axis=0) for j in responses]
+    ave_responses = np.stack(ave_responses)
+    ave_responses = np.transpose(ave_responses, axes=(1, 2, 0))
+
+    return ave_responses, responses
 
 
 def find_stim_events(inputs, window_size=1000):
@@ -179,8 +185,7 @@ def find_stim_events(inputs, window_size=1000):
     return max_data_set, time_window
 
 
-def plot_posterior(emissions, inputs, posterior, post_pred, cell_ids):
-    sample_rate = 0.5
+def plot_posterior(emissions, inputs, posterior, post_pred, cell_ids, sample_rate=0.5):
     colormap = mpl.colormaps['coolwarm']
 
     filt_shape = np.ones(5)
@@ -256,10 +261,7 @@ def plot_posterior(emissions, inputs, posterior, post_pred, cell_ids):
     plt.show()
 
 
-def plot_missing_neuron(model, emissions, inputs, posterior, cell_ids, neuron_to_remove, time_window):
-    # sample_rate = model.sample_rate
-    sample_rate = 0.5
-
+def plot_missing_neuron(model, emissions, inputs, posterior, cell_ids, neuron_to_remove, time_window, sample_rate=0.5):
     init_mean = model.estimate_init_mean([emissions])[0]
     init_cov = model.estimate_init_cov([emissions])[0]
 
@@ -293,15 +295,16 @@ def plot_stim_l2_norm(model, emissions, inputs_full, posterior, post_pred, cell_
     colormap = mpl.colormaps['coolwarm']
 
     # go through emissions and get the average input response for each neuron
-    measured_stim_responses = get_stim_response(emissions, inputs_full, window=window)
-    post_pred_stim_responses = get_stim_response(post_pred, inputs_full, window=window)
-    posterior_stim_responses = get_stim_response(posterior, inputs_full, window=window)
+    measured_stim_responses = get_stim_response(emissions, inputs_full, window=window)[0]
+    post_pred_stim_responses = get_stim_response(post_pred, inputs_full, window=window)[0]
+    posterior_stim_responses = get_stim_response(posterior, inputs_full, window=window)[0]
     model_weights = model.dynamics_weights[:model.dynamics_dim, :]
 
     # calculate the average cross correlation between neurons
 
     correlation = [np.corrcoef(i.T) for i in emissions]
     correlation = np.nanmean(np.stack(correlation), axis=0)
+    correlation[np.isnan(correlation)] = 0
 
     # calculate the rms for each response. This deals with the fact that responses can vary and go negative
     measured_response_norm = rms(measured_stim_responses, axis=0)
@@ -310,11 +313,11 @@ def plot_stim_l2_norm(model, emissions, inputs_full, posterior, post_pred, cell_
     model_weights_norm = rms(stack_weights(model_weights, model.dynamics_lags, axis=1), axis=0)
 
     # pull out the neurons we care about
-    correlation = np.abs(np.linalg.inv(correlation[chosen_neuron_inds, :][:, chosen_neuron_inds]))
-    measured_response_norm = measured_response_norm[chosen_neuron_inds, :][:, chosen_neuron_inds]
-    post_pred_response_norm = post_pred_response_norm[chosen_neuron_inds, :][:, chosen_neuron_inds]
-    posterior_response_norm = posterior_response_norm[chosen_neuron_inds, :][:, chosen_neuron_inds]
-    model_weights_norm = model_weights_norm[chosen_neuron_inds, :][:, chosen_neuron_inds]
+    correlation = np.abs(np.linalg.inv(correlation))[np.ix_(chosen_neuron_inds, chosen_neuron_inds)]
+    measured_response_norm = measured_response_norm[np.ix_(chosen_neuron_inds, chosen_neuron_inds)]
+    post_pred_response_norm = post_pred_response_norm[np.ix_(chosen_neuron_inds, chosen_neuron_inds)]
+    posterior_response_norm = posterior_response_norm[np.ix_(chosen_neuron_inds, chosen_neuron_inds)]
+    model_weights_norm = model_weights_norm[np.ix_(chosen_neuron_inds, chosen_neuron_inds)]
 
     # set the diagonal to 0 for visualization
     correlation[np.eye(correlation.shape[0], dtype=bool)] = 0
@@ -326,8 +329,8 @@ def plot_stim_l2_norm(model, emissions, inputs_full, posterior, post_pred, cell_
     # normalize so that everything is on the same scale
     correlation = correlation / np.nanmax(correlation)
     measured_response_norm = measured_response_norm / np.nanmax(measured_response_norm)
-    post_pred_response_norm = post_pred_response_norm / np.max(post_pred_response_norm)
-    posterior_response_norm = posterior_response_norm / np.max(posterior_response_norm)
+    post_pred_response_norm = post_pred_response_norm / np.nanmax(post_pred_response_norm)
+    posterior_response_norm = posterior_response_norm / np.nanmax(posterior_response_norm)
     model_weights_norm = model_weights_norm / np.max(model_weights_norm)
 
     plt.figure()
@@ -373,17 +376,16 @@ def plot_stim_l2_norm(model, emissions, inputs_full, posterior, post_pred, cell_
     plt.show()
 
 
-def plot_stim_response(emissions, inputs_full, posterior, post_pred, cell_ids, cell_ids_chosen, neuron_to_stim, window=(-60, 120)):
-    # sample_rate = model.sample_rate
-    sample_rate = 0.5
+def plot_stim_response(emissions, inputs_full, posterior, post_pred, cell_ids, cell_ids_chosen, neuron_to_stim,
+                       window=(-60, 120), sample_rate=0.5):
     chosen_neuron_inds = [cell_ids.index(i) for i in cell_ids_chosen]
     plot_x = np.arange(window[0], window[1]) * sample_rate
     neuron_to_stim_ind = cell_ids_chosen.index(neuron_to_stim)
 
     # go through emissions and get the average input response for each neuron
-    measured_stim_responses = get_stim_response(emissions, inputs_full, window=window)
-    post_pred_stim_responses = get_stim_response(post_pred, inputs_full, window=window)
-    posterior_stim_responses = get_stim_response(posterior, inputs_full, window=window)
+    measured_stim_responses = get_stim_response(emissions, inputs_full, window=window)[0]
+    post_pred_stim_responses = get_stim_response(post_pred, inputs_full, window=window)[0]
+    posterior_stim_responses = get_stim_response(posterior, inputs_full, window=window)[0]
 
     # pull out the neurons we care about
     measured_stim_responses = measured_stim_responses[:, chosen_neuron_inds, :]

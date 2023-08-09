@@ -4,23 +4,35 @@ import analysis_utilities as au
 import matplotlib as mpl
 from pathlib import Path
 
+use_synth = False
+run_test = True
 
-# load in the model and training data
-model_folder = Path('C:/Users/mcreamer/Documents/python/funcon_lds/trained_models/exp_test/20230802_001959')
-# cell_ids_chosen = ['AVAL', 'AVAR', 'AVEL', 'AVER', 'AFDL', 'AFDR', 'AVJL', 'AVJR', 'AVDL', 'AVDR']
-cell_ids_chosen = ['AVAL', 'AVAR', 'AVEL', 'AVER', 'AFDL', 'AFDR', 'AVJR', 'AVDR']
-# cell_ids_chosen = ['AVDR', 'AVER', 'AVJR', 'RMDL', 'SAADL']
-neuron_to_remove = 'AVJR'
-neuron_to_stim = 'AVJR'
-sample_rate = 0.5
+if not use_synth:
+    # load in the model and training data
+    model_folder = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/exp_test/20230809_141820/')
+    cell_ids_chosen = ['AVAL', 'AVAR', 'AVEL', 'AVER', 'AFDL', 'AFDR', 'AVJL', 'AVJR', 'AVDL', 'AVDR']
+    cell_ids_chosen = ['AVAL', 'AVAR', 'AVEL', 'AVER', 'AFDR', 'AVJL', 'AVJR', 'AVDL', 'AVDR']
+    neuron_to_remove = 'AVJR'
+    neuron_to_stim = 'AVJR'
+else:
+    model_folder = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/exp_test/20230808_185310/')
+    # model_folder = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/syn_test/20230808_163745/')
+    cell_ids_chosen = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
+    neuron_to_remove = '4'
+    neuron_to_stim = '4'
 
 window_size = 1000
 colormap = mpl.colormaps['coolwarm']
 
 # load in the model and the data
 model_path = model_folder / 'model_trained.pkl'
-data_test_path = model_folder / 'data_train.pkl'
-inference_test_path = model_folder / 'inference_test.pkl'
+
+if run_test:
+    data_test_path = model_folder / 'data_test.pkl'
+    posterior_test_path = model_folder / 'posterior_test.pkl'
+else:
+    data_test_path = model_folder / 'data_train.pkl'
+    posterior_test_path = model_folder / 'posterior_train.pkl'
 
 model_file = open(model_path, 'rb')
 model = pickle.load(model_file)
@@ -30,17 +42,17 @@ data_test_file = open(data_test_path, 'rb')
 data_test = pickle.load(data_test_file)
 data_test_file.close()
 
-inference_test_file = open(inference_test_path, 'rb')
-inference_test = pickle.load(inference_test_file)
-inference_test_file.close()
+posterior_test_file = open(posterior_test_path, 'rb')
+posterior_test = pickle.load(posterior_test_file)
+posterior_test_file.close()
 
 emissions = data_test['emissions']
 inputs = data_test['inputs']
 cell_ids = data_test['cell_ids']
 
-post_pred = inference_test['post_pred']
-post_pred_noise = inference_test['post_pred_noise']
-posterior = inference_test['posterior']
+post_pred = posterior_test['post_pred']
+post_pred_noise = posterior_test['post_pred_noise']
+posterior = posterior_test['posterior']
 
 neuron_inds_chosen = np.array([cell_ids.index(i) for i in cell_ids_chosen])
 
@@ -67,9 +79,9 @@ post_pred_chosen = post_pred_noise[data_ind_chosen][time_window[0]:time_window[1
 au.plot_log_likelihood(model)
 au.plot_model_params(model, cell_ids, cell_ids_chosen=cell_ids_chosen)
 au.plot_dynamics_eigs(model)
-au.plot_posterior(emissions_chosen, inputs_chosen, posterior_chosen, post_pred_chosen, cell_ids_chosen)
-au.plot_missing_neuron(model, emissions[data_ind_chosen], inputs[data_ind_chosen], posterior[data_ind_chosen], cell_ids, neuron_to_remove, time_window)
+au.plot_posterior(emissions_chosen, inputs_chosen, posterior_chosen, post_pred_chosen, cell_ids_chosen, sample_rate=model.sample_rate)
 au.plot_stim_l2_norm(model, emissions, inputs_full, posterior, post_pred, cell_ids, cell_ids_chosen, window=(0, 120))
-au.plot_stim_response(emissions, inputs_full, posterior, post_pred, cell_ids, cell_ids_chosen, neuron_to_stim, window=(-60, 120))
+au.plot_stim_response(emissions, inputs_full, posterior, post_pred, cell_ids, cell_ids_chosen, neuron_to_stim, window=(-60, 120), sample_rate=model.sample_rate)
 
+# au.plot_missing_neuron(model, emissions[data_ind_chosen], inputs[data_ind_chosen], posterior[data_ind_chosen], cell_ids, neuron_to_remove, time_window, sample_rate=model.sample_rate)
 
