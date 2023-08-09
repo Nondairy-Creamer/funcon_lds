@@ -78,6 +78,7 @@ def fit_synthetic(param_name, save_folder):
         inputs = None
         model_trained = None
         model_true = None
+        data_train = None
         data_test = None
 
     # if memory gets to big, use memmap. Reduces speed but significantly reduces memory
@@ -86,18 +87,20 @@ def fit_synthetic(param_name, save_folder):
     else:
         memmap_cpu_id = None
 
-    ll, model_trained, smoothed_means, init_mean, init_cov = \
+    ll, model_trained, init_mean, init_cov = \
         iu.fit_em(model_trained, emissions, inputs, num_steps=run_params['num_train_steps'],
                   save_folder=save_folder, memmap_cpu_id=memmap_cpu_id)
 
-    if cpu_id == 0:
-        inference_train = {'ll': ll,
-                           'posterior': smoothed_means,
-                           'init_mean': init_mean,
-                           'init_cov': init_cov,
-                           }
+    # sample from the model
+    posterior_train = iu.parallel_get_post(model_trained, data_train, init_mean=init_mean, init_cov=init_cov,
+                                           max_iter=100, converge_res=1e-2, time_lim=100)
 
-        lu.save_run(save_folder, model_trained=model_trained, inference_train=inference_train)
+    posterior_test = iu.parallel_get_post(model_trained, data_test, init_mean=None, init_cov=None,
+                                          max_iter=100, converge_res=1e-2, time_lim=100)
+
+    if cpu_id == 0:
+        lu.save_run(save_folder, model_trained=model_trained, posterior_train=posterior_train,
+                    posterior_test=posterior_test)
 
         if run_params['use_memmap']:
             for i in range(size):
@@ -180,6 +183,7 @@ def fit_experimental(param_name, save_folder):
         emissions = None
         inputs = None
         model_trained = None
+        data_train = None
         data_test = None
 
     # if memory gets to big, use memmap. Reduces speed but significantly reduces memory
@@ -189,18 +193,20 @@ def fit_experimental(param_name, save_folder):
         memmap_cpu_id = None
 
     # fit the model using expectation maximization
-    ll, model_trained, smoothed_means, init_mean, init_cov = \
+    ll, model_trained, init_mean, init_cov = \
         iu.fit_em(model_trained, emissions, inputs, num_steps=run_params['num_train_steps'],
                   save_folder=save_folder, memmap_cpu_id=memmap_cpu_id)
 
-    if cpu_id == 0:
-        inference_train = {'ll': ll,
-                           'posterior': smoothed_means,
-                           'init_mean': init_mean,
-                           'init_cov': init_cov,
-                           }
+    # sample from the model
+    posterior_train = iu.parallel_get_post(model_trained, data_train, init_mean=init_mean, init_cov=init_cov,
+                                           max_iter=100, converge_res=1e-2, time_lim=100)
 
-        lu.save_run(save_folder, model_trained=model_trained, inference_train=inference_train)
+    posterior_test = iu.parallel_get_post(model_trained, data_test, init_mean=None, init_cov=None,
+                                          max_iter=100, converge_res=1e-2, time_lim=100)
+
+    if cpu_id == 0:
+        lu.save_run(save_folder, model_trained=model_trained, posterior_train=posterior_train,
+                    posterior_test=posterior_test)
 
         if run_params['use_memmap']:
             for i in range(size):

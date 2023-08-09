@@ -134,13 +134,13 @@ def fit_em(model, emissions, inputs, init_mean=None, init_cov=None, num_steps=10
             model.train_time = time_out
 
             if np.mod(ep + 1, save_every) == 0:
-                inference_train = {'ll': ll,
+                posterior_train = {'ll': ll,
                                    'posterior': smoothed_means,
                                    'init_mean': init_mean,
                                    'init_cov': init_cov,
                                    }
 
-                lu.save_run(save_folder, model_trained=model, inference_train=inference_train)
+                lu.save_run(save_folder, model_trained=model, posterior_train=posterior_train)
 
             if model.verbose:
                 print('Finished step', ep + 1, '/', num_steps)
@@ -149,10 +149,10 @@ def fit_em(model, emissions, inputs, init_mean=None, init_cov=None, num_steps=10
                 time_remaining = time_out[-1] / (ep + 1) * (num_steps - ep - 1)
                 print('Estimated remaining =', time_remaining, 's')
 
-    return ll, model, smoothed_means, init_mean, init_cov
+    return ll, model, init_mean, init_cov
 
 
-def parallel_get_post(model, data_test, init_mean=None, init_cov=None, max_iter=1, converge_res=1e-2):
+def parallel_get_post(model, data_test, init_mean=None, init_cov=None, max_iter=1, converge_res=1e-2, time_lim=100):
     comm = pkl5.Intracomm(MPI.COMM_WORLD)
     cpu_id = comm.Get_rank()
     size = comm.Get_size()
@@ -178,8 +178,8 @@ def parallel_get_post(model, data_test, init_mean=None, init_cov=None, max_iter=
     if data_test_out is not None:
         ll_smeans = []
         for ii, i in enumerate(data_test_out):
-            emissions = i[0].copy()
-            inputs = i[1].copy()
+            emissions = i[0][:time_lim, :].copy()
+            inputs = i[1][:time_lim, :].copy()
             init_mean = i[2].copy()
             init_cov = i[3].copy()
             converged = False
@@ -203,13 +203,18 @@ def parallel_get_post(model, data_test, init_mean=None, init_cov=None, max_iter=
                       'posterior iteration:', iter_num, ', converged:', converged)
                 iter_num += 1
 
+            emissions = i[0].copy()
+            inputs = i[1].copy()
+
+            ll, posterior, suff_stats = model.lgssm_smoother(emissions, inputs, init_mean, init_cov)
             post_pred = model.sample(num_time=emissions.shape[0], inputs_list=[inputs], init_mean=init_mean, init_cov=init_cov, add_noise=False)
             post_pred_noise = model.sample(num_time=emissions.shape[0], inputs_list=[inputs], init_mean=init_mean, init_cov=init_cov)
 
-            post_pred = post_pred['latents'][0]
-            post_pred_noise = post_pred_noise['latents'][0]
+            posterior = posterior[:, :model.dynamics_dim]
+            post_pred = post_pred['latents'][0][:, :model.dynamics_dim]
+            post_pred_noise = post_pred_noise['latents'][0][:, :model.dynamics_dim]
 
-            ll_smeans.append((ll, smoothed_means, post_pred, post_pred_noise, init_mean, init_cov))
+            ll_smeans.append((ll, posterior, post_pred, post_pred_noise, init_mean, init_cov))
     else:
         ll_smeans = None
 

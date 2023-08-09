@@ -102,7 +102,7 @@ class Lgssm:
         pickle.dump(self, save_file)
         save_file.close()
 
-    def randomize_weights(self, max_eig_allowed=0.9, rng=np.random.default_rng()):
+    def randomize_weights(self, max_eig_allowed=0.99, rng=np.random.default_rng()):
         input_weights_std = 1
         noise_std = 0.1
 
@@ -417,8 +417,6 @@ class Lgssm:
             smoothed_cov_this = filtered_cov + G @ (smoothed_cov_next - pred_cov) @ G.T
             smoothed_means[t, :] = filtered_mean + G @ (smoothed_mean_next - pred_mean)
 
-            smoothed_cov_next = smoothed_cov_this.copy()
-
             # Compute the smoothed expectation of x_t x_{t+1}^T
             # TODO: ask why the second expression is not in jonathan's code
             smoothed_crosses_sum += G @ smoothed_cov_next #+ smoothed_means[:, t, :, None] * smoothed_mean_next[:, None, :]
@@ -434,6 +432,8 @@ class Lgssm:
             # add in the variance from all the values of y you imputed
             my_correction[np.ix_(y_nan_loc_t, y_nan_loc_t)] += c_nan @ smoothed_cov_this @ c_nan.T + r_nan
             mzy_correction[:, y_nan_loc_t] += smoothed_cov_this @ c_nan.T
+
+            smoothed_cov_next = smoothed_cov_this.copy()
 
         suff_stats = {}
         suff_stats['smoothed_covs_sum'] = smoothed_covs_sum
@@ -740,11 +740,20 @@ class Lgssm:
         init_mean_list = []
 
         for i in emissions:
-            with warnings.catch_warnings():
-                warnings.simplefilter('ignore', category=RuntimeWarning)
-                init_mean = np.nanmean(i, axis=0)
+            # initialize init_mean to frist nonmean value of the trace
+            init_mean = i[0, :]
+
+            # for values that are not nan, find the first non_nan value,
+            for nan_loc in np.where(np.isnan(init_mean)):
+                first_non_nan_loc = np.where(~np.isnan(i[:, nan_loc]))[0]
+
+                if len(first_non_nan_loc) > 0:
+                    init_mean[nan_loc] = i[first_non_nan_loc[0], nan_loc]
+                else:
+                    init_mean[nan_loc] = np.nan
+
+            # for traces that are all nan, set to the man of all init
             init_mean[np.isnan(init_mean)] = np.nanmean(init_mean)
-            # repeat the mean for each delay you have
             init_mean = np.tile(init_mean, [self.dynamics_lags])
             init_mean_list.append(init_mean)
 

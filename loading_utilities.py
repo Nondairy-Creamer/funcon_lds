@@ -97,34 +97,13 @@ def load_and_align_data(data_path, force_preprocess=False, num_data_sets=None, s
     # choose a subset of the data sets to maximize the number of recordings * the number of neurons included
     data_train = {}
     data_test = {}
-    data_train['emissions'], data_train['inputs'], data_train['cell_ids'] = get_combined_dataset(data_train_unaligned['emissions'], data_train_unaligned['inputs'], data_train_unaligned['cell_ids'])
+    data_train['emissions'], data_train['inputs'], data_train['cell_ids'] = \
+        align_data_cell_ids(data_train_unaligned['emissions'], data_train_unaligned['inputs'],
+                            data_train_unaligned['cell_ids'])
 
-    # generate the test dataset so that it matches the train dataset
-    num_neurons = len(data_train['cell_ids'])
-
-    data_test['emissions'] = []
-    data_test['inputs'] = []
-    data_test['cell_ids'] = []
-
-    for d in range(len(data_test_unaligned['emissions'])):
-        this_emissions = data_test_unaligned['emissions'][d]
-        this_inputs = data_test_unaligned['inputs'][d]
-        this_cell_ids = data_test_unaligned['cell_ids'][d]
-
-        num_time = this_emissions.shape[0]
-        mapped_emissions = np.empty((num_time, num_neurons))
-        mapped_emissions[:] = np.nan
-        mapped_inputs = np.zeros((num_time, num_neurons))
-
-        for ci, c in enumerate(data_train['cell_ids']):
-            if c in this_cell_ids:
-                cell_id_loc = this_cell_ids.index(c)
-                mapped_emissions[:, ci] = this_emissions[:, cell_id_loc]
-                mapped_inputs[:, ci] = this_inputs[:, cell_id_loc]
-
-        data_test['emissions'].append(mapped_emissions)
-        data_test['inputs'].append(mapped_inputs)
-        data_test['cell_ids'] = data_train['cell_ids']
+    data_test['emissions'], data_test['inputs'], data_test['cell_ids'] = \
+        align_data_cell_ids(data_test_unaligned['emissions'], data_test_unaligned['inputs'],
+                            data_test_unaligned['cell_ids'], cell_ids_unique=data_train['cell_ids'])
 
     return data_train, data_test
 
@@ -248,10 +227,11 @@ def save_run(model_save_folder, model_trained=None, model_true=None, **vars_to_s
         save_file.close()
 
 
-def get_combined_dataset(emissions, inputs, cell_ids):
-    cell_ids_unique = list(np.unique(np.concatenate(cell_ids)))
-    if cell_ids_unique[0] == '':
-        cell_ids_unique = cell_ids_unique[1:]
+def align_data_cell_ids(emissions, inputs, cell_ids, cell_ids_unique=None):
+    if cell_ids_unique is None:
+        cell_ids_unique = list(np.unique(np.concatenate(cell_ids)))
+        if cell_ids_unique[0] == '':
+            cell_ids_unique = cell_ids_unique[1:]
 
     num_neurons = len(cell_ids_unique)
 
@@ -259,18 +239,18 @@ def get_combined_dataset(emissions, inputs, cell_ids):
     inputs_aligned = []
 
     # now update the neural data and fill in nans where we don't have a recording from a neuron
-    for ei, e in enumerate(emissions):
+    for e, i, c in zip(emissions, inputs, cell_ids):
         this_emissions = np.empty((e.shape[0], num_neurons))
         this_emissions[:] = np.nan
         this_inputs = np.zeros((e.shape[0], num_neurons))
 
         # loop through all the labels from this data set
-        for ci, c in enumerate(cell_ids[ei]):
+        for unique_cell_index, cell_name in enumerate(cell_ids_unique):
             # find the index of the full list of cell ids
-            if c != '':
-                this_cell_ind = cell_ids_unique.index(c)
-                this_emissions[:, this_cell_ind] = e[:, ci]
-                this_inputs[:, this_cell_ind] = inputs[ei][:, ci]
+            if cell_name in c and cell_name != '':
+                unaligned_cell_index = c.index(cell_name)
+                this_emissions[:, unique_cell_index] = e[:, unaligned_cell_index]
+                this_inputs[:, unique_cell_index] = i[:, unaligned_cell_index]
 
         emissions_aligned.append(this_emissions)
         inputs_aligned.append(this_inputs)
