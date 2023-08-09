@@ -152,7 +152,8 @@ def fit_em(model, emissions, inputs, init_mean=None, init_cov=None, num_steps=10
     return ll, model, init_mean, init_cov
 
 
-def parallel_get_post(model, data_test, init_mean=None, init_cov=None, max_iter=1, converge_res=1e-2, time_lim=100):
+def parallel_get_post(model, data_test, init_mean=None, init_cov=None, max_iter=1, converge_res=1e-2, time_lim=100,
+                      memmap_cpu_id=None):
     comm = pkl5.Intracomm(MPI.COMM_WORLD)
     cpu_id = comm.Get_rank()
     size = comm.Get_size()
@@ -186,7 +187,8 @@ def parallel_get_post(model, data_test, init_mean=None, init_cov=None, max_iter=
             iter_num = 1
 
             while not converged and iter_num <= max_iter:
-                ll, smoothed_means, suff_stats = model.lgssm_smoother(emissions, inputs, init_mean, init_cov)
+                ll, smoothed_means, suff_stats = model.lgssm_smoother(emissions, inputs, init_mean, init_cov,
+                                                                      memmap_cpu_id=memmap_cpu_id)
 
                 init_mean_new = smoothed_means[0, :].copy()
                 init_cov_new = suff_stats['first_cov'].copy()
@@ -206,7 +208,7 @@ def parallel_get_post(model, data_test, init_mean=None, init_cov=None, max_iter=
             emissions = i[0].copy()
             inputs = i[1].copy()
 
-            ll, posterior, suff_stats = model.lgssm_smoother(emissions, inputs, init_mean, init_cov)
+            ll, posterior, suff_stats = model.lgssm_smoother(emissions, inputs, init_mean, init_cov, memmap_cpu_id)
             post_pred = model.sample(num_time=emissions.shape[0], inputs_list=[inputs], init_mean=init_mean, init_cov=init_cov, add_noise=False)
             post_pred_noise = model.sample(num_time=emissions.shape[0], inputs_list=[inputs], init_mean=init_mean, init_cov=init_cov)
 

@@ -199,10 +199,11 @@ def fit_experimental(param_name, save_folder):
 
     # sample from the model
     posterior_train = iu.parallel_get_post(model_trained, data_train, init_mean=init_mean, init_cov=init_cov,
-                                           max_iter=100, converge_res=1e-2, time_lim=100)
+                                           max_iter=100, converge_res=1e-2, time_lim=100,
+                                           memmap_cpu_id=memmap_cpu_id)
 
-    posterior_test = iu.parallel_get_post(model_trained, data_test, init_mean=None, init_cov=None,
-                                          max_iter=100, converge_res=1e-2, time_lim=100)
+    posterior_test = iu.parallel_get_post(model_trained, data_test, init_mean=None, init_cov=None, max_iter=100,
+                                          converge_res=1e-2, time_lim=100, memmap_cpu_id=memmap_cpu_id)
 
     if cpu_id == 0:
         lu.save_run(save_folder, model_trained=model_trained, posterior_train=posterior_train,
