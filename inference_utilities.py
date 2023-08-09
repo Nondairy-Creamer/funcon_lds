@@ -80,7 +80,7 @@ def solve_masked(A, b, mask=None, ridge_penalty=None):
     return x_hat
 
 
-def fit_em(model, emissions, inputs, init_mean=None, init_cov=None, num_steps=10,
+def fit_em(model, data, init_mean=None, init_cov=None, num_steps=10,
            save_folder='em_test', save_every=20, memmap_cpu_id=None):
     comm = pkl5.Intracomm(MPI.COMM_WORLD)
     cpu_id = comm.Get_rank()
@@ -88,6 +88,9 @@ def fit_em(model, emissions, inputs, init_mean=None, init_cov=None, num_steps=10
 
     if cpu_id == 0:
         print('Fitting with EM')
+
+        emissions = data['emissions']
+        inputs = data['inputs']
 
         if len(emissions) < size:
             raise Exception('Number of cpus must be <= number of data sets')
@@ -109,8 +112,6 @@ def fit_em(model, emissions, inputs, init_mean=None, init_cov=None, num_steps=10
 
     log_likelihood_out = []
     time_out = []
-    smoothed_means = None
-    ll = None
 
     start = time.time()
     for ep in range(num_steps):
@@ -149,7 +150,10 @@ def fit_em(model, emissions, inputs, init_mean=None, init_cov=None, num_steps=10
                 time_remaining = time_out[-1] / (ep + 1) * (num_steps - ep - 1)
                 print('Estimated remaining =', time_remaining, 's')
 
-    return ll, model, init_mean, init_cov
+    if cpu_id == 0:
+        return ll, model, init_mean, init_cov
+    else:
+        return None, None, None, None
 
 
 def parallel_get_post(model, data_test, init_mean=None, init_cov=None, max_iter=1, converge_res=1e-2, time_lim=100,

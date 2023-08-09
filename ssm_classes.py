@@ -843,7 +843,7 @@ class Lgssm:
         pos = 0
 
         for i in range(len(chunk_size)):
-            split_data.append(data_zipped[pos : pos + chunk_size[i]])
+            split_data.append(data_zipped[pos:pos+chunk_size[i]])
             pos += chunk_size[i]
 
         return split_data
