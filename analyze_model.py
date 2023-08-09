@@ -4,20 +4,20 @@ import analysis_utilities as au
 import matplotlib as mpl
 from pathlib import Path
 
-use_synth = False
-run_test = True
+use_synth = True
+use_test_data = True
 
 if not use_synth:
     # load in the model and training data
-    model_folder = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/exp_test/20230809_141820/')
+    model_folder = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/exp_test/20230809_152910/')
     cell_ids_chosen = ['AVAL', 'AVAR', 'AVEL', 'AVER', 'AFDL', 'AFDR', 'AVJL', 'AVJR', 'AVDL', 'AVDR']
     cell_ids_chosen = ['AVAL', 'AVAR', 'AVEL', 'AVER', 'AFDR', 'AVJL', 'AVJR', 'AVDL', 'AVDR']
     neuron_to_remove = 'AVJR'
     neuron_to_stim = 'AVJR'
 else:
-    model_folder = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/exp_test/20230808_185310/')
+    model_folder = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/syn_test/20230809_161257/')
     # model_folder = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/syn_test/20230808_163745/')
-    cell_ids_chosen = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
+    cell_ids_chosen = ['0', '1', '2', '3', '4']
     neuron_to_remove = '4'
     neuron_to_stim = '4'
 
@@ -27,32 +27,32 @@ colormap = mpl.colormaps['coolwarm']
 # load in the model and the data
 model_path = model_folder / 'model_trained.pkl'
 
-if run_test:
-    data_test_path = model_folder / 'data_test.pkl'
-    posterior_test_path = model_folder / 'posterior_test.pkl'
+if use_test_data:
+    data_path = model_folder / 'data_test.pkl'
+    posterior_path = model_folder / 'posterior_test.pkl'
 else:
-    data_test_path = model_folder / 'data_train.pkl'
-    posterior_test_path = model_folder / 'posterior_train.pkl'
+    data_path = model_folder / 'data_train.pkl'
+    posterior_path = model_folder / 'posterior_train.pkl'
 
 model_file = open(model_path, 'rb')
 model = pickle.load(model_file)
 model_file.close()
 
-data_test_file = open(data_test_path, 'rb')
-data_test = pickle.load(data_test_file)
-data_test_file.close()
+data_file = open(data_path, 'rb')
+data = pickle.load(data_file)
+data_file.close()
 
-posterior_test_file = open(posterior_test_path, 'rb')
-posterior_test = pickle.load(posterior_test_file)
-posterior_test_file.close()
+posterior_file = open(posterior_path, 'rb')
+posterior_dict = pickle.load(posterior_file)
+posterior_file.close()
 
-emissions = data_test['emissions']
-inputs = data_test['inputs']
-cell_ids = data_test['cell_ids']
+emissions = data['emissions']
+inputs = data['inputs']
+cell_ids = data['cell_ids']
 
-post_pred = posterior_test['post_pred']
-post_pred_noise = posterior_test['post_pred_noise']
-posterior = posterior_test['posterior']
+post_pred = posterior_dict['post_pred']
+post_pred_noise = posterior_dict['post_pred_noise']
+posterior = posterior_dict['posterior']
 
 neuron_inds_chosen = np.array([cell_ids.index(i) for i in cell_ids_chosen])
 
