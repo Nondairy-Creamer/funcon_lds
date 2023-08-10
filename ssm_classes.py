@@ -594,7 +594,7 @@ class Lgssm:
                 max_abs_eig = np.max(np.abs(dyn_eig_vals))
                 while max_abs_eig > max_eig:
                     warnings.warn('Largest eigenvalue of the dynamics matrix is:' + str(max_abs_eig) + ', setting to ' + str(max_eig))
-                    dyn_eig_vals[dyn_eig_vals > max_eig] = max_eig
+                    dyn_eig_vals = dyn_eig_vals / max_abs_eig * max_eig
                     self.dynamics_weights = np.real(dyn_eig_vects @ np.linalg.solve(dyn_eig_vects.T, np.diag(dyn_eig_vals)).T)
                     self.dynamics_weights[self.dynamics_dim:, :self.dynamics_dim_full-self.dynamics_dim] = \
                         np.eye(self.dynamics_dim_full-self.dynamics_dim)
