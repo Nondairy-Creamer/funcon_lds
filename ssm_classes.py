@@ -598,6 +598,8 @@ class Lgssm:
                     self.dynamics_weights = np.real(dyn_eig_vects @ np.linalg.solve(dyn_eig_vects.T, np.diag(dyn_eig_vals)).T)
                     self.dynamics_weights[self.dynamics_dim:, :self.dynamics_dim_full-self.dynamics_dim] = \
                         np.eye(self.dynamics_dim_full-self.dynamics_dim)
+                    self.dynamics_weights[self.dynamics_dim:, self.dynamics_dim_full-self.dynamics_dim:] = \
+                        np.zeros((self.dynamics_dim_full-self.dynamics_dim, self.dynamics_dim))
                     dyn_eig_vals, dyn_eig_vects = np.linalg.eig(self.dynamics_weights)
                     max_abs_eig = np.max(np.abs(dyn_eig_vals))
 
