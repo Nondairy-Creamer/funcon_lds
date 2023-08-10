@@ -272,7 +272,7 @@ class Lgssm:
                                    self.emissions_offset + \
                                    emissions_noise[t, :]
 
-            latents_list.append(latents)
+            latents_list.append(latents[:, :self.dynamics_dim])
             emissions_list.append(emissions)
             init_mean_list.append(init_mean)
             init_cov_list.append(init_cov)
@@ -320,8 +320,8 @@ class Lgssm:
             inputs = self.get_lagged_data(inputs, self.dynamics_input_lags)
 
         ll = 0
-        filtered_mean = init_mean
-        filtered_cov = init_cov
+        filtered_mean = init_mean.copy()
+        filtered_cov = init_cov.copy()
 
         dynamics_inputs = inputs @ self.dynamics_input_weights.T
         emissions_inputs = inputs @ self.emissions_input_weights.T

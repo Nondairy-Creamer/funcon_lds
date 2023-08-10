@@ -124,10 +124,7 @@ def fit_em(model, data, init_mean=None, init_cov=None, num_steps=10,
             # set the initial mean and cov to the first smoothed mean / cov
             for i in range(len(smoothed_means)):
                 init_mean[i] = smoothed_means[i][0, :]
-                if type(new_init_covs[i]) is tuple:
-                    init_cov[i] = new_init_covs[i][0]
-                else:
-                    init_cov[i] = new_init_covs[i]
+                init_cov[i] = new_init_covs[i]
 
             log_likelihood_out.append(ll)
             time_out.append(time.time() - start)
@@ -135,6 +132,8 @@ def fit_em(model, data, init_mean=None, init_cov=None, num_steps=10,
             model.train_time = time_out
 
             if np.mod(ep + 1, save_every) == 0:
+                smoothed_means = [i[:, :model.dynamics_dim] for i in smoothed_means]
+
                 posterior_train = {'ll': ll,
                                    'posterior': smoothed_means,
                                    'init_mean': init_mean,
