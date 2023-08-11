@@ -235,10 +235,11 @@ def infer_posterior(param_name, model_folder):
         data_test_file.close()
     else:
         model = None
+        data_train = None
         data_test = None
 
-    posterior_train = iu.parallel_get_post(model, data_train, max_iter=100, memmap_cpu_id=memmap_cpu_id)
-    posterior_test = iu.parallel_get_post(model, data_test, max_iter=100, memmap_cpu_id=memmap_cpu_id)
+    posterior_train = iu.parallel_get_post(model, data_train, max_iter=run_params['max_iter'], memmap_cpu_id=memmap_cpu_id)
+    posterior_test = iu.parallel_get_post(model, data_test, max_iter=run_params['max_iter'], memmap_cpu_id=memmap_cpu_id)
 
     if cpu_id == 0:
         lu.save_run(model_folder, posterior_train=posterior_train, posterior_test=posterior_test)
