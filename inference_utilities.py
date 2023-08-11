@@ -224,9 +224,12 @@ def parallel_get_post(model, data_test, init_mean=None, init_cov=None, max_iter=
         ll_smeans = None
 
     ll_smeans = individual_gather(ll_smeans)
-    ll_smeans = [i for i in ll_smeans if i is not None]
+    # this is a hack to force blocking so some processes don't end before others
+    blocking_scatter = individual_scatter(ll_smeans)
 
     if cpu_id == 0:
+        ll_smeans = [i for i in ll_smeans if i is not None]
+
         ll_smeans_out = []
         for i in ll_smeans:
             for j in i:
