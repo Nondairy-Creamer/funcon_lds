@@ -85,32 +85,9 @@ def preprocess_data(emissions, inputs, start_index=0, correct_photobleach=False)
     return emissions_filtered_corrected, inputs
 
 
-def load_and_align_data(data_path, force_preprocess=False, num_data_sets=None, start_index=0,
-                        correct_photobleach=False, interpolate_nans=False, held_out_data=[]):
-    # load all the recordings of neural activity
-    data_train_unaligned, data_test_unaligned = \
-        load_and_preprocess_data(data_path, num_data_sets=num_data_sets,
-                                 force_preprocess=force_preprocess, start_index=start_index,
-                                 correct_photobleach=correct_photobleach, interpolate_nans=interpolate_nans,
-                                 held_out_data=held_out_data)
-
-    # choose a subset of the data sets to maximize the number of recordings * the number of neurons included
-    data_train = {}
-    data_test = {}
-    data_train['emissions'], data_train['inputs'], data_train['cell_ids'] = \
-        align_data_cell_ids(data_train_unaligned['emissions'], data_train_unaligned['inputs'],
-                            data_train_unaligned['cell_ids'])
-
-    data_test['emissions'], data_test['inputs'], data_test['cell_ids'] = \
-        align_data_cell_ids(data_test_unaligned['emissions'], data_test_unaligned['inputs'],
-                            data_test_unaligned['cell_ids'], cell_ids_unique=data_train['cell_ids'])
-
-    return data_train, data_test
-
-
-def load_and_preprocess_data(fun_atlas_path, num_data_sets=None, force_preprocess=False, start_index=0,
+def load_and_preprocess_data(data_path, num_data_sets=None, force_preprocess=False, start_index=0,
                              correct_photobleach=False, interpolate_nans=True, held_out_data=[]):
-    fun_atlas_path = Path(fun_atlas_path)
+    data_path = Path(data_path)
 
     preprocess_filename = 'funcon_preprocessed_data.pkl'
     emissions_train = []
@@ -119,7 +96,7 @@ def load_and_preprocess_data(fun_atlas_path, num_data_sets=None, force_preproces
     path_name = []
 
     # find all files in the folder that have francesco_green.npy
-    for i in sorted(fun_atlas_path.rglob('francesco_green.npy'))[::-1]:
+    for i in sorted(data_path.rglob('francesco_green.npy'))[::-1]:
         path_name.append(i.parts[-2])
 
         # check if a processed version exists
@@ -193,15 +170,15 @@ def load_and_preprocess_data(fun_atlas_path, num_data_sets=None, force_preproces
 
     print('Size of data set:', len(emissions_train))
 
-    data_train = {'emissions': emissions_train,
-                  'inputs': inputs_train,
-                  'cell_ids': cell_ids_train,
-                  }
+    # align the data sets so that each column corresponds to the same cell ID
+    data_train = {}
+    data_test = {}
 
-    data_test = {'emissions': emissions_test,
-                 'inputs': inputs_test,
-                 'cell_ids': cell_ids_test,
-                 }
+    data_train['emissions'], data_train['inputs'], data_train['cell_ids'] = \
+        align_data_cell_ids(emissions_train, inputs_train, cell_ids_train)
+
+    data_test['emissions'], data_test['inputs'], data_test['cell_ids'] = \
+        align_data_cell_ids(emissions_test, inputs_test, cell_ids_test, cell_ids_unique=data_train['cell_ids'])
 
     return data_train, data_test
 

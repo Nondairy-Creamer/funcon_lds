@@ -108,12 +108,12 @@ def fit_experimental(param_name, save_folder):
     if cpu_id == 0:
         # load in the data for the model and do any preprocessing here
         data_train, data_test = \
-            lu.load_and_align_data(run_params['data_path'], num_data_sets=run_params['num_data_sets'],
-                                   start_index=run_params['start_index'],
-                                   force_preprocess=run_params['force_preprocess'],
-                                   correct_photobleach=run_params['correct_photobleach'],
-                                   interpolate_nans=run_params['interpolate_nans'],
-                                   held_out_data=run_params['held_out_data'])
+            lu.load_and_preprocess_data(run_params['data_path'], num_data_sets=run_params['num_data_sets'],
+                                        start_index=run_params['start_index'],
+                                        force_preprocess=run_params['force_preprocess'],
+                                        correct_photobleach=run_params['correct_photobleach'],
+                                        interpolate_nans=run_params['interpolate_nans'],
+                                        held_out_data=run_params['held_out_data'])
 
         emissions = data_train['emissions']
         inputs = data_train['inputs']
