@@ -1,5 +1,5 @@
 import loading_utilities as lu
-import fit_data
+import run_inference
 import sys
 import os
 from simple_slurm import Slurm
@@ -38,7 +38,7 @@ if 'slurm' in run_params.keys():
         slurm_fit = Slurm(**run_params['slurm'], output=save_folder / 'slurm_%A.out', job_name=param_name.stem)
 
         cpus_per_task = run_params['slurm']['cpus_per_task']
-        fit_model_command = 'fit_data.' + run_params['fit_file'] + '(\'' + str(param_name) + '\',\'' + str(save_folder) + '\')\"'
+        fit_model_command = 'run_inference.' + run_params['fit_file'] + '(\'' + str(param_name) + '\',\'' + str(save_folder) + '\')\"'
 
         run_command = ['module purge',
                        'module load anaconda3/2022.10',
@@ -47,11 +47,11 @@ if 'slurm' in run_params.keys():
                        'export MKL_NUM_THREADS=' + str(cpus_per_task),
                        'export OPENBLAS_NUM_THREADS=' + str(cpus_per_task),
                        'export OMP_NUM_THREADS=' + str(cpus_per_task),
-                       'srun python -uc \"import fit_data; ' + fit_model_command,
+                       'srun python -uc \"import run_inference; ' + fit_model_command,
                        ]
 
         slurm_fit.sbatch('\n'.join(run_command))
 
 else:
-    method = getattr(fit_data, run_params['fit_file'])
+    method = getattr(run_inference, run_params['fit_file'])
     method(param_name, save_folder)
