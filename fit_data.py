@@ -206,12 +206,18 @@ def infer_posterior(param_name, model_folder):
 
     run_params = lu.get_run_params(param_name=param_name)
 
+    if run_params['use_memmap']:
+        memmap_cpu_id = cpu_id
+    else:
+        memmap_cpu_id = None
+
     # cpu_id 0 is the parent node which will send out the data to the children nodes
     if cpu_id == 0:
         if 'model_folder' in run_params.keys():
             model_folder = run_params['model_folder']
         model_folder = Path(model_folder)
         model_path = model_folder / 'model_trained.pkl'
+        data_train_path = model_folder / 'data_train.pkl'
         data_test_path = model_folder / 'data_test.pkl'
 
         # load in the model
@@ -219,7 +225,11 @@ def infer_posterior(param_name, model_folder):
         model = pickle.load(model_file)
         model_file.close()
 
-        # load in the data for the model and do any preprocessing here
+        # load in the data
+        data_train_file = open(data_train_path, 'rb')
+        data_train = pickle.load(data_train_file)
+        data_train_file.close()
+
         data_test_file = open(data_test_path, 'rb')
         data_test = pickle.load(data_test_file)
         data_test_file.close()
@@ -227,7 +237,8 @@ def infer_posterior(param_name, model_folder):
         model = None
         data_test = None
 
-    inference_test = iu.parallel_get_post(model, data_test, max_iter=100)
+    posterior_train = iu.parallel_get_post(model, data_train, max_iter=100, memmap_cpu_id=memmap_cpu_id)
+    posterior_test = iu.parallel_get_post(model, data_test, max_iter=100, memmap_cpu_id=memmap_cpu_id)
 
     if cpu_id == 0:
-        lu.save_run(model_folder, inference_test=inference_test)
+        lu.save_run(model_folder, posterior_train=posterior_train, posterior_test=posterior_test)

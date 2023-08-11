@@ -313,7 +313,13 @@ def plot_stim_l2_norm(model, emissions, inputs_full, posterior, post_pred, cell_
     model_weights_norm = rms(stack_weights(model_weights, model.dynamics_lags, axis=1), axis=0)
 
     # pull out the neurons we care about
-    correlation = np.abs(np.linalg.inv(correlation))[np.ix_(chosen_neuron_inds, chosen_neuron_inds)]
+    if np.linalg.det(correlation) > 0:
+        correlation = np.abs(np.linalg.inv(correlation))[np.ix_(chosen_neuron_inds, chosen_neuron_inds)]
+    elif np.linalg.det(correlation[np.ix_(chosen_neuron_inds, chosen_neuron_inds)]) > 0:
+        correlation = np.abs(np.linalg.inv(correlation[np.ix_(chosen_neuron_inds, chosen_neuron_inds)]))
+    else:
+        correlation = np.zeros((len(chosen_neuron_inds), len(chosen_neuron_inds)))
+
     measured_response_norm = measured_response_norm[np.ix_(chosen_neuron_inds, chosen_neuron_inds)]
     post_pred_response_norm = post_pred_response_norm[np.ix_(chosen_neuron_inds, chosen_neuron_inds)]
     posterior_response_norm = posterior_response_norm[np.ix_(chosen_neuron_inds, chosen_neuron_inds)]
