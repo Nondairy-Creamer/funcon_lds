@@ -115,10 +115,6 @@ def fit_experimental(param_name, save_folder):
                                         interpolate_nans=run_params['interpolate_nans'],
                                         held_out_data=run_params['held_out_data'])
 
-        # TODO: remove this
-        print('done!')
-        return
-
         emissions = data_train['emissions']
         inputs = data_train['inputs']
         cell_ids = data_train['cell_ids']

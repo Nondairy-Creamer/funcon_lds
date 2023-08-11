@@ -3,7 +3,6 @@ import itertools as it
 import scipy.special as ss
 from pathlib import Path
 import yaml
-import os
 import pickle
 import tmac.preprocessing as tp
 import time
