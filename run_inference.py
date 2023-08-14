@@ -78,7 +78,7 @@ def fit_synthetic(param_name, save_folder):
         data_train = None
         data_test = None
 
-    run_fitting(run_params, model_trained, data_train, data_test, save_folder)
+    run_fitting(run_params, model_trained, data_train, data_test, save_folder, model_true=model_true)
 
 
 def fit_experimental(param_name, save_folder):
@@ -157,7 +157,7 @@ def fit_experimental(param_name, save_folder):
     run_fitting(run_params, model_trained, data_train, data_test, save_folder)
 
 
-def run_fitting(run_params, model, data_train, data_test, save_folder):
+def run_fitting(run_params, model, data_train, data_test, save_folder, model_true=None):
     comm = pkl5.Intracomm(MPI.COMM_WORLD)
     size = comm.Get_size()
     cpu_id = comm.Get_rank()
@@ -195,7 +195,7 @@ def run_fitting(run_params, model, data_train, data_test, save_folder):
                 os.remove('/tmp/filtered_covs_' + str(i) + '.tmp')
 
         if not is_parallel and run_params['plot_figures']:
-            plotting.plot_model_params(model)
+            plotting.plot_model_params(model, model_true)
 
 
 def infer_posterior(param_name, model_folder):
