@@ -77,6 +77,7 @@ def fit_synthetic(param_name, save_folder):
         model_trained = None
         data_train = None
         data_test = None
+        model_true = None
 
     run_fitting(run_params, model_trained, data_train, data_test, save_folder, model_true=model_true)
 
