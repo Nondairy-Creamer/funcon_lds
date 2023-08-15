@@ -320,6 +320,30 @@ def plot_missing_neuron(model, data, posterior_dict, cell_ids, neuron_to_remove,
     plt.show()
 
 
+def nan_corr(data):
+    # calculate the average cross correlation between neurons
+    emissions_cov = []
+    num_neurons = data[0].shape[1]
+    for i in range(len(data)):
+        emissions_this = data[i]
+        nan_loc = np.isnan(emissions_this)
+        em_z_score = (emissions_this - np.nanmean(emissions_this, axis=0)) / np.nanstd(emissions_this, axis=0)
+        em_z_score[nan_loc] = 0
+
+        # figure out how many times the two neurons were measured together
+        num_measured = np.zeros((num_neurons, num_neurons))
+        for j1 in range(num_neurons):
+            for j2 in range(num_neurons):
+                num_measured[j1, j2] = np.sum(~nan_loc[:, j1] & ~nan_loc[:, j2])
+
+        emissions_cov_this = em_z_score.T @ em_z_score / num_measured
+        emissions_cov.append(emissions_cov_this)
+
+    correlation = np.nanmean(np.stack(emissions_cov), axis=0)
+
+    return correlation
+
+
 def plot_stim_l2_norm(model, data, posterior_dict, cell_ids_chosen, window=(0, 120)):
     emissions = data['emissions']
     inputs = data['inputs']
@@ -338,32 +362,13 @@ def plot_stim_l2_norm(model, data, posterior_dict, cell_ids_chosen, window=(0, 1
     posterior_stim_responses = get_stim_response(posterior, inputs, window=window)[0]
     model_weights = model.dynamics_weights[:model.dynamics_dim, :]
 
-    # calculate the average cross correlation between neurons
-    emissions_cov = []
-    for i in range(len(emissions)):
-        emissions_this = emissions[i]
-        nan_loc = np.isnan(emissions_this)
-        em_z_score = (emissions_this - np.nanmean(emissions_this, axis=0)) / np.nanstd(emissions_this, axis=0)
-        em_z_score[nan_loc] = 0
-
-        # figure out how many times the two neurons were measured together
-        num_measured = np.zeros((num_neurons, num_neurons))
-        for j1 in range(num_neurons):
-            for j2 in range(num_neurons):
-                num_measured[j1, j2] = np.sum(~nan_loc[:, j1] & ~nan_loc[:, j2])
-
-        emissions_cov_this = em_z_score.T @ em_z_score / num_measured
-        emissions_cov.append(emissions_cov_this)
-
-    correlation = np.nanmean(np.stack(emissions_cov), axis=0)
-
     # calculate the rms for each response. This deals with the fact that responses can vary and go negative
     measured_response_norm = rms(measured_stim_responses, axis=0)
     post_pred_response_norm = rms(post_pred_stim_responses, axis=0)
     posterior_response_norm = rms(posterior_stim_responses, axis=0)
     model_weights_norm = rms(stack_weights(model_weights, model.dynamics_lags, axis=1), axis=0)
+    correlation = nan_corr(emissions)
 
-    correlation = correlation[np.ix_(chosen_neuron_inds, chosen_neuron_inds)]
     if np.linalg.det(correlation) > 0:
         correlation = np.abs(np.linalg.inv(correlation))[np.ix_(chosen_neuron_inds, chosen_neuron_inds)]
     elif np.linalg.det(correlation[np.ix_(chosen_neuron_inds, chosen_neuron_inds)]) > 0:
@@ -379,9 +384,9 @@ def plot_stim_l2_norm(model, data, posterior_dict, cell_ids_chosen, window=(0, 1
     # set the diagonal to 0 for visualization
     correlation[np.diag(~np.isnan(np.diag(correlation)))] = 0
     measured_response_norm[np.diag(~np.isnan(np.diag(measured_response_norm)))] = 0
-    post_pred_response_norm[np.eye(post_pred_response_norm.shape[0], dtype=bool)] = 0
-    posterior_response_norm[np.eye(posterior_response_norm.shape[0], dtype=bool)] = 0
-    model_weights_norm[np.eye(model_weights_norm.shape[0], dtype=bool)] = 0
+    post_pred_response_norm[np.diag(~np.isnan(np.diag(post_pred_response_norm)))] = 0
+    posterior_response_norm[np.diag(~np.isnan(np.diag(posterior_response_norm)))] = 0
+    model_weights_norm[np.diag(~np.isnan(np.diag(model_weights_norm)))] = 0
 
     # normalize so that everything is on the same scale
     correlation = correlation / np.nanmax(correlation)
