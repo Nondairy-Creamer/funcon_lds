@@ -1,10 +1,28 @@
 from matplotlib import pyplot as plt
 import matplotlib as mpl
 import numpy as np
+import scipy as sp
+colormap = mpl.colormaps['coolwarm']
+plot_percent = 95
 
 
 def rms(data, axis=-1):
     return np.sqrt(np.nanmean(data**2, axis=axis))
+
+
+def plot_data(data):
+    for e, i in zip(data['emissions'], data['inputs']):
+        # convolve the inputs to make them easier to visualize
+        i_conv = sp.signal.convolve2d(i, np.ones((41, 1)), mode='same')
+
+        abs_cmax = np.nanpercentile(np.abs(e), 95, method='closest_observation')
+        plt.figure()
+        plt.imshow(e.T, aspect='auto', interpolation='nearest', cmap=colormap)
+        plt.clim((-abs_cmax, abs_cmax))
+        plt.colorbar()
+        plt.imshow(i_conv.T, aspect='auto', interpolation='nearest', alpha=i_conv.T, cmap=mpl.colormaps['Greys'])
+
+    plt.show()
 
 
 def nan_convolve(data, filter):
@@ -40,21 +58,18 @@ def plot_log_likelihood(model):
     plt.show()
 
 
-def plot_model_params(model, cell_ids, cell_ids_chosen=None):
-    colormap = mpl.colormaps['coolwarm']
-
+def plot_model_params(model, cell_ids_chosen):
     model_params = model.get_params()
+    cell_ids = model.cell_ids
     A_full = model_params['trained']['dynamics_weights'][:model.dynamics_dim, :]
     A = np.split(A_full, model.dynamics_lags, axis=1)
 
     # limit the matrix to the chosen neurons
-    if cell_ids_chosen is not None:
-        neuron_inds_chosen = np.array([cell_ids.index(i) for i in cell_ids_chosen])
+    neuron_inds_chosen = np.array([cell_ids.index(i) for i in cell_ids_chosen])
 
-
-        for aa in range(len(A)):
-            A[aa] = A[aa][neuron_inds_chosen, :]
-            A[aa] = A[aa][:, neuron_inds_chosen]
+    for aa in range(len(A)):
+        A[aa] = A[aa][neuron_inds_chosen, :]
+        A[aa] = A[aa][:, neuron_inds_chosen]
 
     plot_x = np.arange(A[0].shape[0])
 
@@ -75,14 +90,16 @@ def plot_model_params(model, cell_ids, cell_ids_chosen=None):
         plt.title('A' + str(ai))
 
     # plot the B matrix
+    stimulated_neurons = np.any(model.param_props['mask']['dynamics_input_weights'].astype(bool), axis=1)
+
     B_full = model_params['trained']['dynamics_input_weights'][:model.dynamics_dim, :]
     B = np.split(B_full, model.dynamics_input_lags, axis=1)
-    mask = model.param_props['mask']['dynamics_input_weights'].astype(bool)
-    B = [i[mask] for i in B]
+    B = [np.diag(i) for i in B]
     B = [i[:, None] for i in B]
     B = np.concatenate(B, axis=1)
+    B[~stimulated_neurons, :] = np.nan
     B = B[neuron_inds_chosen, :]
-    cmax = np.max(np.abs(B))
+    cmax = np.nanpercentile(np.abs(B), plot_percent)
 
     plt.figure()
     plt.imshow(B, interpolation='nearest', cmap=colormap)
@@ -121,17 +138,14 @@ def plot_model_params(model, cell_ids, cell_ids_chosen=None):
     plt.show()
 
 
-def get_stim_response(emissions, inputs, window=(-20, 60)):
-    num_neurons = emissions[0].shape[1]
+def get_stim_response(data, inputs, window=(-20, 60)):
+    num_neurons = data[0].shape[1]
 
-    # get structure which is responding neuron x stimulated neuron
-    stim_responses = np.zeros((window[1] - window[0], num_neurons, num_neurons))
-    num_stims = np.zeros((num_neurons, num_neurons))
     responses = []
     for n in range(num_neurons):
         responses.append([])
 
-    for e, i in zip(emissions, inputs):
+    for e, i in zip(data, inputs):
         num_time = e.shape[0]
         stim_events = np.where(i)
 
@@ -185,20 +199,35 @@ def find_stim_events(inputs, window_size=1000):
     return max_data_set, time_window
 
 
-def plot_posterior(emissions, inputs, posterior, post_pred, cell_ids, sample_rate=0.5):
-    colormap = mpl.colormaps['coolwarm']
+def plot_posterior(data, posterior_dict, cell_ids_chosen, sample_rate=0.5, window_size=1000):
+    cell_ids = data['cell_ids']
+    emissions = data['emissions']
+    inputs = data['inputs']
+    posterior = posterior_dict['posterior']
+    post_pred = posterior_dict['post_pred_noise']
+
+    neuron_inds_chosen = np.array([cell_ids.index(i) for i in cell_ids_chosen])
+
+    # get all the inputs but with only the chosen neurons
+    inputs_truncated = [i[:, neuron_inds_chosen] for i in inputs]
+    data_ind_chosen, time_window = find_stim_events(inputs_truncated, window_size=window_size)
+
+    emissions_chosen = emissions[data_ind_chosen][time_window[0]:time_window[1], neuron_inds_chosen]
+    inputs_chosen = inputs[data_ind_chosen][time_window[0]:time_window[1], neuron_inds_chosen]
+    posterior_chosen = posterior[data_ind_chosen][time_window[0]:time_window[1], neuron_inds_chosen]
+    post_pred_chosen = post_pred[data_ind_chosen][time_window[0]:time_window[1], neuron_inds_chosen]
 
     filt_shape = np.ones(5)
-    for i in range(inputs.shape[1]):
-        inputs[:, i] = np.convolve(inputs[:, i], filt_shape, mode='same')
+    for i in range(inputs_chosen.shape[1]):
+        inputs_chosen[:, i] = np.convolve(inputs_chosen[:, i], filt_shape, mode='same')
 
     plot_y = np.arange(len(cell_ids))
-    plot_x = np.arange(0, emissions.shape[0], emissions.shape[0]/10)
-    cmax = np.nanmax(np.abs((emissions, posterior)))
+    plot_x = np.arange(0, emissions_chosen.shape[0], emissions_chosen.shape[0]/10)
+    cmax = np.nanpercentile(np.abs((emissions_chosen, posterior_chosen)), plot_percent)
 
     plt.figure()
     plt.subplot(3, 1, 1)
-    plt.imshow(inputs.T, interpolation='nearest', aspect='auto', cmap=colormap)
+    plt.imshow(inputs_chosen.T, interpolation='nearest', aspect='auto', cmap=colormap)
     plt.title('stimulation events')
     plt.yticks(plot_y, cell_ids)
     plt.xticks(plot_x, plot_x * sample_rate)
@@ -207,7 +236,7 @@ def plot_posterior(emissions, inputs, posterior, post_pred, cell_ids, sample_rat
     plt.colorbar()
 
     plt.subplot(3, 1, 2)
-    plt.imshow(emissions.T, interpolation='nearest', aspect='auto', cmap=colormap)
+    plt.imshow(emissions_chosen.T, interpolation='nearest', aspect='auto', cmap=colormap)
     plt.clim((-cmax, cmax))
     plt.title('measured data')
     plt.yticks(plot_y, cell_ids)
@@ -216,7 +245,7 @@ def plot_posterior(emissions, inputs, posterior, post_pred, cell_ids, sample_rat
     plt.colorbar()
 
     plt.subplot(3, 1, 3)
-    plt.imshow(posterior.T, interpolation='nearest', aspect='auto', cmap=colormap)
+    plt.imshow(posterior_chosen.T, interpolation='nearest', aspect='auto', cmap=colormap)
     plt.clim((-cmax, cmax))
     plt.title('model posterior, all data')
     plt.yticks(plot_y, cell_ids)
@@ -227,10 +256,10 @@ def plot_posterior(emissions, inputs, posterior, post_pred, cell_ids, sample_rat
     plt.tight_layout()
 
     plt.figure()
-    cmax = np.nanmax(np.abs((post_pred, posterior)))
+    cmax = np.nanpercentile(np.abs((post_pred_chosen, posterior_chosen)), plot_percent)
 
     plt.subplot(3, 1, 1)
-    plt.imshow(inputs.T, interpolation='nearest', aspect='auto', cmap=colormap)
+    plt.imshow(inputs_chosen.T, interpolation='nearest', aspect='auto', cmap=colormap)
     plt.title('stimulation events')
     plt.yticks(plot_y, cell_ids)
     plt.xticks(plot_x, plot_x * sample_rate)
@@ -239,7 +268,7 @@ def plot_posterior(emissions, inputs, posterior, post_pred, cell_ids, sample_rat
     plt.colorbar()
 
     plt.subplot(3, 1, 2)
-    plt.imshow(post_pred.T, interpolation='nearest', aspect='auto', cmap=colormap)
+    plt.imshow(post_pred_chosen.T, interpolation='nearest', aspect='auto', cmap=colormap)
     plt.clim((-cmax, cmax))
     plt.title('sampled model')
     plt.yticks(plot_y, cell_ids)
@@ -248,7 +277,7 @@ def plot_posterior(emissions, inputs, posterior, post_pred, cell_ids, sample_rat
     plt.colorbar()
 
     plt.subplot(3, 1, 3)
-    plt.imshow(posterior.T, interpolation='nearest', aspect='auto', cmap=colormap)
+    plt.imshow(posterior_chosen.T, interpolation='nearest', aspect='auto', cmap=colormap)
     plt.clim((-cmax, cmax))
     plt.title('model posterior, all data')
     plt.yticks(plot_y, cell_ids)
@@ -261,9 +290,11 @@ def plot_posterior(emissions, inputs, posterior, post_pred, cell_ids, sample_rat
     plt.show()
 
 
-def plot_missing_neuron(model, emissions, inputs, posterior, cell_ids, neuron_to_remove, time_window, sample_rate=0.5):
-    init_mean = model.estimate_init_mean([emissions])[0]
-    init_cov = model.estimate_init_cov([emissions])[0]
+def plot_missing_neuron(model, data, posterior_dict, cell_ids, neuron_to_remove, time_window, sample_rate=0.5):
+    emissions = data['emissions']
+    inputs = data['inputs']
+    init_mean = data['init_mean']
+    init_cov = data['init_cov']
 
     missing_neuron_ind = cell_ids.index(neuron_to_remove)
 
@@ -275,7 +306,7 @@ def plot_missing_neuron(model, emissions, inputs, posterior, cell_ids, neuron_to
     posterior_missing = (posterior_missing @ model.emissions_weights.T)
     posterior_missing = posterior_missing[time_window[0]:time_window[1], missing_neuron_ind]
 
-    posterior = posterior[time_window[0]:time_window[1], missing_neuron_ind]
+    posterior = posterior_dict['posterior'][time_window[0]:time_window[1], missing_neuron_ind]
     emissions = emissions[time_window[0]:time_window[1], missing_neuron_ind]
 
     plot_x = np.arange(emissions.shape[0]) * sample_rate
@@ -289,22 +320,42 @@ def plot_missing_neuron(model, emissions, inputs, posterior, cell_ids, neuron_to
     plt.show()
 
 
-def plot_stim_l2_norm(model, emissions, inputs_full, posterior, post_pred, cell_ids, cell_ids_chosen, window=(0, 120)):
+def plot_stim_l2_norm(model, data, posterior_dict, cell_ids_chosen, window=(0, 120)):
+    emissions = data['emissions']
+    inputs = data['inputs']
+    cell_ids = data['cell_ids']
+    posterior = posterior_dict['posterior']
+    post_pred = posterior_dict['post_pred']
+    num_neurons = len(cell_ids)
+
     chosen_neuron_inds = [cell_ids.index(i) for i in cell_ids_chosen]
+
     plot_x = np.arange(len(chosen_neuron_inds))
-    colormap = mpl.colormaps['coolwarm']
 
     # go through emissions and get the average input response for each neuron
-    measured_stim_responses = get_stim_response(emissions, inputs_full, window=window)[0]
-    post_pred_stim_responses = get_stim_response(post_pred, inputs_full, window=window)[0]
-    posterior_stim_responses = get_stim_response(posterior, inputs_full, window=window)[0]
+    measured_stim_responses = get_stim_response(emissions, inputs, window=window)[0]
+    post_pred_stim_responses = get_stim_response(post_pred, inputs, window=window)[0]
+    posterior_stim_responses = get_stim_response(posterior, inputs, window=window)[0]
     model_weights = model.dynamics_weights[:model.dynamics_dim, :]
 
     # calculate the average cross correlation between neurons
+    emissions_cov = []
+    for i in range(len(emissions)):
+        emissions_this = emissions[i]
+        nan_loc = np.isnan(emissions_this)
+        em_z_score = (emissions_this - np.nanmean(emissions_this, axis=0)) / np.nanstd(emissions_this, axis=0)
+        em_z_score[nan_loc] = 0
 
-    correlation = [np.corrcoef(i.T) for i in emissions]
-    correlation = np.nanmean(np.stack(correlation), axis=0)
-    correlation[np.isnan(correlation)] = 0
+        # figure out how many times the two neurons were measured together
+        num_measured = np.zeros((num_neurons, num_neurons))
+        for j1 in range(num_neurons):
+            for j2 in range(num_neurons):
+                num_measured[j1, j2] = np.sum(~nan_loc[:, j1] & ~nan_loc[:, j2])
+
+        emissions_cov_this = em_z_score.T @ em_z_score / num_measured
+        emissions_cov.append(emissions_cov_this)
+
+    correlation = np.nanmean(np.stack(emissions_cov), axis=0)
 
     # calculate the rms for each response. This deals with the fact that responses can vary and go negative
     measured_response_norm = rms(measured_stim_responses, axis=0)
@@ -312,7 +363,7 @@ def plot_stim_l2_norm(model, emissions, inputs_full, posterior, post_pred, cell_
     posterior_response_norm = rms(posterior_stim_responses, axis=0)
     model_weights_norm = rms(stack_weights(model_weights, model.dynamics_lags, axis=1), axis=0)
 
-    # pull out the neurons we care about
+    correlation = correlation[np.ix_(chosen_neuron_inds, chosen_neuron_inds)]
     if np.linalg.det(correlation) > 0:
         correlation = np.abs(np.linalg.inv(correlation))[np.ix_(chosen_neuron_inds, chosen_neuron_inds)]
     elif np.linalg.det(correlation[np.ix_(chosen_neuron_inds, chosen_neuron_inds)]) > 0:
@@ -326,8 +377,8 @@ def plot_stim_l2_norm(model, emissions, inputs_full, posterior, post_pred, cell_
     model_weights_norm = model_weights_norm[np.ix_(chosen_neuron_inds, chosen_neuron_inds)]
 
     # set the diagonal to 0 for visualization
-    correlation[np.eye(correlation.shape[0], dtype=bool)] = 0
-    measured_response_norm[np.eye(measured_response_norm.shape[0], dtype=bool)] = 0
+    correlation[np.diag(~np.isnan(np.diag(correlation)))] = 0
+    measured_response_norm[np.diag(~np.isnan(np.diag(measured_response_norm)))] = 0
     post_pred_response_norm[np.eye(post_pred_response_norm.shape[0], dtype=bool)] = 0
     posterior_response_norm[np.eye(posterior_response_norm.shape[0], dtype=bool)] = 0
     model_weights_norm[np.eye(model_weights_norm.shape[0], dtype=bool)] = 0
@@ -379,19 +430,65 @@ def plot_stim_l2_norm(model, emissions, inputs_full, posterior, post_pred, cell_
 
     plt.tight_layout()
 
+    plt.figure()
+    ax = plt.gca()
+    plt.imshow(measured_response_norm, interpolation='nearest', cmap=colormap)
+    plt.title('measured response L2 norm')
+    plt.xticks(plot_x, cell_ids_chosen)
+    plt.yticks(plot_x, cell_ids_chosen)
+    for label in ax.get_xticklabels():
+        label.set_rotation(90)
+    plt.clim((-1, 1))
+
+    plt.figure()
+    ax = plt.gca()
+    plt.imshow(post_pred_response_norm, interpolation='nearest', cmap=colormap)
+    plt.title('post pred response L2 norm')
+    plt.xticks(plot_x, cell_ids_chosen)
+    plt.yticks(plot_x, cell_ids_chosen)
+    for label in ax.get_xticklabels():
+        label.set_rotation(90)
+    plt.clim((-1, 1))
+
+    plt.figure()
+    ax = plt.gca()
+    plt.imshow(correlation, interpolation='nearest', cmap=colormap)
+    plt.title('correlation')
+    plt.xticks(plot_x, cell_ids_chosen)
+    plt.yticks(plot_x, cell_ids_chosen)
+    for label in ax.get_xticklabels():
+        label.set_rotation(90)
+    plt.clim((-1, 1))
+
+    plt.figure()
+    ax = plt.gca()
+    plt.imshow(model_weights_norm, interpolation='nearest', cmap=colormap)
+    plt.title('model weights L2 norm')
+    plt.xticks(plot_x, cell_ids_chosen)
+    plt.yticks(plot_x, cell_ids_chosen)
+    for label in ax.get_xticklabels():
+        label.set_rotation(90)
+    plt.clim((-1, 1))
+
     plt.show()
 
 
-def plot_stim_response(emissions, inputs_full, posterior, post_pred, cell_ids, cell_ids_chosen, neuron_to_stim,
+def plot_stim_response(data, posterior_dict, cell_ids_chosen, neuron_to_stim,
                        window=(-60, 120), sample_rate=0.5):
+    emissions = data['emissions']
+    inputs = data['inputs']
+    cell_ids = data['cell_ids']
+    posterior = posterior_dict['posterior']
+    post_pred = posterior_dict['post_pred']
+
     chosen_neuron_inds = [cell_ids.index(i) for i in cell_ids_chosen]
     plot_x = np.arange(window[0], window[1]) * sample_rate
     neuron_to_stim_ind = cell_ids_chosen.index(neuron_to_stim)
 
     # go through emissions and get the average input response for each neuron
-    measured_stim_responses = get_stim_response(emissions, inputs_full, window=window)[0]
-    post_pred_stim_responses = get_stim_response(post_pred, inputs_full, window=window)[0]
-    posterior_stim_responses = get_stim_response(posterior, inputs_full, window=window)[0]
+    measured_stim_responses = get_stim_response(emissions, inputs, window=window)[0]
+    post_pred_stim_responses = get_stim_response(post_pred, inputs, window=window)[0]
+    posterior_stim_responses = get_stim_response(posterior, inputs, window=window)[0]
 
     # pull out the neurons we care about
     measured_stim_responses = measured_stim_responses[:, chosen_neuron_inds, :]
@@ -401,12 +498,8 @@ def plot_stim_response(emissions, inputs_full, posterior, post_pred, cell_ids, c
     posterior_stim_responses = posterior_stim_responses[:, chosen_neuron_inds, :]
     posterior_stim_responses = posterior_stim_responses[:, :, chosen_neuron_inds]
 
-    # normalize so that everything is on the same scale
-    # measured_response_norm = measured_stim_responses / np.max(measured_stim_responses)
-    # post_pred_response_norm = post_pred_stim_responses / np.max(post_pred_stim_responses)
-    # posterior_response_norm = posterior_stim_responses / np.max(posterior_stim_responses)
-
-    vals = [measured_stim_responses, posterior_stim_responses, post_pred_stim_responses]
+    vals = [measured_stim_responses[:, :, neuron_to_stim_ind], posterior_stim_responses[:, :, neuron_to_stim_ind],
+            post_pred_stim_responses[:, :, neuron_to_stim_ind]]
     ylim = (np.nanmin(vals), np.nanmax(vals))
 
     for i in range(measured_stim_responses.shape[1]):
