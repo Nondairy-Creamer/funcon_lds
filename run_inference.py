@@ -55,6 +55,15 @@ def fit_synthetic(param_name, save_folder):
                                            data_train['init_mean'], data_train['init_cov'])
         model_true.log_likelihood = [ll_true_params]
 
+        num_neurons = data_train['emissions'][0].shape[1]
+        # create a mask for the dynamics_input_weights. This allows us to fit dynamics weights that are diagonal
+        # if a neuron never receives stimulation, mask its weight too
+        input_mask = np.eye(num_neurons)
+        has_stims = np.any(np.concatenate(data_train['inputs'], axis=0), axis=0)
+        input_mask[np.diag(~has_stims)] = 0
+        # set the model properties so the model fits with this mask
+        run_params['param_props']['mask']['dynamics_input_weights'] = input_mask
+
         # make a new model to fit to the random model
         model_trained = Lgssm(run_params['dynamics_dim'], run_params['emissions_dim'], run_params['input_dim'],
                               verbose=run_params['verbose'], param_props=run_params['param_props'],
@@ -113,12 +122,12 @@ def fit_experimental(param_name, save_folder):
                                         held_out_data=run_params['held_out_data'])
 
 
-        num_neurons = emissions[0].shape[1]
+        num_neurons = data_train['emissions'][0].shape[1]
         # create a mask for the dynamics_input_weights. This allows us to fit dynamics weights that are diagonal
         # if a neuron never receives stimulation, mask its weight too
         input_mask = np.eye(num_neurons)
-        has_stims = np.any(np.concatenate(inputs, axis=0), axis=0)
-        input_mask[np.diag(has_stims)] = 0
+        has_stims = np.any(np.concatenate(data_train['inputs'], axis=0), axis=0)
+        input_mask[np.diag(~has_stims)] = 0
         # set the model properties so the model fits with this mask
         run_params['param_props']['mask']['dynamics_input_weights'] = input_mask
 
