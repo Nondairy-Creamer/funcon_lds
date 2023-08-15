@@ -200,13 +200,12 @@ def find_stim_events(inputs, window_size=1000):
 
 
 def plot_posterior(data, posterior_dict, cell_ids_chosen, sample_rate=0.5, window_size=1000):
-    cell_ids = data['cell_ids']
     emissions = data['emissions']
     inputs = data['inputs']
     posterior = posterior_dict['posterior']
     post_pred = posterior_dict['post_pred_noise']
 
-    neuron_inds_chosen = np.array([cell_ids.index(i) for i in cell_ids_chosen])
+    neuron_inds_chosen = np.array([data['cell_ids'].index(i) for i in cell_ids_chosen])
 
     # get all the inputs but with only the chosen neurons
     inputs_truncated = [i[:, neuron_inds_chosen] for i in inputs]
@@ -221,7 +220,7 @@ def plot_posterior(data, posterior_dict, cell_ids_chosen, sample_rate=0.5, windo
     for i in range(inputs_chosen.shape[1]):
         inputs_chosen[:, i] = np.convolve(inputs_chosen[:, i], filt_shape, mode='same')
 
-    plot_y = np.arange(len(cell_ids))
+    plot_y = np.arange(len(cell_ids_chosen))
     plot_x = np.arange(0, emissions_chosen.shape[0], emissions_chosen.shape[0]/10)
     cmax = np.nanpercentile(np.abs((emissions_chosen, posterior_chosen)), plot_percent)
 
@@ -229,7 +228,7 @@ def plot_posterior(data, posterior_dict, cell_ids_chosen, sample_rate=0.5, windo
     plt.subplot(3, 1, 1)
     plt.imshow(inputs_chosen.T, interpolation='nearest', aspect='auto', cmap=colormap)
     plt.title('stimulation events')
-    plt.yticks(plot_y, cell_ids)
+    plt.yticks(plot_y, cell_ids_chosen)
     plt.xticks(plot_x, plot_x * sample_rate)
     plt.xlabel('time (s)')
     plt.clim((-1, 1))
@@ -239,7 +238,7 @@ def plot_posterior(data, posterior_dict, cell_ids_chosen, sample_rate=0.5, windo
     plt.imshow(emissions_chosen.T, interpolation='nearest', aspect='auto', cmap=colormap)
     plt.clim((-cmax, cmax))
     plt.title('measured data')
-    plt.yticks(plot_y, cell_ids)
+    plt.yticks(plot_y, cell_ids_chosen)
     plt.xticks(plot_x, plot_x * sample_rate)
     plt.xlabel('time (s)')
     plt.colorbar()
@@ -248,7 +247,7 @@ def plot_posterior(data, posterior_dict, cell_ids_chosen, sample_rate=0.5, windo
     plt.imshow(posterior_chosen.T, interpolation='nearest', aspect='auto', cmap=colormap)
     plt.clim((-cmax, cmax))
     plt.title('model posterior, all data')
-    plt.yticks(plot_y, cell_ids)
+    plt.yticks(plot_y, cell_ids_chosen)
     plt.xticks(plot_x, plot_x * sample_rate)
     plt.xlabel('time (s)')
     plt.colorbar()
@@ -261,7 +260,7 @@ def plot_posterior(data, posterior_dict, cell_ids_chosen, sample_rate=0.5, windo
     plt.subplot(3, 1, 1)
     plt.imshow(inputs_chosen.T, interpolation='nearest', aspect='auto', cmap=colormap)
     plt.title('stimulation events')
-    plt.yticks(plot_y, cell_ids)
+    plt.yticks(plot_y, cell_ids_chosen)
     plt.xticks(plot_x, plot_x * sample_rate)
     plt.xlabel('time (s)')
     plt.clim((-1, 1))
@@ -271,7 +270,7 @@ def plot_posterior(data, posterior_dict, cell_ids_chosen, sample_rate=0.5, windo
     plt.imshow(post_pred_chosen.T, interpolation='nearest', aspect='auto', cmap=colormap)
     plt.clim((-cmax, cmax))
     plt.title('sampled model')
-    plt.yticks(plot_y, cell_ids)
+    plt.yticks(plot_y, cell_ids_chosen)
     plt.xticks(plot_x, plot_x * sample_rate)
     plt.xlabel('time (s)')
     plt.colorbar()
@@ -280,7 +279,7 @@ def plot_posterior(data, posterior_dict, cell_ids_chosen, sample_rate=0.5, windo
     plt.imshow(posterior_chosen.T, interpolation='nearest', aspect='auto', cmap=colormap)
     plt.clim((-cmax, cmax))
     plt.title('model posterior, all data')
-    plt.yticks(plot_y, cell_ids)
+    plt.yticks(plot_y, cell_ids_chosen)
     plt.xticks(plot_x, plot_x * sample_rate)
     plt.xlabel('time (s)')
     plt.colorbar()
@@ -350,7 +349,6 @@ def plot_stim_l2_norm(model, data, posterior_dict, cell_ids_chosen, window=(0, 1
     cell_ids = data['cell_ids']
     posterior = posterior_dict['posterior']
     post_pred = posterior_dict['post_pred']
-    num_neurons = len(cell_ids)
 
     chosen_neuron_inds = [cell_ids.index(i) for i in cell_ids_chosen]
 
@@ -369,6 +367,7 @@ def plot_stim_l2_norm(model, data, posterior_dict, cell_ids_chosen, window=(0, 1
     model_weights_norm = rms(stack_weights(model_weights, model.dynamics_lags, axis=1), axis=0)
     correlation = nan_corr(emissions)
 
+    correlation[np.isnan(correlation)] = 0
     if np.linalg.det(correlation) > 0:
         correlation = np.abs(np.linalg.inv(correlation))[np.ix_(chosen_neuron_inds, chosen_neuron_inds)]
     elif np.linalg.det(correlation[np.ix_(chosen_neuron_inds, chosen_neuron_inds)]) > 0:
