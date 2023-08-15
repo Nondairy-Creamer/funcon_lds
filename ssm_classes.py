@@ -606,6 +606,7 @@ class Lgssm:
                     max_abs_eig = np.max(np.abs(dyn_eig_vals))
 
             elif self.param_props['update']['dynamics_weights']:  # update dynamics matrix A only
+                # TODO: I think this is broken right now if there are variables that were never stimulated
                 if self.ridge_lambda == 0:
                     self.dynamics_weights = np.linalg.solve(Mz1.T, (Mz12 - Muz21.T @ self.dynamics_input_weights.T)[:, :self.dynamics_dim]).T  # new A
                 else:

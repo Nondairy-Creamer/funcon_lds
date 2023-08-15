@@ -40,6 +40,7 @@ def fit_synthetic(param_name, save_folder):
                               lost_emission_freq=run_params['lost_emission_freq'],
                               input_time_scale=run_params['input_time_scale'],
                               rng=rng)
+
         data_test = \
             model_true.sample(num_time=run_params['num_time'],
                               num_data_sets=run_params['num_data_sets'],
@@ -49,14 +50,9 @@ def fit_synthetic(param_name, save_folder):
                               rng=rng)
         print('Time to sample:', time.time() - start, 's')
 
-        emissions = data_train['emissions']
-        inputs = data_train['inputs']
-        latents_true = data_train['latents']
-        init_mean_true = data_train['init_mean']
-        init_cov_true = data_train['init_cov']
-
         # get the log likelihood of the true data
-        ll_true_params = model_true.get_ll(emissions, inputs, init_mean_true, init_cov_true)
+        ll_true_params = model_true.get_ll(data_train['emissions'], data_train['inputs'],
+                                           data_train['init_mean'], data_train['init_cov'])
         model_true.log_likelihood = [ll_true_params]
 
         # make a new model to fit to the random model
@@ -116,9 +112,6 @@ def fit_experimental(param_name, save_folder):
                                         interpolate_nans=run_params['interpolate_nans'],
                                         held_out_data=run_params['held_out_data'])
 
-        emissions = data_train['emissions']
-        inputs = data_train['inputs']
-        cell_ids = data_train['cell_ids']
 
         num_neurons = emissions[0].shape[1]
         # create a mask for the dynamics_input_weights. This allows us to fit dynamics weights that are diagonal
@@ -130,17 +123,17 @@ def fit_experimental(param_name, save_folder):
         run_params['param_props']['mask']['dynamics_input_weights'] = input_mask
 
         # initialize the model and set model weights
+        num_neurons = data_train['emissions'][0].shape[1]
         model_trained = Lgssm(num_neurons, num_neurons, num_neurons,
                               dynamics_lags=run_params['dynamics_lags'],
                               dynamics_input_lags=run_params['dynamics_input_lags'],
                               verbose=run_params['verbose'],
                               param_props=run_params['param_props'],
                               ridge_lambda=run_params['ridge_lambda'],
-                              cell_ids=cell_ids)
+                              cell_ids=data_train['cell_ids'])
 
         model_trained.emissions_weights = np.eye(model_trained.emissions_dim, model_trained.dynamics_dim_full)
         model_trained.emissions_input_weights = np.zeros((model_trained.emissions_dim, model_trained.input_dim_full))
-        model_trained.cell_ids = cell_ids
 
         lu.save_run(save_folder, model_trained=model_trained, data_train=data_train, data_test=data_test, params=run_params)
 
