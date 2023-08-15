@@ -347,11 +347,13 @@ class Lgssm:
             # Predict the next state
             pred_mean = self.dynamics_weights @ filtered_mean + dynamics_inputs[t, :] + self.dynamics_offset
             pred_cov = self.dynamics_weights @ filtered_cov @ self.dynamics_weights.T + self.dynamics_cov
+            pred_cov = pred_cov.T / 2 + pred_cov / 2
 
             # Update the log likelihood
             ll_mu = self.emissions_weights @ pred_mean + emissions_inputs[t, :] + self.emissions_offset
 
             ll_cov = self.emissions_weights @ pred_cov @ self.emissions_weights.T + R
+            ll_cov = ll_cov.T / 2 + ll_cov / 2
             ll_cov_logdet = np.linalg.slogdet(ll_cov)[1]
             ll_cov_inv = np.linalg.inv(ll_cov)
 
@@ -363,6 +365,7 @@ class Lgssm:
             # Compute the Kalman gain
             K = pred_cov.T @ self.emissions_weights.T @ ll_cov_inv
             filtered_cov = pred_cov - K @ ll_cov @ K.T
+            filtered_cov = filtered_cov.T / 2 + filtered_cov / 2
 
             filtered_mean = pred_mean + K @ mean_diff
             filtered_means[t, :] = filtered_mean
@@ -410,11 +413,13 @@ class Lgssm:
             # Compute the smoothed mean and covariance
             pred_mean = self.dynamics_weights @ filtered_mean + dynamics_inputs[t+1, :] + self.dynamics_offset
             pred_cov = self.dynamics_weights @ filtered_cov @ self.dynamics_weights.T + self.dynamics_cov
+            pred_cov = pred_cov.T / 2 + pred_cov / 2
 
             # This is like the Kalman gain but in reverse
             # See Eq 8.11 of Saarka's "Bayesian Filtering and Smoothing"
             G = np.linalg.solve(pred_cov, self.dynamics_weights @ filtered_cov).T
             smoothed_cov_this = filtered_cov + G @ (smoothed_cov_next - pred_cov) @ G.T
+            smoothed_cov_this = smoothed_cov_this.T / 2 + smoothed_cov_this / 2
             smoothed_means[t, :] = filtered_mean + G @ (smoothed_mean_next - pred_mean)
 
             # Compute the smoothed expectation of x_t x_{t+1}^T
