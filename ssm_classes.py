@@ -507,56 +507,27 @@ class Lgssm:
 
         data = iu.individual_scatter(data_out, root=0)
 
-        ll_suff_stats_smoothed_means = []
+        suff_stats = []
         for d in data:
-            ll_suff_stats_smoothed_means.append(self.parallel_suff_stats(d, memmap_cpu_id=memmap_cpu_id))
+            suff_stats.append(self.parallel_suff_stats(d, memmap_cpu_id=memmap_cpu_id))
 
-        ll_suff_stats_smoothed_means = iu.individual_gather(ll_suff_stats_smoothed_means, root=0)
+        suff_stats = iu.individual_gather_sum(suff_stats, root=0)
 
         if cpu_id == 0:
-            ll_suff_stats_out = []
-            for i in ll_suff_stats_smoothed_means:
-                for j in i:
-                    ll_suff_stats_out.append(j)
+            Mz1 = suff_stats[1]['Mz1'] / (suff_stats[1]['nt'] - len(emissions_list))
+            Mz2 = suff_stats[1]['Mz2'] / (suff_stats[1]['nt'] - len(emissions_list))
+            Mz12 = suff_stats[1]['Mz12'] / (suff_stats[1]['nt'] - len(emissions_list))
+            Mu1 = suff_stats[1]['Mu1'] / (suff_stats[1]['nt'] - len(emissions_list))
+            Muz2 = suff_stats[1]['Muz2'] / (suff_stats[1]['nt'] - len(emissions_list))
+            Muz21 = suff_stats[1]['Muz21'] / (suff_stats[1]['nt'] - len(emissions_list))
 
-            ll_suff_stats_smoothed_means = ll_suff_stats_out
+            Mz = suff_stats[1]['Mz'] / suff_stats[1]['nt']
+            Mu2 = suff_stats[1]['Mu2'] / suff_stats[1]['nt']
+            Muz = suff_stats[1]['Muz'] / suff_stats[1]['nt']
 
-            log_likelihood = [i[0] for i in ll_suff_stats_smoothed_means]
-            log_likelihood = np.sum(np.stack(log_likelihood))
-            suff_stats = [i[1] for i in ll_suff_stats_smoothed_means]
-            smoothed_means = [i[2] for i in ll_suff_stats_smoothed_means]
-            new_init_covs = [i[3] for i in ll_suff_stats_smoothed_means]
-
-            Mz1_list = [i['Mz1'] for i in suff_stats]
-            Mz2_list = [i['Mz2'] for i in suff_stats]
-            Mz12_list = [i['Mz12'] for i in suff_stats]
-            Mu1_list = [i['Mu1'] for i in suff_stats]
-            Muz2_list = [i['Muz2'] for i in suff_stats]
-            Muz21_list = [i['Muz21'] for i in suff_stats]
-            Mzy_list = [i['Mzy'] for i in suff_stats]
-            Muy_list = [i['Muy'] for i in suff_stats]
-            Mz_list = [i['Mz'] for i in suff_stats]
-            Mu2_list = [i['Mu2'] for i in suff_stats]
-            Muz_list = [i['Muz'] for i in suff_stats]
-            My_list = [i['My'] for i in suff_stats]
-            nt = [i['nt'] for i in suff_stats]
-
-            total_time = np.sum(nt)
-
-            Mz1 = np.sum(np.stack(Mz1_list), axis=0) / (total_time - len(emissions_list))
-            Mz2 = np.sum(np.stack(Mz2_list), axis=0) / (total_time - len(emissions_list))
-            Mz12 = np.sum(np.stack(Mz12_list), axis=0) / (total_time - len(emissions_list))
-            Mu1 = np.sum(np.stack(Mu1_list), axis=0) / (total_time - len(emissions_list))
-            Muz2 = np.sum(np.stack(Muz2_list), axis=0) / (total_time - len(emissions_list))
-            Muz21 = np.sum(np.stack(Muz21_list), axis=0) / (total_time - len(emissions_list))
-
-            Mz = np.sum(np.stack(Mz_list), axis=0) / total_time
-            Mu2 = np.sum(np.stack(Mu2_list), axis=0) / total_time
-            Muz = np.sum(np.stack(Muz_list), axis=0) / total_time
-
-            Mzy = np.sum(np.stack(Mzy_list), axis=0) / total_time
-            Muy = np.sum(np.stack(Muy_list), axis=0) / total_time
-            My = np.sum(np.stack(My_list), axis=0) / total_time
+            Mzy = suff_stats[1]['Mzy'] / suff_stats[1]['nt']
+            Muy = suff_stats[1]['Muy'] / suff_stats[1]['nt']
+            My = suff_stats[1]['My'] / suff_stats[1]['nt']
 
             # update dynamics matrix A & input matrix B
             # append the trivial parts of the weights from input lags
@@ -678,7 +649,7 @@ class Lgssm:
             if not np.all(self.emissions_cov == self.emissions_cov.T):
                 warnings.warn('emissions_cov is not symmetric')
 
-            return log_likelihood, smoothed_means, new_init_covs
+            return suff_stats[0], suff_stats[2], suff_stats[3]
 
         return None, None, None
 

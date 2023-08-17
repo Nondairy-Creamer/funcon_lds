@@ -55,6 +55,56 @@ def individual_gather(data, root=0):
     return item
 
 
+def individual_gather_sum(data, root=0):
+    # as you gather inputs, rather than storing them sum them together
+    comm = pkl5.Intracomm(MPI.COMM_WORLD)
+    cpu_id = comm.Get_rank()
+    size = comm.Get_size()
+
+    def combine_packet(packet):
+        combined_packet = list(packet[0])
+        combined_packet[2] = [combined_packet[2]]
+        combined_packet[3] = [combined_packet[3]]
+
+        for ii, i in enumerate(packet[1:]):
+            combined_packet[0] += i[0]
+
+            for k in i[1].keys():
+                combined_packet[1][k] += i[1][k]
+
+            combined_packet[2].append(i[2])
+            combined_packet[3].append(i[3])
+
+        return combined_packet
+
+    if cpu_id == root:
+        cpu_list = [i for i in range(size) if i != root]
+
+        data_gathered = combine_packet(data)
+
+        for cl in cpu_list:
+            data_received = comm.recv(source=cl)
+
+            data_received = combine_packet(data_received)
+
+            data_gathered[0] += data_received[0]
+
+            for k in data_received[1].keys():
+                data_gathered[1][k] += data_received[1][k]
+
+            for i in data_received[2]:
+                data_gathered[2].append(i)
+
+            for i in data_received[3]:
+                data_gathered[3].append(i)
+
+    else:
+        comm.send(data, dest=root)
+        data_gathered = None
+
+    return data_gathered
+
+
 def solve_masked(A, b, mask=None, ridge_penalty=None):
     # solves the linear equation b=Ax where x has 0's where mask == 0
     x_hat = np.zeros((A.shape[1], b.shape[1]))
