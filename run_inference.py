@@ -50,11 +50,6 @@ def fit_synthetic(param_name, save_folder):
                               rng=rng)
         print('Time to sample:', time.time() - start, 's')
 
-        # get the log likelihood of the true data
-        ll_true_params = model_true.get_ll(data_train['emissions'], data_train['inputs'],
-                                           data_train['init_mean'], data_train['init_cov'])
-        model_true.log_likelihood = [ll_true_params]
-
         num_neurons = data_train['emissions'][0].shape[1]
         # create a mask for the dynamics_input_weights. This allows us to fit dynamics weights that are diagonal
         # if a neuron never receives stimulation, mask its weight too
@@ -75,14 +70,20 @@ def fit_synthetic(param_name, save_folder):
                 setattr(model_trained, init_key, getattr(model_true, init_key))
         model_trained.set_to_init()
 
-        lu.save_run(save_folder, model_trained=model_trained, model_true=model_true,
-                    data_train=data_train, data_test=data_test,
+        lu.save_run(save_folder, model_trained=model_trained, data_train=data_train, data_test=data_test,
                     params=run_params)
     else:
         model_trained = None
         data_train = None
         data_test = None
         model_true = None
+
+    # get the log likelihood of the true data
+    ll_true_params = iu.parallel_get_ll(model_true, data_train)
+
+    if cpu_id == 0:
+        model_true.log_likelihood = [ll_true_params]
+        lu.save_run(save_folder, model_true=model_true)
 
     run_fitting(run_params, model_trained, data_train, data_test, save_folder, model_true=model_true)
 

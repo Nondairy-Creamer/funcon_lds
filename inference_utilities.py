@@ -205,15 +205,15 @@ def fit_em(model, data, init_mean=None, init_cov=None, num_steps=10,
         return None, None, None, None
 
 
-def parallel_get_post(model, data_test, init_mean=None, init_cov=None, max_iter=1, converge_res=1e-2, time_lim=100,
+def parallel_get_post(model, data, init_mean=None, init_cov=None, max_iter=1, converge_res=1e-2, time_lim=100,
                       memmap_cpu_id=None):
     comm = pkl5.Intracomm(MPI.COMM_WORLD)
     cpu_id = comm.Get_rank()
     size = comm.Get_size()
 
     if cpu_id == 0:
-        emissions = data_test['emissions']
-        inputs = data_test['inputs']
+        emissions = data['emissions']
+        inputs = data['inputs']
 
         if init_mean is None:
             init_mean = model.estimate_init_mean(emissions)
@@ -227,11 +227,11 @@ def parallel_get_post(model, data_test, init_mean=None, init_cov=None, max_iter=
 
     # get posterior on test data
     model = comm.bcast(model)
-    data_test_out = individual_scatter(test_data_packaged)
+    data_out = individual_scatter(test_data_packaged)
 
-    if data_test_out is not None:
+    if data_out is not None:
         ll_smeans = []
-        for ii, i in enumerate(data_test_out):
+        for ii, i in enumerate(data_out):
             emissions = i[0][:time_lim, :].copy()
             inputs = i[1][:time_lim, :].copy()
             init_mean = i[2].copy()
@@ -254,7 +254,7 @@ def parallel_get_post(model, data_test, init_mean=None, init_cov=None, max_iter=
                     init_mean = init_mean_new.copy()
                     init_cov = init_cov_new.copy()
 
-                print('cpu_id', cpu_id + 1, '/', size, 'data #', ii + 1, '/', len(data_test_out),
+                print('cpu_id', cpu_id + 1, '/', size, 'data #', ii + 1, '/', len(data_out),
                       'posterior iteration:', iter_num, ', converged:', converged)
                 iter_num += 1
 
@@ -304,6 +304,45 @@ def parallel_get_post(model, data_test, init_mean=None, init_cov=None, max_iter=
                           }
 
         return inference_test
+
+    return None
+
+
+def parallel_get_ll(model, data):
+    comm = pkl5.Intracomm(MPI.COMM_WORLD)
+    cpu_id = comm.Get_rank()
+    size = comm.Get_size()
+
+    if cpu_id == 0:
+        emissions = data['emissions']
+        inputs = data['inputs']
+        init_mean = data['init_mean']
+        init_cov = data['init_cov']
+
+        test_data_packaged = model.package_data_mpi(emissions, inputs, init_mean, init_cov, size)
+    else:
+        test_data_packaged = None
+
+    # get posterior on test data
+    model = comm.bcast(model)
+    data_out = individual_scatter(test_data_packaged)
+
+    emissions_this = [i[0] for i in data_out]
+    inputs_this = [i[1] for i in data_out]
+    init_mean_this = [i[2] for i in data_out]
+    init_cov_this = [i[3] for i in data_out]
+
+    ll = model.get_ll(emissions_this, inputs_this,
+                      init_mean_this, init_cov_this)
+
+    ll = individual_gather(ll)
+    # this is a hack to force blocking so some processes don't end before others
+    blocking_scatter = individual_scatter(ll)
+
+    if cpu_id == 0:
+        ll = [i for i in ll if i is not None]
+
+        return np.sum(ll)
 
     return None
 
