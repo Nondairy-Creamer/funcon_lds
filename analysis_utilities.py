@@ -90,7 +90,10 @@ def plot_model_params(model, cell_ids_chosen):
         plt.title('A' + str(ai))
 
     # plot the B matrix
-    stimulated_neurons = np.any(model.param_props['mask']['dynamics_input_weights'].astype(bool), axis=1)
+    if model.param_props['mask']['dynamics_input_weights'] is None:
+        stimulated_neurons = np.zeros(model.input_dim) == 0
+    else:
+        stimulated_neurons = np.any(model.param_props['mask']['dynamics_input_weights'].astype(bool), axis=1)
 
     B_full = model_params['trained']['dynamics_input_weights'][:model.dynamics_dim, :]
     B = np.split(B_full, model.dynamics_input_lags, axis=1)
