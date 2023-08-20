@@ -215,7 +215,7 @@ def infer_posterior(param_name, model_folder):
         if 'model_folder' in run_params.keys():
             model_folder = run_params['model_folder']
         model_folder = Path(model_folder)
-        model_path = model_folder / 'model_trained.pkl'
+        model_path = model_folder / 'models' / 'model_trained.pkl'
         data_train_path = model_folder / 'data_train.pkl'
         data_test_path = model_folder / 'data_test.pkl'
 
