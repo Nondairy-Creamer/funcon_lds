@@ -212,7 +212,7 @@ def infer_posterior(param_name, data_folder):
 
     # cpu_id 0 is the parent node which will send out the data to the children nodes
     if cpu_id == 0:
-        if 'model_folder' in run_params.keys():
+        if 'data_folder' in run_params.keys():
             data_folder = run_params['model_folder']
         data_folder = Path(data_folder)
         model_path = data_folder / 'models' / 'model_trained.pkl'
@@ -241,4 +241,4 @@ def infer_posterior(param_name, data_folder):
     posterior_test = iu.parallel_get_post(model, data_test, max_iter=run_params['max_iter'], memmap_cpu_id=memmap_cpu_id)
 
     if cpu_id == 0:
-        lu.save_run(model_folder, posterior_train=posterior_train, posterior_test=posterior_test)
+        lu.save_run(data_folder, posterior_train=posterior_train, posterior_test=posterior_test)
