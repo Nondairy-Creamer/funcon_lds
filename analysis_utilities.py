@@ -154,7 +154,14 @@ def get_stim_response(data, inputs, window=(-20, 60)):
 
         for time, target in zip(stim_events[0], stim_events[1]):
             if window[0] + time >= 0 and window[1] + time < num_time:
-                responses[target].append(e[window[0]+time:window[1]+time, :])
+                this_clip = e[window[0]+time:window[1]+time, :]
+
+                if window[0] < 0:
+                    baseline = np.nanmean(this_clip[0:-window[0], :], axis=0)
+                    baseline[np.isnan(baseline)] = 0
+                    this_clip -= baseline
+
+                responses[target].append(this_clip)
 
     for ri, r in enumerate(responses):
         if len(r) > 0:
