@@ -70,7 +70,7 @@ def fit_synthetic(param_name, save_folder):
                 setattr(model_trained, init_key, getattr(model_true, init_key))
         model_trained.set_to_init()
 
-        lu.save_run(save_folder, model_trained=model_trained, data_train=data_train, data_test=data_test,
+        lu.save_run(save_folder, model_trained=model_trained, ep=0, data_train=data_train, data_test=data_test,
                     params=run_params)
     else:
         model_trained = None
@@ -145,7 +145,7 @@ def fit_experimental(param_name, save_folder):
         model_trained.emissions_weights = np.eye(model_trained.emissions_dim, model_trained.dynamics_dim_full)
         model_trained.emissions_input_weights = np.zeros((model_trained.emissions_dim, model_trained.input_dim_full))
 
-        lu.save_run(save_folder, model_trained=model_trained, data_train=data_train, data_test=data_test, params=run_params)
+        lu.save_run(save_folder, model_trained=model_trained, ep=0, data_train=data_train, data_test=data_test, params=run_params)
 
     else:
         # if you are a child node, just set everything to None and only calculate your sufficient statistics
@@ -186,7 +186,7 @@ def run_fitting(run_params, model, data_train, data_test, save_folder, model_tru
                                           converge_res=1e-2, time_lim=100, memmap_cpu_id=memmap_cpu_id)
 
     if cpu_id == 0:
-        lu.save_run(save_folder, model_trained=model, posterior_train=posterior_train,
+        lu.save_run(save_folder, model_trained=model, ep=-1, posterior_train=posterior_train,
                     posterior_test=posterior_test)
 
         if run_params['use_memmap']:

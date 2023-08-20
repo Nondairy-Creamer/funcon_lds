@@ -131,7 +131,7 @@ def solve_masked(A, b, mask=None, ridge_penalty=None):
 
 
 def fit_em(model, data, init_mean=None, init_cov=None, num_steps=10,
-           save_folder='em_test', save_every=20, memmap_cpu_id=None):
+           save_folder='em_test', save_every=10, memmap_cpu_id=None):
     comm = pkl5.Intracomm(MPI.COMM_WORLD)
     cpu_id = comm.Get_rank()
     size = comm.Get_size()
@@ -190,7 +190,7 @@ def fit_em(model, data, init_mean=None, init_cov=None, num_steps=10,
                                    'init_cov': init_cov,
                                    }
 
-                lu.save_run(save_folder, model_trained=model, posterior_train=posterior_train)
+                lu.save_run(save_folder, model_trained=model, ep=ep+1, posterior_train=posterior_train)
 
             if model.verbose:
                 print('Finished step', ep + 1, '/', num_steps)

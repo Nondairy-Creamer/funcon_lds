@@ -8,6 +8,7 @@ import tmac.preprocessing as tp
 import time
 import analysis_utilities as au
 import warnings
+import os
 
 # utilities for loading and saving the data
 
@@ -182,21 +183,32 @@ def load_and_preprocess_data(data_path, num_data_sets=None, force_preprocess=Fal
     return data_train, data_test
 
 
-def save_run(model_save_folder, model_trained=None, model_true=None, **vars_to_save):
-    model_save_folder = Path(model_save_folder)
+def save_run(save_folder, model_trained=None, model_true=None, ep=None, **vars_to_save):
+    save_folder = Path(save_folder)
+    model_save_folder = save_folder / 'models'
 
     # save the trained model
     if model_trained is not None:
+        if not model_save_folder.exists():
+            os.mkdir(model_save_folder)
+
+        if ep is not None:
+            trained_model_save_path = model_save_folder / ('model_trained_' + str(ep) + '.pkl')
+            model_trained.save(path=trained_model_save_path)
+
         trained_model_save_path = model_save_folder / 'model_trained.pkl'
         model_trained.save(path=trained_model_save_path)
 
     # save the true model, if it exists
     if model_true is not None:
+        if not model_save_folder.exists():
+            os.mkdir(model_save_folder)
+
         true_model_save_path = model_save_folder / 'model_true.pkl'
         model_true.save(path=true_model_save_path)
 
     for k, v in vars_to_save.items():
-        save_path = model_save_folder / (k + '.pkl')
+        save_path = save_folder / (k + '.pkl')
 
         save_file = open(save_path, 'wb')
         pickle.dump(v, save_file)
