@@ -141,7 +141,7 @@ def plot_model_params(model, cell_ids_chosen):
     plt.show()
 
 
-def get_stim_response(data, inputs, window=(-20, 60)):
+def get_stim_response(data, inputs, window=(-20, 60), sub_start=False):
     num_neurons = data[0].shape[1]
 
     responses = []
@@ -156,10 +156,11 @@ def get_stim_response(data, inputs, window=(-20, 60)):
             if window[0] + time >= 0 and window[1] + time < num_time:
                 this_clip = e[window[0]+time:window[1]+time, :]
 
-                if window[0] < 0:
-                    baseline = np.nanmean(this_clip[0:-window[0], :], axis=0)
-                    baseline[np.isnan(baseline)] = 0
-                    this_clip -= baseline
+                if sub_start:
+                    if window[0] < 0:
+                        baseline = np.nanmean(this_clip[0:-window[0], :], axis=0)
+                        baseline[np.isnan(baseline)] = 0
+                        this_clip -= baseline
 
                 responses[target].append(this_clip)
 
@@ -173,7 +174,11 @@ def get_stim_response(data, inputs, window=(-20, 60)):
     ave_responses = np.stack(ave_responses)
     ave_responses = np.transpose(ave_responses, axes=(1, 2, 0))
 
-    return ave_responses, responses
+    sem_responses = [np.nanstd(j, axis=0, ddof=1) / np.sqrt(j.shape[0]) for j in responses]
+    sem_responses = np.stack(sem_responses)
+    sem_responses = np.transpose(sem_responses, axes=(1, 2, 0))
+
+    return ave_responses, sem_responses, responses
 
 
 def find_stim_events(inputs, window_size=1000):
@@ -365,9 +370,9 @@ def plot_stim_l2_norm(model, data, posterior_dict, cell_ids_chosen, window=(0, 1
     plot_x = np.arange(len(chosen_neuron_inds))
 
     # go through emissions and get the average input response for each neuron
-    measured_stim_responses = get_stim_response(emissions, inputs, window=window)[0]
-    post_pred_stim_responses = get_stim_response(post_pred, inputs, window=window)[0]
-    posterior_stim_responses = get_stim_response(posterior, inputs, window=window)[0]
+    measured_stim_responses, measured_stim_responses_sem = get_stim_response(emissions, inputs, window=window)[:2]
+    post_pred_stim_responses, post_pred_stim_responses_sem = get_stim_response(post_pred, inputs, window=window)[:2]
+    posterior_stim_responses, posterior_stim_responses_sem = get_stim_response(posterior, inputs, window=window)[:2]
     model_weights = model.dynamics_weights[:model.dynamics_dim, :]
 
     # calculate the rms for each response. This deals with the fact that responses can vary and go negative
@@ -500,17 +505,25 @@ def plot_stim_response(data, posterior_dict, cell_ids_chosen, neuron_to_stim,
     neuron_to_stim_ind = cell_ids_chosen.index(neuron_to_stim)
 
     # go through emissions and get the average input response for each neuron
-    measured_stim_responses = get_stim_response(emissions, inputs, window=window)[0]
-    post_pred_stim_responses = get_stim_response(post_pred, inputs, window=window)[0]
-    posterior_stim_responses = get_stim_response(posterior, inputs, window=window)[0]
+    measured_stim_responses, measured_stim_responses_sem = get_stim_response(emissions, inputs, window=window)[:2]
+    post_pred_stim_responses, post_pred_stim_responses_sem = get_stim_response(post_pred, inputs, window=window)[:2]
+    posterior_stim_responses, posterior_stim_responses_sem = get_stim_response(posterior, inputs, window=window)[:2]
 
     # pull out the neurons we care about
     measured_stim_responses = measured_stim_responses[:, chosen_neuron_inds, :]
     measured_stim_responses = measured_stim_responses[:, :, chosen_neuron_inds]
+    measured_stim_responses_sem = measured_stim_responses_sem[:, chosen_neuron_inds, :]
+    measured_stim_responses_sem = measured_stim_responses_sem[:, :, chosen_neuron_inds]
+
     post_pred_stim_responses = post_pred_stim_responses[:, chosen_neuron_inds, :]
     post_pred_stim_responses = post_pred_stim_responses[:, :, chosen_neuron_inds]
+    post_pred_stim_responses_sem = post_pred_stim_responses_sem[:, chosen_neuron_inds, :]
+    post_pred_stim_responses_sem = post_pred_stim_responses_sem[:, :, chosen_neuron_inds]
+
     posterior_stim_responses = posterior_stim_responses[:, chosen_neuron_inds, :]
     posterior_stim_responses = posterior_stim_responses[:, :, chosen_neuron_inds]
+    posterior_stim_responses_sem = posterior_stim_responses_sem[:, chosen_neuron_inds, :]
+    posterior_stim_responses_sem = posterior_stim_responses_sem[:, :, chosen_neuron_inds]
 
     vals = [measured_stim_responses[:, :, neuron_to_stim_ind], posterior_stim_responses[:, :, neuron_to_stim_ind],
             post_pred_stim_responses[:, :, neuron_to_stim_ind]]
@@ -518,7 +531,10 @@ def plot_stim_response(data, posterior_dict, cell_ids_chosen, neuron_to_stim,
 
     for i in range(measured_stim_responses.shape[1]):
         plt.figure()
-        plt.plot(plot_x, measured_stim_responses[:, i, neuron_to_stim_ind], label='measured')
+        this_measured_resp = measured_stim_responses[:, i, neuron_to_stim_ind]
+        this_measured_resp_sem = measured_stim_responses_sem[:, i, neuron_to_stim_ind]
+        plt.plot(plot_x, this_measured_resp, label='measured')
+        plt.fill_between(plot_x, this_measured_resp - this_measured_resp_sem/2, this_measured_resp + this_measured_resp_sem/2, alpha=0.4)
         plt.plot(plot_x, posterior_stim_responses[:, i, neuron_to_stim_ind], label='smoothed')
         plt.plot(plot_x, post_pred_stim_responses[:, i, neuron_to_stim_ind], label='model')
         plt.axvline(0, color='k', linestyle='--')
