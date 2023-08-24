@@ -569,7 +569,10 @@ class Lgssm:
                 dyn_eig_vals, dyn_eig_vects = np.linalg.eig(self.dynamics_weights)
                 max_abs_eig = np.max(np.abs(dyn_eig_vals))
                 if max_abs_eig > max_eig:
+                    update_input_weights = True
                     warnings.warn('Largest eigenvalue of the dynamics matrix is:' + str(max_abs_eig) + ', setting to ' + str(max_eig))
+                else:
+                    update_input_weights = False
 
                 while max_abs_eig > max_eig:
                     dyn_eig_vals = dyn_eig_vals / max_abs_eig * max_eig
@@ -581,8 +584,22 @@ class Lgssm:
                     dyn_eig_vals, dyn_eig_vects = np.linalg.eig(self.dynamics_weights)
                     max_abs_eig = np.max(np.abs(dyn_eig_vals))
 
+                # TODO: this is a hack to deal with shrinking the wieght matrix. not sure if it matters or helps. remove
+                if update_input_weights:
+                    if self.param_props['shape']['dynamics_input_weights'] == 'diag':
+                        if self.param_props['mask']['dynamics_input_weights'] is None:
+                            self.param_props['mask']['dynamics_input_weights'] = np.eye(self.dynamics_dim, self.input_dim)
+
+                        # make the mask of which parameters to fit
+                        mask = np.tile(self.param_props['mask']['dynamics_input_weights'].T, (self.dynamics_input_lags, 1))
+
+                        self.dynamics_input_weights = iu.solve_masked(Mu1.T, (Muz2 - Muz21 @ self.dynamics_weights.T)[:, :self.dynamics_dim], mask).T  # new A and B from regression
+                    else:
+                        self.dynamics_input_weights = np.linalg.solve(Mu1.T, (Muz2 - Muz21 @ self.dynamics_weights.T)[:, :self.dynamics_dim]).T  # new B
+
+                    self.dynamics_input_weights = np.concatenate((self.dynamics_input_weights, dynamics_inputs_zeros_pad), axis=0)  # new B
+
             elif self.param_props['update']['dynamics_weights']:  # update dynamics matrix A only
-                # TODO: I think this is broken right now if there are variables that were never stimulated
                 if self.ridge_lambda == 0:
                     self.dynamics_weights = np.linalg.solve(Mz1.T, (Mz12 - Muz21.T @ self.dynamics_input_weights.T)[:, :self.dynamics_dim]).T  # new A
                 else:
@@ -591,11 +608,13 @@ class Lgssm:
                 self.dynamics_weights = np.concatenate((self.dynamics_weights, dynamics_pad), axis=0)  # new A
 
             elif self.param_props['update']['dynamics_input_weights']:  # update input matrix B only
+                # TODO: I think this is broken right now if there are variables that were never stimulated
+
                 if self.param_props['shape']['dynamics_input_weights'] == 'diag':
                     if self.param_props['mask']['dynamics_input_weights'] is None:
                         self.param_props['mask']['dynamics_input_weights'] = np.eye(self.dynamics_dim, self.input_dim)
 
-                    # make the of which parameters to fit
+                    # make the mask of which parameters to fit
                     mask = np.tile(self.param_props['mask']['dynamics_input_weights'].T, (self.dynamics_input_lags, 1))
 
                     self.dynamics_input_weights = iu.solve_masked(Mu1.T, (Muz2 - Muz21 @ self.dynamics_weights.T)[:, :self.dynamics_dim], mask).T  # new A and B from regression
