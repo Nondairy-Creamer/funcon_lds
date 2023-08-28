@@ -120,7 +120,8 @@ def fit_experimental(param_name, save_folder):
                                         force_preprocess=run_params['force_preprocess'],
                                         correct_photobleach=run_params['correct_photobleach'],
                                         interpolate_nans=run_params['interpolate_nans'],
-                                        held_out_data=run_params['held_out_data'])
+                                        held_out_data=run_params['held_out_data'],
+                                        neuron_freq=run_params['neuron_freq'])
 
 
         num_neurons = data_train['emissions'][0].shape[1]

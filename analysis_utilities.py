@@ -10,21 +10,6 @@ def rms(data, axis=-1):
     return np.sqrt(np.nanmean(data**2, axis=axis))
 
 
-def plot_data(data):
-    for e, i in zip(data['emissions'], data['inputs']):
-        # convolve the inputs to make them easier to visualize
-        i_conv = sp.signal.convolve2d(i, np.ones((41, 1)), mode='same')
-
-        abs_cmax = np.nanpercentile(np.abs(e), 95, method='closest_observation')
-        plt.figure()
-        plt.imshow(e.T, aspect='auto', interpolation='nearest', cmap=colormap)
-        plt.clim((-abs_cmax, abs_cmax))
-        plt.colorbar()
-        plt.imshow(i_conv.T, aspect='auto', interpolation='nearest', alpha=i_conv.T, cmap=mpl.colormaps['Greys'])
-
-    plt.show()
-
-
 def nan_convolve(data, filter):
     # attempt to ignore nans during a convolution
     # this isn't particularly principled, will just replace nans with 0s and divide the convolution

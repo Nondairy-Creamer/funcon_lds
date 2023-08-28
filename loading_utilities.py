@@ -86,7 +86,7 @@ def preprocess_data(emissions, inputs, start_index=0, correct_photobleach=False)
 
 
 def load_and_preprocess_data(data_path, num_data_sets=None, force_preprocess=False, start_index=0,
-                             correct_photobleach=False, interpolate_nans=True, held_out_data=[]):
+                             correct_photobleach=False, interpolate_nans=True, neuron_freq=0.0, held_out_data=[]):
     data_path = Path(data_path)
 
     preprocess_filename = 'funcon_preprocessed_data.pkl'
@@ -179,6 +179,19 @@ def load_and_preprocess_data(data_path, num_data_sets=None, force_preprocess=Fal
 
     data_test['emissions'], data_test['inputs'], data_test['cell_ids'] = \
         align_data_cell_ids(emissions_test, inputs_test, cell_ids_test, cell_ids_unique=data_train['cell_ids'])
+
+    # eliminate neurons that don't show up often enough
+    measured_neurons = np.stack([~np.all(np.isnan(i), axis=0) for i in data_train['emissions']])
+    measured_freq = np.mean(measured_neurons, axis=0)
+    neurons_to_keep = measured_freq >= neuron_freq
+
+    data_train['emissions'] = [i[:, neurons_to_keep] for i in data_train['emissions']]
+    data_train['inputs'] = [i[:, neurons_to_keep] for i in data_train['inputs']]
+    data_train['cell_ids'] = [data_train['cell_ids'][i] for i in range(len(data_train['cell_ids'])) if neurons_to_keep[i]]
+
+    data_test['emissions'] = [i[:, neurons_to_keep] for i in data_test['emissions']]
+    data_test['inputs'] = [i[:, neurons_to_keep] for i in data_test['inputs']]
+    data_test['cell_ids'] = [data_test['cell_ids'][i] for i in range(len(data_test['cell_ids'])) if neurons_to_keep[i]]
 
     return data_train, data_test
 
