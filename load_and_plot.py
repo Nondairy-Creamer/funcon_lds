@@ -29,7 +29,7 @@ else:
 
     model_folder = Path(max_dir)
 
-model_trained_path = model_folder / 'model_trained.pkl'
+model_trained_path = model_folder / 'models' / 'model_trained.pkl'
 model_trained_file = open(model_trained_path, 'rb')
 model_trained = pickle.load(model_trained_file)
 model_trained_file.close()
