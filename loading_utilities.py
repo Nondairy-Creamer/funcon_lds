@@ -50,7 +50,7 @@ def preprocess_data(emissions, inputs, start_index=0, correct_photobleach=False)
         # photobleach correction
         emissions_filtered_corrected = np.zeros_like(emissions_filtered)
         for c in range(emissions_filtered.shape[1]):
-            emissions_filtered_corrected[:, c] = tp.photobleach_correction(emissions_filtered[:, c], num_exp=2)[:, 0]
+            emissions_filtered_corrected[:, c] = tp.photobleach_correction(emissions_filtered[:, c], num_exp=2, fit_offset=True)[:, 0]
 
         # occasionally the fit fails check for outputs who don't have a mean close to 1
         # fit those with a single exponential
@@ -60,7 +60,7 @@ def preprocess_data(emissions, inputs, start_index=0, correct_photobleach=False)
             bad_fits_2exp = np.where(np.abs(np.nanmean(emissions_filtered_corrected, axis=0) - 1) > 0.1)[0]
 
             for bf in bad_fits_2exp:
-                emissions_filtered_corrected[:, bf] = tp.photobleach_correction(emissions_filtered[:, bf], num_exp=1)[:, 0]
+                emissions_filtered_corrected[:, bf] = tp.photobleach_correction(emissions_filtered[:, bf], num_exp=1, fit_offset=True)[:, 0]
 
             bad_fits_1xp = np.where(np.abs(np.nanmean(emissions_filtered_corrected, axis=0) - 1) > 0.2)[0]
             if len(bad_fits_1xp) > 0:
