@@ -68,16 +68,12 @@ for d in range(num_data_sets):
     a_hat_pos = plt.imshow(all_a_hat[:, :, d], aspect='auto', interpolation='nearest', cmap=colormap)
     plt.colorbar(a_hat_pos)
     plt.show()
-    # str = params['fig_path'] + 'ahat%i.png' % d
-    # plt.savefig(str)
 
     fig, axs = plt.subplots(nrows=1, ncols=1)
     plt.title('dataset %(dataset)i GC for %(lags)i lags: b_hat' % {"dataset": d, "lags": num_lags})
     b_hat_pos = plt.imshow(all_b_hat[:, :, d], aspect='auto', interpolation='nearest', cmap=colormap)
     plt.colorbar(b_hat_pos)
     plt.show()
-    # str = params['fig_path'] + 'bhat%i.png' % d
-    # plt.savefig(str)
 
 # create averaged a_hat and b_hat matrices over all non-NaN values over all datasets
 # save all a_hat and b_hat full mtxes first as 3d array, then nanmean over each element along 3rd axis
