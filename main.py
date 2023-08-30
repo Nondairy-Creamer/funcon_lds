@@ -50,10 +50,12 @@ if 'slurm' in run_params.keys():
         if infer_post:
             run_params['slurm']['time'] = '24:00:00'
             slurm_output_path = save_folder / 'slurm_%A_post.out'
+            job_name = param_name.stem + '_post'
         else:
             slurm_output_path = save_folder / 'slurm_%A.out'
+            job_name = param_name.stem
 
-        slurm_fit = Slurm(**run_params['slurm'], output=slurm_output_path, job_name=param_name.stem)
+        slurm_fit = Slurm(**run_params['slurm'], output=slurm_output_path, job_name=job_name)
 
         cpus_per_task = run_params['slurm']['cpus_per_task']
         fit_model_command = 'run_inference.' + run_params['fit_file'] + '(\'' + str(param_name) + '\',\'' + str(save_folder) + '\')\"'

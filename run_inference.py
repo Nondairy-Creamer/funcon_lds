@@ -213,6 +213,7 @@ def infer_posterior(param_name, data_folder):
 
     # cpu_id 0 is the parent node which will send out the data to the children nodes
     if cpu_id == 0:
+        data_folder = Path(data_folder)
         model_path = data_folder / 'models' / 'model_trained.pkl'
         data_train_path = data_folder / 'data_train.pkl'
         data_test_path = data_folder / 'data_test.pkl'
