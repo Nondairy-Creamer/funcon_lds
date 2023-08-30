@@ -22,9 +22,11 @@ else:
     param_name = sys.argv[1]
 
 if len(sys.argv) == 3:
-    infer_post = sys.argv[2]
+    infer_post = True
+    folder_name = sys.argv[2]
 else:
     infer_post = False
+    folder_name = None
 
 param_name = Path(param_name)
 run_params = lu.get_run_params(param_name=param_name)
@@ -34,19 +36,24 @@ if cpu_id == 0:
 
     full_path = Path(__file__).parent.resolve()
     if infer_post:
-        save_folder = full_path / 'trained_models' / param_name.stem / (current_date + '_post')
+        save_folder = full_path / 'trained_models' / param_name.stem / folder_name
         run_params['fit_file'] = 'infer_posterior'
-        run_params['slurm']['time'] = '24:00:00',
     else:
         save_folder = full_path / 'trained_models' / param_name.stem / current_date
+        os.makedirs(save_folder)
 
-    os.makedirs(save_folder)
 else:
     save_folder = None
 
 if 'slurm' in run_params.keys():
     if cpu_id == 0:
-        slurm_fit = Slurm(**run_params['slurm'], output=save_folder / 'slurm_%A.out', job_name=param_name.stem)
+        if infer_post:
+            run_params['slurm']['time'] = '24:00:00'
+            slurm_output_path = save_folder / 'slurm_%A_post.out'
+        else:
+            slurm_output_path = save_folder / 'slurm_%A.out'
+
+        slurm_fit = Slurm(**run_params['slurm'], output=slurm_output_path, job_name=param_name.stem)
 
         cpus_per_task = run_params['slurm']['cpus_per_task']
         fit_model_command = 'run_inference.' + run_params['fit_file'] + '(\'' + str(param_name) + '\',\'' + str(save_folder) + '\')\"'
