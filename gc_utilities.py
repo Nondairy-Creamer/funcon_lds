@@ -323,9 +323,9 @@ def plot_weights_mean_median_split(weight_mtx, colormap, num_lags, save=False, f
 # sample from model for a specific stimulated neuron for num_sim
 def impulse_response_func(num_sim, cell_ids, cell_ids_chosen, num_neurons, num_data_sets, emissions, inputs, all_a_hat,
                           all_b_hat, emissions_num_lags, inputs_num_lags, f_name='impulse_response_data',
-                          load_dir='/Users/lsmith/Documents/python/'):
+                          load_dir='/Users/lsmith/Documents/python/', rerun=False):
     f_name = f_name + str(emissions_num_lags) + str(inputs_num_lags) + '.pkl'
-    if os.path.exists(load_dir + f_name) and os.path.isfile(load_dir + f_name):
+    if os.path.exists(load_dir + f_name) and os.path.isfile(load_dir + f_name) and ~rerun:
         with open(load_dir + f_name, 'rb') as f:
             avg_pred_x_all_data, pred_response_norm_plot = pickle.load(f)
 
@@ -505,23 +505,24 @@ def plot_imp_resp(emissions, inputs, neuron_inds_chosen, num_neurons, num_data_s
     measured_stim_responses = measured_stim_responses[:, chosen_neuron_inds, :]
 
     # add on the avg emissions initial conditions before the stimulus
-    model_pred_resp = np.zeros((60, num_neurons, num_data_sets))
+    model_pred_resp = np.zeros((np.abs(window[0]), num_neurons, num_data_sets))
     for d in range(num_data_sets):
         stim_times = np.where(inputs[d][:, cell_ids.index(neuron_to_stim)])[0]
-        temp = np.zeros((60, num_neurons, stim_times.size))
+        temp = np.zeros((np.abs(window[0]), num_neurons, stim_times.size))
         for i in range(stim_times.size):
             # get initial values of emissions before stimulation
-            if (stim_times[i] - 60) < 0:
-                temp[(60-stim_times[i]):, :, i] = emissions[d][:stim_times[i], :]
+            if (stim_times[i] - np.abs(window[0])) < 0:
+                temp[(np.abs(window[0])-stim_times[i]):, :, i] = emissions[d][:stim_times[i], :]
             else:
-                temp[:, :, i] = emissions[d][(stim_times[i] - 60):stim_times[i], :]
+                temp[:, :, i] = emissions[d][(stim_times[i] - np.abs(window[0])):stim_times[i], :]
         model_pred_resp[:, :, d] = np.nanmean(temp, axis=2)
     model_pred_resp_avg = np.nanmean(model_pred_resp, axis=2)
     plot_model_resp = np.concatenate((model_pred_resp_avg, avg_pred_x_all_data), axis=0)
 
     neuron_to_stim_ind = cell_ids.index(neuron_to_stim)
     plot_x = np.arange(window[0], window[1]) * sample_rate
-    ylim = (np.nanmin(measured_stim_responses), np.nanmax(measured_stim_responses))
+    ylim = (np.nanmin(measured_stim_responses[:, :, neuron_to_stim_ind]),
+            np.nanmax(measured_stim_responses[:, :, neuron_to_stim_ind]))
 
     # then plot the measured results from the experimental data
     for i in range(len(neuron_inds_chosen)):
