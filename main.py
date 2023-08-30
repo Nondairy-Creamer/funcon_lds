@@ -14,12 +14,17 @@ cpu_id = comm.Get_rank()
 is_parallel = size > 1
 
 if len(sys.argv) == 1:
-    # param_name = 'submission_scripts/syn_test.yml'
-    param_name = 'submission_scripts/exp_test.yml'
+    param_name = 'submission_scripts/syn_test.yml'
+    # param_name = 'submission_scripts/exp_test.yml'
     # param_name = 'submission_scripts/infer_post.yml'
     # param_name = 'submission_scripts/slurm_test.yml'
 else:
     param_name = sys.argv[1]
+
+if len(sys.argv) == 3:
+    infer_post = sys.argv[2]
+else:
+    infer_post = False
 
 param_name = Path(param_name)
 run_params = lu.get_run_params(param_name=param_name)
@@ -28,7 +33,13 @@ if cpu_id == 0:
     current_date = datetime.today().strftime('%Y%m%d_%H%M%S')
 
     full_path = Path(__file__).parent.resolve()
-    save_folder = full_path / 'trained_models' / param_name.stem / current_date
+    if infer_post:
+        save_folder = full_path / 'trained_models' / param_name.stem / (current_date + '_post')
+        run_params['fit_file'] = 'infer_posterior'
+        run_params['slurm']['time'] = '24:00:00',
+    else:
+        save_folder = full_path / 'trained_models' / param_name.stem / current_date
+
     os.makedirs(save_folder)
 else:
     save_folder = None
