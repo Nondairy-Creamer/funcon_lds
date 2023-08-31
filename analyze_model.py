@@ -5,9 +5,9 @@ from pathlib import Path
 
 use_synth = False
 use_test_data = False
-auto_select_ids = True
-window_plot = (-60, 300)
-window_int = (0, window_plot[1])
+auto_select_ids = False
+window = (-60, 120)
+sub_start = True
 
 if use_synth:
     model_folder = Path('C:/Users/mcreamer/Documents/python/funcon_lds/trained_models/exp_DL1_IL45_N80_R0/20230819_092054')
@@ -16,12 +16,13 @@ if use_synth:
     neuron_to_stim = '4'
 else:
     # load in the model and training data
-    model_folder = Path('C:/Users/mcreamer/Documents/python/funcon_lds/trained_models\exp_DL1_IL45_N80_R0/20230819_201050')
-    cell_ids_chosen = ['AVAL', 'AVAR', 'AVEL', 'AVER', 'AFDL', 'AFDR', 'AVJL', 'AVJR', 'AVDL', 'AVDR']
+    model_folder = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/exp_DL4_IL45_N80_R0/20230819_201106/')
+    # cell_ids_chosen = ['AVAL', 'AVAR', 'AVEL', 'AVER', 'AFDL', 'AFDR', 'AVJL', 'AVJR', 'AVDL', 'AVDR']
+    cell_ids_chosen = ['M3L', 'RMDDR', 'FLPR', 'RIMR', 'AVER', 'AVJL', 'AVEL', 'AWBL', 'RMDVL', 'RMDVR']
     # cell_ids_chosen = ['AVAL', 'AVAR', 'AVEL', 'AVER', 'AFDR', 'AVJL', 'AVJR', 'AVDL', 'AVDR']
     # cell_ids_chosen = None
-    neuron_to_remove = 'AFDR'
-    neuron_to_stim = 'AFDR'
+    neuron_to_remove = 'AVEL'
+    neuron_to_stim = 'AVEL'
 
 # load in the model and the data
 model_path = model_folder / 'models' / 'model_trained.pkl'
@@ -67,7 +68,7 @@ if cell_ids_chosen is None:
 if auto_select_ids and has_data and has_post:
     num_neurons = 10
     measured_stim_responses_ave, measured_stim_responses_ave_sem, measured_stim_responses = \
-        au.get_stim_response(data['emissions'], data['inputs'], window=window_int)
+        au.get_stim_response(data['emissions'], data['inputs'], window=window, return_pre=False)
     measured_stim_responses_ave_l2 = au.rms(measured_stim_responses_ave, axis=0)
     num_stim = [i.shape[0] for i in measured_stim_responses]
 
@@ -83,14 +84,16 @@ if auto_select_ids and has_data and has_post:
     neuron_to_remove = 'AVEL'
     neuron_to_stim = 'AVEL'
 
+
+
 # au.plot_log_likelihood(model)
 # au.plot_model_params(model, cell_ids_chosen=cell_ids_chosen)
 # au.plot_dynamics_eigs(model)
 
 if has_data and has_post:
     # au.plot_posterior(data, posterior_dict, cell_ids_chosen, sample_rate=model.sample_rate)
-    au.plot_stim_l2_norm(model, data, posterior_dict, cell_ids_chosen, window=window_int)
-    au.plot_stim_response(data, posterior_dict, cell_ids_chosen, neuron_to_stim, window=window_plot, sample_rate=model.sample_rate)
-
+    au.plot_stim_l2_norm(model, data, posterior_dict, cell_ids_chosen, window=window, sub_start=sub_start)
+    au.plot_stim_response(data, posterior_dict, cell_ids_chosen, neuron_to_stim, window=window, sample_rate=model.sample_rate, sub_start=sub_start)
+    a=1
     # au.plot_missing_neuron(model, emissions[data_ind_chosen], inputs[data_ind_chosen], posterior[data_ind_chosen], cell_ids, neuron_to_remove, time_window, sample_rate=model.sample_rate)
 
