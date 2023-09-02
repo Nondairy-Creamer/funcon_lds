@@ -471,7 +471,7 @@ class Lgssm:
         return ll, suff_stats, smoothed_means, new_init_covs
 
     def em_step(self, emissions_list, inputs_list, init_mean_list, init_cov_list, cpu_id=0, num_cpus=1,
-                memmap_cpu_id=None, max_eig=0.9999):
+                memmap_cpu_id=None, max_eig=1.0):
         #
         # Run M-step updates for LDS-Gaussian model
         #

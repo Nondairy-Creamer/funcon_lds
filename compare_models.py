@@ -3,7 +3,8 @@ import pickle
 import numpy as np
 from matplotlib import pyplot as plt
 
-data_sets_location = Path('/home/mcreamer/Documents/trained_models/no_ridge_full_emissions/')
+# data_sets_location = Path('/home/mcreamer/Documents/trained_models/no_ridge_full_emissions/')
+data_sets_location = Path('/home/mcreamer/Documents/trained_models/R0_diag_emissions/')
 sorting_param = 'dynamics_lags'
 data = []
 

@@ -3,11 +3,13 @@ import pickle
 import analysis_utilities as au
 from pathlib import Path
 
+
 use_synth = False
-use_test_data = False
+use_test_data = True
 auto_select_ids = False
 window = (-60, 120)
 sub_start = True
+force_calc_missing_posterior = False
 
 if use_synth:
     model_folder = Path('C:/Users/mcreamer/Documents/python/funcon_lds/trained_models/exp_DL1_IL45_N80_R0/20230819_092054')
@@ -17,11 +19,12 @@ if use_synth:
 else:
     # load in the model and training data
     model_folder = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/exp_DL4_IL45_N80_R0/20230819_201106/')
+    # model_folder = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/exp_DL2_IL45_N80_R0/20230831_145345/')
     # cell_ids_chosen = ['AVAL', 'AVAR', 'AVEL', 'AVER', 'AFDL', 'AFDR', 'AVJL', 'AVJR', 'AVDL', 'AVDR']
     cell_ids_chosen = ['M3L', 'RMDDR', 'FLPR', 'RIMR', 'AVER', 'AVJL', 'AVEL', 'AWBL', 'RMDVL', 'RMDVR']
     # cell_ids_chosen = ['AVAL', 'AVAR', 'AVEL', 'AVER', 'AFDR', 'AVJL', 'AVJR', 'AVDL', 'AVDR']
     # cell_ids_chosen = None
-    neuron_to_remove = 'AVEL'
+    neuron_to_remove = 'RMDDR'
     neuron_to_stim = 'AVEL'
 
 # load in the model and the data
@@ -81,10 +84,8 @@ if auto_select_ids and has_data and has_post:
     ave_response_to_stim = np.nanmean(np.exp(measured_stim_responses_ave_l2_chosen), axis=0)
     neuron_to_remove = cell_ids_chosen[np.nanargmax(ave_response_to_stim)]
     neuron_to_stim = neuron_to_remove
-    neuron_to_remove = 'AVEL'
+    neuron_to_remove = 'RMDDR'
     neuron_to_stim = 'AVEL'
-
-
 
 # au.plot_log_likelihood(model)
 # au.plot_model_params(model, cell_ids_chosen=cell_ids_chosen)
@@ -94,6 +95,10 @@ if has_data and has_post:
     # au.plot_posterior(data, posterior_dict, cell_ids_chosen, sample_rate=model.sample_rate)
     au.plot_stim_l2_norm(model, data, posterior_dict, cell_ids_chosen, window=window, sub_start=sub_start)
     au.plot_stim_response(data, posterior_dict, cell_ids_chosen, neuron_to_stim, window=window, sample_rate=model.sample_rate, sub_start=sub_start)
-    a=1
-    # au.plot_missing_neuron(model, emissions[data_ind_chosen], inputs[data_ind_chosen], posterior[data_ind_chosen], cell_ids, neuron_to_remove, time_window, sample_rate=model.sample_rate)
+    #
+    # posterior_dict['posterior_missing'] = au.plot_missing_neuron(model, data, posterior_dict, cell_ids_chosen, neuron_to_remove, force_calc=force_calc_missing_posterior)
+    #
+    # posterior_file = open(posterior_path, 'wb')
+    # pickle.dump(posterior_dict, posterior_file)
+    # posterior_file.close()
 
