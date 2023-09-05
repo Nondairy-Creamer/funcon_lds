@@ -536,7 +536,10 @@ class Lgssm:
             dynamics_pad = np.concatenate((dynamics_eye_pad, dynamics_zeros_pad), axis=1)
             dynamics_inputs_zeros_pad = np.zeros((self.dynamics_dim * (self.dynamics_lags - 1), self.input_dim_full))
 
-            ridge_penalty = self.ridge_lambda * np.diag(self.dynamics_cov)
+            if self.ridge_lambda is None:
+                ridge_penalty = np.zeros((self.dynamics_dim_full, self.dynamics_dim_full))
+            else:
+                ridge_penalty = 10.0**self.ridge_lambda * np.diag(self.dynamics_cov)
 
             if self.param_props['update']['dynamics_weights'] and self.param_props['update']['dynamics_input_weights']:
                 # do a joint update for A and B
@@ -584,7 +587,7 @@ class Lgssm:
                     dyn_eig_vals, dyn_eig_vects = np.linalg.eig(self.dynamics_weights)
                     max_abs_eig = np.max(np.abs(dyn_eig_vals))
 
-                # TODO: this is a hack to deal with shrinking the wieght matrix. not sure if it matters or helps. remove
+                # TODO: this is a hack to deal with shrinking the weight matrix. not sure if it matters or helps. remove
                 if update_input_weights:
                     if self.param_props['shape']['dynamics_input_weights'] == 'diag':
                         if self.param_props['mask']['dynamics_input_weights'] is None:
