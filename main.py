@@ -1,93 +1,89 @@
-import numpy as np
-import torch
 import loading_utilities as lu
-import plotting
-from ssm_classes import Lgssm
+import run_inference
+import sys
+import os
+from simple_slurm import Slurm
+from datetime import datetime
+from pathlib import Path
 from mpi4py import MPI
 from mpi4py.util import pkl5
-import inference_utilities as iu
 
 
-# the goal of this function is to take the pairwise stimulation and response data from
-# https://arxiv.org/abs/2208.04790
-# this data is a collection of calcium recordings of ~200 neurons over ~5-15 minutes where individual neurons are
-# randomly targets and stimulated optogenetically
-# We want to fit a linear dynamical system to the data in order to infer the connection weights between neurons
-# The model is of the form
-# x_t = A @ x_(t-1) + B @ u_t + w_t
-# y_t = C @ x_t + D @ u_t + v_t
+def main(param_name, folder_name=None):
+    comm = pkl5.Intracomm(MPI.COMM_WORLD)
+    cpu_id = comm.Get_rank()
 
-# The code should work with different parameters, but for my normal use case
-# C is the identity
-# B is diagonal
-# D is the zero matrix
-# w_t, v_t are gaussian with 0 mean
+    if folder_name is None:
+        infer_post = False
+    else:
+        infer_post = True
 
-# set up the option to parallelize the model fitting over CPUs
-comm = pkl5.Intracomm(MPI.COMM_WORLD)
-size = comm.Get_size()
-rank = comm.Get_rank()
-is_parallel = size > 1
+    param_name = Path(param_name)
+    run_params = lu.get_run_params(param_name=param_name)
 
-# get run parameters, yaml file contains descriptions of the parameters
-run_params = lu.get_run_params(param_name='params')
+    if cpu_id == 0:
+        current_date = datetime.today().strftime('%Y%m%d_%H%M%S')
 
-# rank 0 is the parent node which will send out the data to the children nodes
-if rank == 0:
-    # set the device (cpu / gpu) and data type
-    device = run_params['device']
-    dtype = getattr(torch, run_params['dtype'])
+        full_path = Path(__file__).parent.resolve()
+        if infer_post:
+            save_folder = full_path / 'trained_models' / param_name.stem / folder_name
+            run_params['fit_file'] = 'infer_posterior'
+        else:
+            save_folder = full_path / 'trained_models' / param_name.stem / current_date
+            os.makedirs(save_folder)
 
-    # load in the data for the model and do any preprocessing here
-    emissions, inputs, cell_ids = \
-        lu.load_and_align_data(run_params['data_path'], num_data_sets=run_params['num_data_sets'],
-                               bad_data_sets=run_params['bad_data_sets'],
-                               start_index=run_params['start_index'],
-                               force_preprocess=run_params['force_preprocess'],
-                               correct_photobleach=run_params['correct_photobleach'],
-                               interpolate_nans=run_params['interpolate_nans'],
-                               held_out_data=run_params['held_out_data'])
+    else:
+        save_folder = None
 
-    num_neurons = emissions[0].shape[1]
-    # create a mask for the dynamics_input_weights. This allows us to fit dynamics weights that are diagonal
-    input_mask = torch.eye(num_neurons, dtype=dtype, device=device)
-    # get rid of any inputs that never receive stimulation
-    has_stims = np.any(np.concatenate(inputs, axis=0), axis=0)
-    inputs = [i[:, has_stims] for i in inputs]
-    input_mask = input_mask[:, has_stims]
-    # set the model properties so the model fits with this mask
-    run_params['param_props']['mask']['dynamics_input_weights'] = input_mask
-    # get the input dimension after removing the neurons that were never stimulated
-    input_dim = inputs[0].shape[1]
+    if 'slurm' in run_params.keys():
+        if cpu_id == 0:
+            if infer_post:
+                run_params['slurm']['time'] = '24:00:00'
+                slurm_output_path = save_folder / 'slurm_%A_post.out'
+                job_name = param_name.stem + '_post'
+            else:
+                slurm_output_path = save_folder / 'slurm_%A.out'
+                job_name = param_name.stem
 
-    # initialize the model and set model weights
-    model_trained = Lgssm(num_neurons, num_neurons, input_dim,
-                          dynamics_lags=run_params['dynamics_lags'],
-                          dynamics_input_lags=run_params['dynamics_input_lags'],
-                          dtype=dtype, device=device, verbose=run_params['verbose'],
-                          param_props=run_params['param_props'])
+            slurm_fit = Slurm(**run_params['slurm'], output=slurm_output_path, job_name=job_name)
 
-    model_trained.emissions_weights = torch.eye(model_trained.emissions_dim, model_trained.dynamics_dim_full, device=device, dtype=dtype)
-    model_trained.emissions_input_weights = torch.zeros((model_trained.emissions_dim, model_trained.input_dim_full), device=device, dtype=dtype)
-    model_trained.cell_ids = cell_ids
+            cpus_per_task = run_params['slurm']['cpus_per_task']
+            fit_model_command = 'run_inference.' + run_params['fit_file'] + '(\'' + str(param_name) + '\',\'' + str(save_folder) + '\')\"'
 
-    lu.save_run(run_params['model_save_folder'], model_trained, remove_old=True,
-                data={'emissions': emissions, 'inputs': inputs, 'cell_ids': cell_ids}, run_params=run_params)
+            run_command = ['module purge',
+                           'module load anaconda3/2022.10',
+                           'module load openmpi/gcc/4.1.2',
+                           'conda activate fast-mpi4py',
+                           'export MKL_NUM_THREADS=' + str(cpus_per_task),
+                           'export OPENBLAS_NUM_THREADS=' + str(cpus_per_task),
+                           'export OMP_NUM_THREADS=' + str(cpus_per_task),
+                           'srun python -uc \"import run_inference; ' + fit_model_command,
+                           ]
 
-else:
-    # if you are a child node, just set everything to None and only calculate your sufficient statistics
-    emissions = None
-    inputs = None
-    cell_ids = None
-    model_trained = None
+            slurm_fit.sbatch('\n'.join(run_command))
 
-# fit the model using expectation maximization
-model_trained, smoothed_means = iu.fit_em(model_trained, emissions, inputs, num_steps=run_params['num_train_steps'],
-                                          save_folder=run_params['model_save_folder'])
+    else:
+        method = getattr(run_inference, run_params['fit_file'])
+        method(param_name, save_folder)
 
-if rank == 0:
-    lu.save_run(run_params['model_save_folder'], model_trained, posterior=smoothed_means)
+    return save_folder
 
-    if not is_parallel and run_params['plot_figures']:
-        plotting.plot_model_params(model_trained)
+
+if __name__ == '__main__':
+    num_args = len(sys.argv)
+
+    if num_args == 1:
+        param_name = 'submission_scripts/syn_test.yml'
+        # param_name = 'submission_scripts/exp_test.yml'
+        folder_name = None
+    elif num_args == 2:
+        param_name = sys.argv[1]
+        folder_name = None
+    elif num_args == 3:
+        param_name = sys.argv[1]
+        folder_name = sys.argv[2]
+    else:
+        raise Exception('Unsupported number of arguments: (' + str(num_args))
+
+    main(param_name, folder_name)
 

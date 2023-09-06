@@ -3,30 +3,22 @@ import itertools as it
 import scipy.special as ss
 from pathlib import Path
 import yaml
-import os
 import pickle
 import tmac.preprocessing as tp
 import time
 import analysis_utilities as au
 import warnings
+import os
 
 # utilities for loading and saving the data
 
 
-def get_run_params(param_name='params'):
+def get_run_params(param_name):
     # load in the parameters for the run which dictate how many data sets to use,
     # or how many time lags the model will fit etc
-    # first load in the defaults from the hidden files like .params.yml
-    # then load in the user updated version from params_update.yml
 
-    with open('.' + param_name + '.yml', 'r') as file:
+    with open(param_name, 'r') as file:
         params = yaml.safe_load(file)
-
-    if Path(param_name + '_update.yml').exists():
-        with open(param_name + '_update.yml', 'r') as file:
-            params_update = yaml.safe_load(file)
-
-        params.update(params_update)
 
     return params
 
@@ -58,7 +50,7 @@ def preprocess_data(emissions, inputs, start_index=0, correct_photobleach=False)
         # photobleach correction
         emissions_filtered_corrected = np.zeros_like(emissions_filtered)
         for c in range(emissions_filtered.shape[1]):
-            emissions_filtered_corrected[:, c] = tp.photobleach_correction(emissions_filtered[:, c], num_exp=2)[:, 0]
+            emissions_filtered_corrected[:, c] = tp.photobleach_correction(emissions_filtered[:, c], num_exp=2, fit_offset=True)[:, 0]
 
         # occasionally the fit fails check for outputs who don't have a mean close to 1
         # fit those with a single exponential
@@ -68,7 +60,7 @@ def preprocess_data(emissions, inputs, start_index=0, correct_photobleach=False)
             bad_fits_2exp = np.where(np.abs(np.nanmean(emissions_filtered_corrected, axis=0) - 1) > 0.1)[0]
 
             for bf in bad_fits_2exp:
-                emissions_filtered_corrected[:, bf] = tp.photobleach_correction(emissions_filtered[:, bf], num_exp=1)[:, 0]
+                emissions_filtered_corrected[:, bf] = tp.photobleach_correction(emissions_filtered[:, bf], num_exp=1, fit_offset=True)[:, 0]
 
             bad_fits_1xp = np.where(np.abs(np.nanmean(emissions_filtered_corrected, axis=0) - 1) > 0.2)[0]
             if len(bad_fits_1xp) > 0:
@@ -93,43 +85,19 @@ def preprocess_data(emissions, inputs, start_index=0, correct_photobleach=False)
     return emissions_filtered_corrected, inputs
 
 
-def load_and_align_data(data_path, force_preprocess=False, num_data_sets=None, bad_data_sets=(), start_index=0,
-                        correct_photobleach=False, interpolate_nans=False, held_out_data=[]):
-    # load all the recordings of neural activity
-    emissions_unaligned, inputs_unaligned, cell_ids_unaligned = \
-        load_and_preprocess_data(data_path, num_data_sets=num_data_sets,
-                                 force_preprocess=force_preprocess, start_index=start_index,
-                                 correct_photobleach=correct_photobleach, interpolate_nans=interpolate_nans,
-                                 held_out_data=held_out_data)
-
-    # remove recordings that are noisy
-    data_sets_to_remove = np.sort(bad_data_sets)[::-1]
-    for bd in data_sets_to_remove:
-        emissions_unaligned.pop(bd)
-        inputs_unaligned.pop(bd)
-        cell_ids_unaligned.pop(bd)
-
-    # choose a subset of the data sets to maximize the number of recordings * the number of neurons included
-    emissions, inputs, cell_ids, = get_combined_dataset(emissions_unaligned, inputs_unaligned, cell_ids_unaligned)
-
-    return emissions, inputs, cell_ids
-
-
-def load_and_preprocess_data(fun_atlas_path, num_data_sets=None, force_preprocess=False, start_index=0,
-                             correct_photobleach=False, interpolate_nans=True, held_out_data=[]):
-    fun_atlas_path = Path(fun_atlas_path)
+def load_and_preprocess_data(data_path, num_data_sets=None, force_preprocess=False, start_index=0,
+                             correct_photobleach=False, interpolate_nans=True, neuron_freq=0.0, held_out_data=[]):
+    data_path = Path(data_path)
 
     preprocess_filename = 'funcon_preprocessed_data.pkl'
-    emissions = []
-    inputs = []
-    cell_ids = []
-    num_loaded_data = 0
+    emissions_train = []
+    inputs_train = []
+    cell_ids_train = []
+    path_name = []
 
     # find all files in the folder that have francesco_green.npy
-    for i in fun_atlas_path.rglob('francesco_green.npy'):
-        # skip any data that is being held out
-        if i.parts[-2] in held_out_data:
-            continue
+    for i in sorted(data_path.rglob('francesco_green.npy'))[::-1]:
+        path_name.append(i.parts[-2])
 
         # check if a processed version exists
         preprocess_path = i.parent / preprocess_filename
@@ -174,76 +142,97 @@ def load_and_preprocess_data(fun_atlas_path, num_data_sets=None, force_preproces
             print('Data set', i.parent, 'preprocessed')
             print('Took', time.time() - start, 's')
 
-        emissions.append(this_emissions)
-        inputs.append(this_inputs)
-        cell_ids.append(this_cell_ids)
+        emissions_train.append(this_emissions)
+        inputs_train.append(this_inputs)
+        cell_ids_train.append(this_cell_ids)
 
-        num_loaded_data += 1
+    emissions_test = []
+    inputs_test = []
+    cell_ids_test = []
 
-        if num_data_sets is not None:
-            if num_loaded_data >= num_data_sets:
-                break
+    for i in reversed(range(len(emissions_train))):
+        # skip any data that is being held out
+        if path_name[i] in held_out_data:
+            emissions_test.append(emissions_train.pop(i))
+            inputs_test.append(inputs_train.pop(i))
+            cell_ids_test.append(cell_ids_train.pop(i))
 
-    print('Size of data set:', len(emissions))
+    emissions_test += emissions_train[num_data_sets:]
+    inputs_test += inputs_train[num_data_sets:]
+    cell_ids_test += cell_ids_train[num_data_sets:]
+    emissions_test = emissions_test[:num_data_sets]
+    inputs_test = inputs_test[:num_data_sets]
+    cell_ids_test = cell_ids_test[:num_data_sets]
 
-    return emissions, inputs, cell_ids
+    emissions_train = emissions_train[:num_data_sets]
+    inputs_train = inputs_train[:num_data_sets]
+    cell_ids_train = cell_ids_train[:num_data_sets]
+
+    print('Size of data set:', len(emissions_train))
+
+    # align the data sets so that each column corresponds to the same cell ID
+    data_train = {}
+    data_test = {}
+
+    data_train['emissions'], data_train['inputs'], data_train['cell_ids'] = \
+        align_data_cell_ids(emissions_train, inputs_train, cell_ids_train)
+
+    data_test['emissions'], data_test['inputs'], data_test['cell_ids'] = \
+        align_data_cell_ids(emissions_test, inputs_test, cell_ids_test, cell_ids_unique=data_train['cell_ids'])
+
+    # eliminate neurons that don't show up often enough
+    measured_neurons = np.stack([~np.all(np.isnan(i), axis=0) for i in data_train['emissions']])
+    measured_freq = np.mean(measured_neurons, axis=0)
+    neurons_to_keep = measured_freq >= neuron_freq
+
+    data_train['emissions'] = [i[:, neurons_to_keep] for i in data_train['emissions']]
+    data_train['inputs'] = [i[:, neurons_to_keep] for i in data_train['inputs']]
+    data_train['cell_ids'] = [data_train['cell_ids'][i] for i in range(len(data_train['cell_ids'])) if neurons_to_keep[i]]
+
+    data_test['emissions'] = [i[:, neurons_to_keep] for i in data_test['emissions']]
+    data_test['inputs'] = [i[:, neurons_to_keep] for i in data_test['inputs']]
+    data_test['cell_ids'] = [data_test['cell_ids'][i] for i in range(len(data_test['cell_ids'])) if neurons_to_keep[i]]
+
+    return data_train, data_test
 
 
-def save_run(model_save_folder, model_trained, model_true=None, data=None, posterior=None,
-             run_params=None, remove_old=False):
-    # save the models, data, and parameters from the fitting procedure
-    # if run on SLURM get the slurm ID
-    if 'SLURM_JOB_ID' in os.environ:
-        slurm_tag = os.environ['SLURM_JOB_ID']
-    else:
-        slurm_tag = 'local'
-
-    lag_tag = 'DL' + str(model_trained.dynamics_lags) + '_IL' + str(model_trained.dynamics_input_lags)
-
-    full_save_folder = Path(model_save_folder) / (slurm_tag + '_' + lag_tag)
-    true_model_save_path = full_save_folder / 'model_true.pkl'
-    trained_model_save_path = full_save_folder / 'model_trained.pkl'
-    data_save_path = full_save_folder / 'data.pkl'
-    posterior_path = full_save_folder / 'posterior.pkl'
-    params_save_path = full_save_folder / 'params.pkl'
-
-    if not full_save_folder.exists():
-        os.mkdir(full_save_folder)
+def save_run(save_folder, model_trained=None, model_true=None, ep=None, **vars_to_save):
+    save_folder = Path(save_folder)
+    model_save_folder = save_folder / 'models'
 
     # save the trained model
-    model_trained.save(path=trained_model_save_path)
+    if model_trained is not None:
+        if not model_save_folder.exists():
+            os.mkdir(model_save_folder)
+
+        if ep is not None:
+            trained_model_save_path = model_save_folder / ('model_trained_' + str(ep) + '.pkl')
+            model_trained.save(path=trained_model_save_path)
+
+        trained_model_save_path = model_save_folder / 'model_trained.pkl'
+        model_trained.save(path=trained_model_save_path)
 
     # save the true model, if it exists
     if model_true is not None:
+        if not model_save_folder.exists():
+            os.mkdir(model_save_folder)
+
+        true_model_save_path = model_save_folder / 'model_true.pkl'
         model_true.save(path=true_model_save_path)
-    else:
-        if remove_old:
-            # if there is an old "true" model delete it because it doesn't correspond to this trained model
-            if os.path.exists(true_model_save_path):
-                os.remove(true_model_save_path)
 
-    # save the data
-    if data is not None:
-        data_file = open(data_save_path, 'wb')
-        pickle.dump(data, data_file)
-        data_file.close()
+    for k, v in vars_to_save.items():
+        save_path = save_folder / (k + '.pkl')
 
-    if posterior is not None:
-        means_file = open(posterior_path, 'wb')
-        pickle.dump(posterior, means_file)
-        means_file.close()
-
-    # save the input parameters
-    if run_params is not None:
-        params_file = open(params_save_path, 'wb')
-        pickle.dump(run_params, params_file)
-        params_file.close()
+        save_file = open(save_path, 'wb')
+        pickle.dump(v, save_file)
+        save_file.close()
 
 
-def get_combined_dataset(emissions, inputs, cell_ids):
-    cell_ids_unique = list(np.unique(np.concatenate(cell_ids)))
-    if cell_ids_unique[0] == '':
-        cell_ids_unique = cell_ids_unique[1:]
+def align_data_cell_ids(emissions, inputs, cell_ids, cell_ids_unique=None):
+    if cell_ids_unique is None:
+        cell_ids_unique = list(np.unique(np.concatenate(cell_ids)))
+        if cell_ids_unique[0] == '':
+            cell_ids_unique = cell_ids_unique[1:]
 
     num_neurons = len(cell_ids_unique)
 
@@ -251,18 +240,18 @@ def get_combined_dataset(emissions, inputs, cell_ids):
     inputs_aligned = []
 
     # now update the neural data and fill in nans where we don't have a recording from a neuron
-    for ei, e in enumerate(emissions):
-        this_emissions = np.empty([e.shape[0], num_neurons])
-        this_inputs = np.zeros((e.shape[0], num_neurons))
+    for e, i, c in zip(emissions, inputs, cell_ids):
+        this_emissions = np.empty((e.shape[0], num_neurons))
         this_emissions[:] = np.nan
+        this_inputs = np.zeros((e.shape[0], num_neurons))
 
         # loop through all the labels from this data set
-        for ci, c in enumerate(cell_ids[ei]):
+        for unique_cell_index, cell_name in enumerate(cell_ids_unique):
             # find the index of the full list of cell ids
-            if c != '':
-                this_cell_ind = cell_ids_unique.index(c)
-                this_emissions[:, this_cell_ind] = e[:, ci]
-                this_inputs[:, this_cell_ind] = inputs[ei][:, ci]
+            if cell_name in c and cell_name != '':
+                unaligned_cell_index = c.index(cell_name)
+                this_emissions[:, unique_cell_index] = e[:, unaligned_cell_index]
+                this_inputs[:, unique_cell_index] = i[:, unaligned_cell_index]
 
         emissions_aligned.append(this_emissions)
         inputs_aligned.append(this_inputs)
