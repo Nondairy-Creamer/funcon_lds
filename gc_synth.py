@@ -4,20 +4,15 @@ import loading_utilities as lu
 from matplotlib import pyplot as plt
 import matplotlib as mpl
 from ssm_classes import Lgssm
-from mpi4py import MPI
-import inference_utilities as iu
-import analysis_utilities as au
-import granger_causality as gc
+import gc_utilities as gcu
 
-rng=0
+# rng=0
 colormap = mpl.colormaps['coolwarm']
 run_params = lu.get_run_params(param_name='params_synth_update')
 device = run_params["device"]
 dtype = getattr(torch, run_params["dtype"])
 fig_path = run_params['fig_path']
 
-device = run_params['device']
-dtype = getattr(torch, run_params['dtype'])
 rng = np.random.default_rng(run_params['random_seed'])
 
 # define the model, setting specific parameters
@@ -30,13 +25,10 @@ model_true.emissions_input_weights_init = np.zeros((model_true.emissions_dim, mo
 model_true.set_to_init()
 
 # sample from the randomized model
-data_dict = \
-    model_true.sample(num_time=run_params['num_time'],
-                      num_data_sets=run_params['num_data_sets'],
-                      scattered_nan_freq=run_params['scattered_nan_freq'],
-                      lost_emission_freq=run_params['lost_emission_freq'],
-                      input_time_scale=run_params['input_time_scale'],
-                      rng=rng)
+data_dict = model_true.sample(num_time=run_params['num_time'], num_data_sets=run_params['num_data_sets'],
+                              scattered_nan_freq=run_params['scattered_nan_freq'],
+                              lost_emission_freq=run_params['lost_emission_freq'],
+                              input_time_scale=run_params['input_time_scale'], rng=rng)
 
 emissions = data_dict['emissions']
 inputs = data_dict['inputs']
@@ -58,19 +50,22 @@ B_true = model_params['trained']['dynamics_input_weights']
 # X_i is a granger cause of another time series X_j if at least 1 element A_tau(j,i)
 # for tau=1,...,L is signif larger than 0
 # X_t = sum_1^L A_tau*X(t-tau) + noise(t)
-num_lags = 6
+emissions_num_lags = 5
+inputs_num_lags = 20
 
-all_a_hat, all_b_hat = gc.run_gc(num_data_sets, num_lags, num_neurons, inputs, emissions)
+all_a_hat, all_a_hat_0, all_b_hat, mse = gcu.run_gc(num_data_sets, emissions_num_lags, inputs_num_lags, num_neurons,
+                                                    inputs, emissions, f_name='synth_data',
+                                                    load_dir='/Users/lsmith/Documents/python/', rerun=False)
 
 for d in range(num_data_sets):
     fig, axs = plt.subplots(nrows=1, ncols=1)
-    plt.title('dataset %(dataset)i GC for %(lags)i lags: a_hat' % {"dataset": d, "lags": num_lags})
+    plt.title('dataset %(dataset)i GC for %(lags)i lags: a_hat' % {"dataset": d, "lags": emissions_num_lags})
     a_hat_pos = plt.imshow(all_a_hat[:, :, d], aspect='auto', interpolation='nearest', cmap=colormap)
     plt.colorbar(a_hat_pos)
     plt.show()
 
     fig, axs = plt.subplots(nrows=1, ncols=1)
-    plt.title('dataset %(dataset)i GC for %(lags)i lags: b_hat' % {"dataset": d, "lags": num_lags})
+    plt.title('dataset %(dataset)i GC for %(lags)i lags: b_hat' % {"dataset": d, "lags": inputs_num_lags})
     b_hat_pos = plt.imshow(all_b_hat[:, :, d], aspect='auto', interpolation='nearest', cmap=colormap)
     plt.colorbar(b_hat_pos)
     plt.show()
@@ -107,3 +102,5 @@ plt.title('true dynamics_input_weights (B)')
 plt.clim((-color_limits, color_limits))
 plt.colorbar(B_pos)
 plt.show()
+
+a=0
