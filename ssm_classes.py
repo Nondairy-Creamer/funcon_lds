@@ -471,7 +471,7 @@ class Lgssm:
         return ll, suff_stats, smoothed_means, new_init_covs
 
     def em_step(self, emissions_list, inputs_list, init_mean_list, init_cov_list, cpu_id=0, num_cpus=1,
-                memmap_cpu_id=None, max_eig=1.0):
+                memmap_cpu_id=None, max_eig_allowed=1.0):
         #
         # Run M-step updates for LDS-Gaussian model
         #
@@ -571,19 +571,14 @@ class Lgssm:
                 # check the largest eigenvalue of the dynamics matrix
                 dyn_eig_vals, dyn_eig_vects = np.linalg.eig(self.dynamics_weights)
                 max_abs_eig = np.max(np.abs(dyn_eig_vals))
-                if max_abs_eig > max_eig:
+                if max_abs_eig > max_eig_allowed:
                     update_input_weights = True
-                    warnings.warn('Largest eigenvalue of the dynamics matrix is:' + str(max_abs_eig) + ', setting to ' + str(max_eig))
+                    warnings.warn('Largest eigenvalue of the dynamics matrix is:' + str(max_abs_eig) + ', setting to ' + str(max_eig_allowed))
                 else:
                     update_input_weights = False
 
-                while max_abs_eig > max_eig:
-                    dyn_eig_vals = dyn_eig_vals / max_abs_eig * max_eig
-                    self.dynamics_weights = np.real(dyn_eig_vects @ np.linalg.solve(dyn_eig_vects.T, np.diag(dyn_eig_vals)).T)
-                    self.dynamics_weights[self.dynamics_dim:, :self.dynamics_dim_full-self.dynamics_dim] = \
-                        np.eye(self.dynamics_dim_full-self.dynamics_dim)
-                    self.dynamics_weights[self.dynamics_dim:, self.dynamics_dim_full-self.dynamics_dim:] = \
-                        np.zeros((self.dynamics_dim_full-self.dynamics_dim, self.dynamics_dim))
+                while max_abs_eig > max_eig_allowed:
+                    self.dynamics_weights[:self.dynamics_dim, :] = self.dynamics_weights[:self.dynamics_dim, :] / max_abs_eig * max_eig_allowed
                     dyn_eig_vals, dyn_eig_vects = np.linalg.eig(self.dynamics_weights)
                     max_abs_eig = np.max(np.abs(dyn_eig_vals))
 
