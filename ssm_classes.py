@@ -628,13 +628,10 @@ class Lgssm:
 
             # Update noise covariance Q
             if self.param_props['update']['dynamics_cov']:
-                self.dynamics_cov = np.eye(self.dynamics_dim_full) - self.dynamics_weights @ self.dynamics_weights.T + np.eye(self.dynamics_dim_full) / self.epsilon
-
-                #
-                # self.dynamics_cov = (Mz2 + self.dynamics_weights @ Mz1 @ self.dynamics_weights.T + self.dynamics_input_weights @ Mu1 @ self.dynamics_input_weights.T
-                #                      - self.dynamics_weights @ Mz12 - Mz12.T @ self.dynamics_weights.T
-                #                      - self.dynamics_input_weights @ Muz2 - Muz2.T @ self.dynamics_input_weights.T
-                #                      + self.dynamics_weights @ Muz21.T @ self.dynamics_input_weights.T + self.dynamics_input_weights @ Muz21 @ self.dynamics_weights.T) #/ (nt - 1)
+                self.dynamics_cov = (Mz2 + self.dynamics_weights @ Mz1 @ self.dynamics_weights.T + self.dynamics_input_weights @ Mu1 @ self.dynamics_input_weights.T
+                                     - self.dynamics_weights @ Mz12 - Mz12.T @ self.dynamics_weights.T
+                                     - self.dynamics_input_weights @ Muz2 - Muz2.T @ self.dynamics_input_weights.T
+                                     + self.dynamics_weights @ Muz21.T @ self.dynamics_input_weights.T + self.dynamics_input_weights @ Muz21 @ self.dynamics_weights.T) #/ (nt - 1)
 
                 if self.param_props['shape']['dynamics_cov'] == 'diag':
                     self.dynamics_cov = np.diag(np.diag(self.dynamics_cov))
