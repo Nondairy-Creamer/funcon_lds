@@ -1,5 +1,4 @@
 import numpy as np
-import torch
 import loading_utilities as lu
 from matplotlib import pyplot as plt
 import matplotlib as mpl
@@ -8,16 +7,14 @@ import gc_utilities as gcu
 
 # rng=0
 colormap = mpl.colormaps['coolwarm']
-run_params = lu.get_run_params(param_name='params_synth_update')
-device = run_params["device"]
-dtype = getattr(torch, run_params["dtype"])
+run_params = lu.get_run_params(param_name='submission_scripts/gc_test.yml')
 fig_path = run_params['fig_path']
 
 rng = np.random.default_rng(run_params['random_seed'])
 
 # define the model, setting specific parameters
 model_true = Lgssm(run_params['dynamics_dim'], run_params['emissions_dim'], run_params['input_dim'],
-                   dtype=dtype, device=device, param_props=run_params['param_props'],
+                   param_props=run_params['param_props'],
                    dynamics_lags=run_params['dynamics_lags'], dynamics_input_lags=run_params['dynamics_input_lags'])
 model_true.randomize_weights(rng=rng)
 model_true.emissions_weights_init = np.eye(model_true.emissions_dim, model_true.dynamics_dim_full)
@@ -50,12 +47,12 @@ B_true = model_params['trained']['dynamics_input_weights']
 # X_i is a granger cause of another time series X_j if at least 1 element A_tau(j,i)
 # for tau=1,...,L is signif larger than 0
 # X_t = sum_1^L A_tau*X(t-tau) + noise(t)
-emissions_num_lags = 5
-inputs_num_lags = 20
+emissions_num_lags = run_params['dynamics_lags']
+inputs_num_lags = run_params['dynamics_input_lags']
 
 all_a_hat, all_a_hat_0, all_b_hat, mse = gcu.run_gc(num_data_sets, emissions_num_lags, inputs_num_lags, num_neurons,
                                                     inputs, emissions, f_name='synth_data',
-                                                    load_dir='/Users/lsmith/Documents/python/', rerun=False)
+                                                    load_dir='/Users/lsmith/Documents/python/', rerun=True)
 
 for d in range(num_data_sets):
     fig, axs = plt.subplots(nrows=1, ncols=1)

@@ -1,26 +1,21 @@
 import numpy as np
-import torch
 import loading_utilities as lu
 from matplotlib import pyplot as plt
 import matplotlib as mpl
 import gc_utilities as gcu
-import analysis_utilities as au
 
 make_avg_med_figs = True
 make_best_figs = True
 
 colormap = mpl.colormaps['coolwarm']
-run_params = lu.get_run_params(param_name='params')
-device = run_params["device"]
-dtype = getattr(torch, run_params["dtype"])
+run_params = lu.get_run_params(param_name='submission_scripts/gc_exp_test.yml')
 fig_path = run_params['fig_path']
 
-A, num_neurons, num_data_sets, num_neurons, emissions, inputs, cell_ids = gcu.gc_preprocessing(run_params, dtype,
-                                                                                               device, rerun=False)
+A, num_neurons, num_data_sets, num_neurons, emissions, inputs, cell_ids = gcu.gc_preprocessing(run_params, rerun=False)
 
-emissions_num_lags = 6
-inputs_num_lags = 100
-# todo: test 100 lags, still get peak at end?
+emissions_num_lags = run_params['dynamics_lags']
+inputs_num_lags = run_params['dynamics_input_lags']
+
 # num_data_sets = 1 #for testing
 
 all_a_hat, all_a_hat_0, all_b_hat, mse = gcu.run_gc(num_data_sets, emissions_num_lags, inputs_num_lags, num_neurons,
@@ -35,16 +30,16 @@ neuron_inds_chosen = np.array([cell_ids.index(i) for i in cell_ids_chosen])
 neuron_stim_index = cell_ids.index(neuron_to_stim)
 
 # give best dataset with high coverage of neurons measured and lowest mse
-# best_data_ind = np.where(mse < .0001)
+best_data_ind = np.where(mse < .0375)
 nan_count = np.zeros(num_data_sets)
 test_neuron_stimmed = np.full(num_data_sets, False)
 for i in range(num_data_sets):
     nan_count[i] = np.count_nonzero(np.isnan(emissions[i][0, :]))
     test_neuron_stimmed[i] = np.any(inputs[i][:, neuron_stim_index])
-# plt.figure()
-# plt.scatter(nan_count[best_data_ind], mse[best_data_ind])
-# plt.show()
-mask1 = np.logical_and(mse < .00038, nan_count < 150)
+plt.figure()
+plt.scatter(nan_count[best_data_ind], mse[best_data_ind])
+plt.show()
+mask1 = np.logical_and(mse < .037, nan_count < 175)
 mask2 = np.logical_and(mask1, test_neuron_stimmed)
 best_data_set = np.where(mask2)[0][0]
 
@@ -191,10 +186,10 @@ num_sim = 120
 
 avg_pred_x_all_data = gcu.impulse_response_func(num_sim, cell_ids, cell_ids_chosen, num_neurons, num_data_sets,
                                                 emissions, inputs, all_a_hat, all_b_hat, emissions_num_lags,
-                                                inputs_num_lags, rerun=False)
+                                                inputs_num_lags, rerun=True)
 
-# gcu.plot_l2_norms(neuron_inds_chosen, emissions, inputs, cell_ids, cell_ids_chosen, avg_pred_x_all_data, colormap,
-#                   save=True, fig_path=fig_path)
+gcu.plot_l2_norms(neuron_inds_chosen, emissions, inputs, cell_ids, cell_ids_chosen, avg_pred_x_all_data, colormap,
+                  save=True, fig_path=fig_path)
 
 # plot on y axis the gc results for a chosen neuron after stimulus of another neuron
 # so plot the a_hat matrix value corresponding to these two neurons vs time, where we start later in time lags and go up

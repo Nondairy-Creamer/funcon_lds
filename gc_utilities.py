@@ -1,7 +1,6 @@
 import os.path
 import pickle
 import numpy as np
-import torch
 import loading_utilities as lu
 from matplotlib import pyplot as plt
 import matplotlib as mpl
@@ -9,21 +8,22 @@ from ssm_classes import Lgssm
 import inference_utilities as iu
 import analysis_utilities as au
 
-def gc_preprocessing(run_params, dtype, device, load_dir='/Users/lsmith/Documents/python/', rerun=False):
+def gc_preprocessing(run_params, load_dir='/Users/lsmith/Documents/python/', rerun=False):
     if os.path.exists(load_dir + 'preprocessed_data.pkl') and os.path.isfile(load_dir + 'preprocessed_data.pkl') \
             and not rerun:
         with open(load_dir + 'preprocessed_data.pkl', 'rb') as f:
             A, num_neurons, num_data_sets, num_neurons, emissions, inputs, cell_ids = pickle.load(f)
     else:
         # load in the data for the model and do any preprocessing here
-        emissions, inputs, cell_ids = \
-            lu.load_and_align_data(run_params['data_path'],
-                                   bad_data_sets=run_params['bad_data_sets'],
-                                   start_index=run_params['start_index'],
-                                   force_preprocess=run_params['force_preprocess'],
-                                   correct_photobleach=run_params['correct_photobleach'],
-                                   interpolate_nans=run_params['interpolate_nans'])
-
+        data_train, data_test = \
+            lu.load_and_preprocess_data(run_params['data_path'], num_data_sets=run_params['num_data_sets'],
+                                        start_index=run_params['start_index'],
+                                        force_preprocess=run_params['force_preprocess'],
+                                        correct_photobleach=run_params['correct_photobleach'],
+                                        interpolate_nans=run_params['interpolate_nans'],
+                                        held_out_data=run_params['held_out_data'],
+                                        neuron_freq=run_params['neuron_freq'])
+        emissions, inputs, cell_ids = data_train['emissions'], data_train['inputs'], data_train['cell_ids']
         num_neurons = emissions[0].shape[1]
         num_data_sets = len(emissions)
 
@@ -34,18 +34,16 @@ def gc_preprocessing(run_params, dtype, device, load_dir='/Users/lsmith/Document
         model_true = Lgssm(num_neurons, num_neurons, input_dim,
                            dynamics_lags=run_params['dynamics_lags'],
                            dynamics_input_lags=run_params['dynamics_input_lags'],
-                           dtype=dtype, device=device, verbose=run_params['verbose'],
+                           verbose=run_params['verbose'],
                            param_props=run_params['param_props'])
 
-        model_true.emissions_weights = torch.eye(model_true.emissions_dim, model_true.dynamics_dim_full, device=device,
-                                                 dtype=dtype)
-        model_true.emissions_input_weights = torch.zeros((model_true.emissions_dim, model_true.input_dim_full),
-                                                         device=device, dtype=dtype)
+        model_true.emissions_weights = np.eye(model_true.emissions_dim, model_true.dynamics_dim_full)
+        model_true.emissions_input_weights = np.zeros((model_true.emissions_dim, model_true.input_dim_full))
 
         # randomize the parameters (defaults are nonrandom)
         model_true.randomize_weights()
 
-        A = model_true.dynamics_weights.detach().numpy()
+        A = model_true.dynamics_weights
 
         with open(load_dir + 'preprocessed_data.pkl', 'wb') as f:
             pickle.dump((A, num_neurons, num_data_sets, num_neurons, emissions, inputs, cell_ids), f)
@@ -81,7 +79,7 @@ def run_gc(num_data_sets, emissions_num_lags, inputs_num_lags, num_neurons, inpu
             nans = np.any(np.isnan(emissions[d]), axis=0)
 
             curr_inputs = curr_inputs[:, has_stims]
-            weights_mask = torch.eye(inputs[d].shape[1])
+            weights_mask = np.eye(inputs[d].shape[1])
             # take out the neurons that were never stimulated from the columns
             weights_mask = weights_mask[:, has_stims]
             # take out the neurons that are nan for the emissions for the rows for fitting later
@@ -115,17 +113,21 @@ def run_gc(num_data_sets, emissions_num_lags, inputs_num_lags, num_neurons, inpu
             # input_history = np.zeros((num_time - num_lags, 0))
 
             # note this goes from time num_lags to T
-            y_target = non_nan_emissions[emissions_num_lags:, :]
 
             y_history = get_lagged_data(non_nan_emissions, emissions_num_lags, add_pad=False)
             input_history = get_lagged_data(curr_inputs, inputs_num_lags, add_pad=False)
 
-            len_diff = np.abs(y_history.shape[0] - input_history.shape[0])
+            len_diff = np.abs(emissions_num_lags - inputs_num_lags)
+            len_max = np.max((emissions_num_lags, inputs_num_lags))
 
             if y_history.shape[0] > input_history.shape[0]:
-                y_history = y_history[len_diff:, :]
+                y_history = y_history[len_diff:-1, :]
+                input_history = input_history[:-1, :]
             else:
-                input_history = input_history[len_diff:, :]
+                input_history = input_history[len_diff:-1, :]
+                y_history = y_history[:-1, :]
+
+            y_target = non_nan_emissions[len_max:, :]
 
             # # build lagged y_history from emissions (x_(t-1))
             # for p in reversed(range(emissions_num_lags)):
@@ -138,23 +140,20 @@ def run_gc(num_data_sets, emissions_num_lags, inputs_num_lags, num_neurons, inpu
             #     else:
             #         input_history = np.concatenate((input_history, curr_inputs[(p + 1):, :]), axis=1)
 
-            y_history = np.concatenate((y_history, input_history), axis=1)
+            emission_input_history = np.concatenate((y_history, input_history), axis=1)
 
             # create a mask for the dynamics_input_weights. This allows us to fit dynamics weights that are diagonal
-            input_mask = torch.tile(weights_mask.T, (inputs_num_lags, 1))
-            input_mask = torch.cat((torch.ones(non_nan_emissions.shape[1] * emissions_num_lags, non_nan_emissions.shape[1]),
-                                    input_mask), dim=0)
+            input_mask = np.tile(weights_mask.T, (inputs_num_lags, 1))
+            input_mask = np.concatenate((np.ones((non_nan_emissions.shape[1] * emissions_num_lags, non_nan_emissions.shape[1])),
+                                         input_mask), axis=0)
 
             # a_hat is a col vector of each A_hat_p matrix for each lag p -> need to transpose each A_hat_p
             num_emission_neurons = len(non_nan_emissions[0, :])
             num_input_neurons = len(curr_inputs[0, :])
 
-            # ab_hat = np.linalg.lstsq(y_history, y_target, rcond=None)[0]
+            # ab_hat = np.linalg.lstsq(emission_input_history, y_target, rcond=None)[0]
             # instead do masking from utils to get rid of the 0 entries and get proper fitting
-            torch_y_history = torch.from_numpy(y_history)
-            torch_y_target = torch.from_numpy(y_target)
-            ab_hat = iu.solve_masked(torch_y_history, torch_y_target, input_mask)
-            ab_hat = ab_hat.detach().numpy()
+            ab_hat = iu.solve_masked(emission_input_history, y_target, input_mask)
 
             a_hat = ab_hat[:emissions_num_lags * num_emission_neurons, :].T
             b_hat = ab_hat[emissions_num_lags * num_emission_neurons:, :].T
@@ -165,7 +164,7 @@ def run_gc(num_data_sets, emissions_num_lags, inputs_num_lags, num_neurons, inpu
             #
             # # get vector of input neurons' fitted weights for each lag
             # b_split = np.split(b_hat, num_lags, axis=1)
-            # b = [i[weights_mask.numpy().astype(bool)] for i in b_split]
+            # b = [i[weights_mask.astype(bool)] for i in b_split]
             # b = [i[:, None] for i in b]
             # b = np.concatenate(b, axis=1)
             # # b = b[neuron_inds_chosen, :]
@@ -182,7 +181,7 @@ def run_gc(num_data_sets, emissions_num_lags, inputs_num_lags, num_neurons, inpu
             # # plt.show()
 
 
-            y_hat = y_history @ ab_hat
+            y_hat = emission_input_history @ ab_hat
             mse[d] = np.mean((y_target - y_hat) ** 2)
 
             # add NaNs back in for plotting and to compare across datasets
@@ -456,15 +455,15 @@ def plot_l2_norms(neuron_inds_chosen, emissions, inputs, cell_ids, cell_ids_chos
 
     plot_x = np.arange(len(chosen_neuron_inds))
     # measured_stim_responses = au.get_stim_response(emissions, inputs, window=(0, emissions[0].shape[0]))
-    measured_stim_responses = au.get_stim_response(emissions, inputs, window=window)
+    measured_stim_responses = au.get_stim_response(emissions, inputs, window=window)[0]
     measured_response_norm = au.rms(measured_stim_responses, axis=0)
-    measured_response_norm = measured_response_norm[chosen_neuron_inds, :][:, chosen_neuron_inds]
+    measured_response_norm = measured_response_norm[np.ix_(chosen_neuron_inds, chosen_neuron_inds)]
     measured_response_norm[np.eye(measured_response_norm.shape[0], dtype=bool)] = 0
     measured_response_norm = measured_response_norm / np.nanmax(measured_response_norm)
 
     pred_response_norm_plot = np.zeros((len(chosen_neuron_inds), len(chosen_neuron_inds)))
     # only take the l2 norm of the trace AFTER the stim, so remove the initialization at timestep 0
-    pred_response_norm = au.rms(avg_pred_x_all_data[1:, :, :], axis=0)
+    pred_response_norm = au.rms(avg_pred_x_all_data, axis=0)
     pred_response_norm_plot = pred_response_norm[chosen_neuron_inds, :]
     # pred_response_norm_plot[:, n] = pred_response_norm
 
@@ -510,7 +509,7 @@ def plot_imp_resp(emissions, inputs, neuron_inds_chosen, num_neurons, num_data_s
     window=(-60, 120)
     # list of neuron indices
     chosen_neuron_inds = [cell_ids.index(i) for i in cell_ids_chosen]
-    measured_stim_responses = au.get_stim_response(emissions, inputs, window=window)
+    measured_stim_responses = au.get_stim_response(emissions, inputs, window=window)[0]
     measured_response_norm = au.rms(measured_stim_responses, axis=0)
     measured_response_norm = measured_response_norm[chosen_neuron_inds, :][:, chosen_neuron_inds]
     measured_response_norm[np.eye(measured_response_norm.shape[0], dtype=bool)] = 0
