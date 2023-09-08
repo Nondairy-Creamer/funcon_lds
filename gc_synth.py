@@ -55,13 +55,13 @@ all_a_hat, all_a_hat_0, all_b_hat, mse = gcu.run_gc(num_data_sets, emissions_num
                                                     load_dir='/Users/lsmith/Documents/python/', rerun=True)
 
 for d in range(num_data_sets):
-    fig, axs = plt.subplots(nrows=1, ncols=1)
+    plt.figure()
     plt.title('dataset %(dataset)i GC for %(lags)i lags: a_hat' % {"dataset": d, "lags": emissions_num_lags})
     a_hat_pos = plt.imshow(all_a_hat[:, :, d], aspect='auto', interpolation='nearest', cmap=colormap)
     plt.colorbar(a_hat_pos)
     plt.show()
 
-    fig, axs = plt.subplots(nrows=1, ncols=1)
+    plt.figure()
     plt.title('dataset %(dataset)i GC for %(lags)i lags: b_hat' % {"dataset": d, "lags": inputs_num_lags})
     b_hat_pos = plt.imshow(all_b_hat[:, :, d], aspect='auto', interpolation='nearest', cmap=colormap)
     plt.colorbar(b_hat_pos)
@@ -100,4 +100,4 @@ plt.clim((-color_limits, color_limits))
 plt.colorbar(B_pos)
 plt.show()
 
-a=0
+a = 0

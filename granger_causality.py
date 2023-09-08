@@ -11,7 +11,7 @@ colormap = mpl.colormaps['coolwarm']
 run_params = lu.get_run_params(param_name='submission_scripts/gc_exp_test.yml')
 fig_path = run_params['fig_path']
 
-A, num_neurons, num_data_sets, num_neurons, emissions, inputs, cell_ids = gcu.gc_preprocessing(run_params, rerun=False)
+A, num_neurons, num_data_sets, emissions, inputs, cell_ids = gcu.gc_preprocessing(run_params, rerun=False)
 
 emissions_num_lags = run_params['dynamics_lags']
 inputs_num_lags = run_params['dynamics_input_lags']
@@ -76,17 +76,17 @@ if make_avg_med_figs:
     b_hat_median = np.nanmedian(all_b_hat, axis=2)
 
     # mean
-    gcu.plot_weights_mean_median(a_hat_avg, colormap, save=True, fig_path=fig_path, data_title='averaged a_hat over all datasets',
-                                 data_name='100avg_a_hat')
-    gcu.plot_weights_mean_median(b_hat_avg, colormap, save=True, fig_path=fig_path, data_title='averaged b_hat over all datasets',
-                                 data_name='100avg_b_hat')
+    gcu.plot_weights_mean_median(a_hat_avg, colormap, save=True, fig_path=fig_path,
+                                 data_title='averaged a_hat over all datasets', data_name='100avg_a_hat')
+    gcu.plot_weights_mean_median(b_hat_avg, colormap, save=True, fig_path=fig_path,
+                                 data_title='averaged b_hat over all datasets', data_name='100avg_b_hat')
     gcu.plot_weights_mean_median(a_hat_0_avg, colormap, save=True, fig_path=fig_path,
                                  data_title='100averaged a_hat, diag=0 over all datasets', data_name='avg_a_hat_0')
     # median
-    gcu.plot_weights_mean_median(a_hat_median, colormap, save=True, fig_path=fig_path, data_title='median a_hat over all datasets',
-                                 data_name='100median_a_hat')
-    gcu.plot_weights_mean_median(b_hat_median, colormap, save=True, fig_path=fig_path, data_title='median b_hat over all datasets',
-                                 data_name='100median_b_hat')
+    gcu.plot_weights_mean_median(a_hat_median, colormap, save=True, fig_path=fig_path,
+                                 data_title='median a_hat over all datasets', data_name='100median_a_hat')
+    gcu.plot_weights_mean_median(b_hat_median, colormap, save=True, fig_path=fig_path,
+                                 data_title='median b_hat over all datasets', data_name='100median_b_hat')
     gcu.plot_weights_mean_median(a_hat_0_median, colormap, save=True, fig_path=fig_path,
                                  data_title='100median a_hat, diag=0 over all datasets', data_name='median_a_hat_0')
 
@@ -174,8 +174,6 @@ if make_best_figs:
     # string = fig_path + 'eigs_best.png'
     # plt.savefig(string)
 
-
-
 # set NaNs to 0, feed in an input vector for a specific neuron, run GC model, should see some sort of response
 # impulse response functions:
 
@@ -188,7 +186,7 @@ avg_pred_x_all_data = gcu.impulse_response_func(num_sim, cell_ids, cell_ids_chos
                                                 emissions, inputs, all_a_hat, all_b_hat, emissions_num_lags,
                                                 inputs_num_lags, rerun=True)
 
-gcu.plot_l2_norms(neuron_inds_chosen, emissions, inputs, cell_ids, cell_ids_chosen, avg_pred_x_all_data, colormap,
+gcu.plot_l2_norms(emissions, inputs, cell_ids, cell_ids_chosen, avg_pred_x_all_data, colormap,
                   save=True, fig_path=fig_path)
 
 # plot on y axis the gc results for a chosen neuron after stimulus of another neuron
@@ -207,11 +205,11 @@ avg_pred_x_all_data_best = gcu.impulse_response_func(num_sim, cell_ids, cell_ids
                                                                (num_neurons, num_neurons*inputs_num_lags, 1)),
                                                      emissions_num_lags, inputs_num_lags,
                                                      f_name='impulse_response_data_best', rerun=True)
-gcu.plot_l2_norms(neuron_inds_chosen, emissions, inputs, cell_ids, cell_ids_chosen, avg_pred_x_all_data_best,
+gcu.plot_l2_norms(emissions, inputs, cell_ids, cell_ids_chosen, avg_pred_x_all_data_best,
                   colormap, save=True, fig_path=fig_path + 'best_')
 gcu.plot_imp_resp(emissions, inputs, neuron_inds_chosen, num_neurons, num_data_sets, cell_ids, cell_ids_chosen,
                   neuron_to_stim, avg_pred_x_all_data_best, save=True, fig_path=fig_path + 'best_')
-a=0
+a = 0
 
 # todo: hold out 30 datasets for test ds, train on rest
 # todo: find 'best' dataset that has good coverage of neurons
