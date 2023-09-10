@@ -2,7 +2,7 @@ import numpy as np
 import pickle
 import inference_utilities as iu
 import warnings
-from scipy.linalg import block_diag
+import scipy.linalg as sl
 
 
 class Lgssm:
@@ -355,15 +355,14 @@ class Lgssm:
             ll_cov = self.emissions_weights @ pred_cov @ self.emissions_weights.T + R
             ll_cov = ll_cov.T / 2 + ll_cov / 2
             ll_cov_logdet = np.linalg.slogdet(ll_cov)[1]
-            ll_cov_inv = np.linalg.inv(ll_cov)
 
             mean_diff = y - ll_mu
             ll += -1/2 * (emissions.shape[1] * np.log(2*np.pi) + ll_cov_logdet +
-                          np.dot(mean_diff, ll_cov_inv @ mean_diff))
+                          np.dot(mean_diff, np.linalg.solve(ll_cov, mean_diff)))
 
             # Condition on this emission
             # Compute the Kalman gain
-            K = pred_cov.T @ self.emissions_weights.T @ ll_cov_inv
+            K = pred_cov.T @ np.linalg.solve(ll_cov, self.emissions_weights).T
             filtered_cov = pred_cov - K @ ll_cov @ K.T
             filtered_cov = filtered_cov.T / 2 + filtered_cov / 2
 
@@ -775,7 +774,7 @@ class Lgssm:
 
             emissions_var[np.isnan(emissions_var)] = np.nanmean(emissions_var[~np.isnan(emissions_var)])
             var_mat = np.diag(emissions_var)
-            var_block = block_diag(*([var_mat] * self.dynamics_lags))
+            var_block = sl.block_diag(*([var_mat] * self.dynamics_lags))
             init_cov_list.append(var_block)
 
         return init_cov_list

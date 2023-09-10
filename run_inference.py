@@ -70,8 +70,8 @@ def fit_synthetic(param_name, save_folder):
                 setattr(model_trained, init_key, getattr(model_true, init_key))
         model_trained.set_to_init()
 
-        lu.save_run(save_folder, model_trained=model_trained, ep=0, data_train=data_train, data_test=data_test,
-                    params=run_params)
+        lu.save_run(save_folder, model_true=model_true, model_trained=model_trained, ep=0, data_train=data_train,
+                    data_test=data_test, params=run_params)
     else:
         model_trained = None
         data_train = None
@@ -80,6 +80,8 @@ def fit_synthetic(param_name, save_folder):
 
     # get the log likelihood of the true data
     ll_true_params = iu.parallel_get_ll(model_true, data_train)
+
+    print('log likelihood of true parameters: ', ll_true_params)
 
     if cpu_id == 0:
         model_true.log_likelihood = [ll_true_params]
@@ -121,7 +123,8 @@ def fit_experimental(param_name, save_folder):
                                         correct_photobleach=run_params['correct_photobleach'],
                                         interpolate_nans=run_params['interpolate_nans'],
                                         held_out_data=run_params['held_out_data'],
-                                        neuron_freq=run_params['neuron_freq'])
+                                        neuron_freq=run_params['neuron_freq'],
+                                        filter_size=run_params['filter_size'])
 
 
         num_neurons = data_train['emissions'][0].shape[1]

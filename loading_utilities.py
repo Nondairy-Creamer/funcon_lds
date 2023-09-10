@@ -23,7 +23,7 @@ def get_run_params(param_name):
     return params
 
 
-def preprocess_data(emissions, inputs, start_index=0, correct_photobleach=False):
+def preprocess_data(emissions, inputs, start_index=0, correct_photobleach=False, filter_size=2):
     # remove the beginning of the recording which contains artifacts and mean subtract
     emissions = emissions[start_index:, :]
     inputs = inputs[start_index:, :]
@@ -38,19 +38,21 @@ def preprocess_data(emissions, inputs, start_index=0, correct_photobleach=False)
             interp_x = np.arange(data_x[0], data_x[1])
             emissions[interp_x, c] = np.interp(interp_x, data_x, emissions[data_x, c])
 
-    # filter out noise at the nyquist frequency
-    filter_size = 2
-    filter_shape = np.ones(filter_size) / filter_size
-    emissions_filtered = np.zeros((emissions.shape[0] - filter_size + 1, emissions.shape[1]))
+    if filter_size > 0:
+        # filter out noise at the nyquist frequency
+        filter_shape = np.ones(filter_size) / filter_size
+        emissions_filtered = np.zeros((emissions.shape[0] - filter_size + 1, emissions.shape[1]))
 
-    for c in range(emissions.shape[1]):
-        emissions_filtered[:, c] = au.nan_convolve(emissions[:, c].copy(), filter_shape)
+        for c in range(emissions.shape[1]):
+            emissions_filtered[:, c] = au.nan_convolve(emissions[:, c], filter_shape)
+    else:
+        emissions_filtered = emissions.copy()
 
     if correct_photobleach:
         # photobleach correction
         emissions_filtered_corrected = np.zeros_like(emissions_filtered)
         for c in range(emissions_filtered.shape[1]):
-            emissions_filtered_corrected[:, c] = tp.photobleach_correction(emissions_filtered[:, c], num_exp=2, fit_offset=True)[:, 0]
+            emissions_filtered_corrected[:, c] = tp.photobleach_correction(emissions_filtered[:, c], num_exp=2, fit_offset=False)[:, 0]
 
         # occasionally the fit fails check for outputs who don't have a mean close to 1
         # fit those with a single exponential
@@ -85,7 +87,7 @@ def preprocess_data(emissions, inputs, start_index=0, correct_photobleach=False)
     return emissions_filtered_corrected, inputs
 
 
-def load_and_preprocess_data(data_path, num_data_sets=None, force_preprocess=False, start_index=0,
+def load_and_preprocess_data(data_path, num_data_sets=None, force_preprocess=False, start_index=0, filter_size=2,
                              correct_photobleach=False, interpolate_nans=True, neuron_freq=0.0, held_out_data=[]):
     data_path = Path(data_path)
 
@@ -128,7 +130,8 @@ def load_and_preprocess_data(data_path, num_data_sets=None, force_preprocess=Fal
 
             start = time.time()
             this_emissions, this_inputs = preprocess_data(this_emissions, this_inputs, start_index=start_index,
-                                                          correct_photobleach=correct_photobleach)
+                                                          correct_photobleach=correct_photobleach,
+                                                          filter_size=filter_size)
 
             if interpolate_nans:
                 full_nan_loc = np.all(np.isnan(this_emissions), axis=0)
