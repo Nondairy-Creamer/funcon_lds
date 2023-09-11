@@ -346,25 +346,22 @@ class Lgssm:
 
             # Predict the next state
             pred_mean = self.dynamics_weights @ filtered_mean + dynamics_inputs[t, :] + self.dynamics_offset
-            pred_cov = self.dynamics_weights @ filtered_cov @ self.dynamics_weights.T + self.dynamics_cov
-            pred_cov = pred_cov.T / 2 + pred_cov / 2
+            pred_cov = iu.nearest_pd(self.dynamics_weights @ filtered_cov @ self.dynamics_weights.T + self.dynamics_cov)
 
             # Update the log likelihood
             ll_mu = self.emissions_weights @ pred_mean + emissions_inputs[t, :] + self.emissions_offset
 
-            ll_cov = self.emissions_weights @ pred_cov @ self.emissions_weights.T + R
-            ll_cov = ll_cov.T / 2 + ll_cov / 2
+            ll_cov = iu.nearest_pd(self.emissions_weights @ pred_cov @ self.emissions_weights.T + R)
             ll_cov_logdet = np.linalg.slogdet(ll_cov)[1]
 
             mean_diff = y - ll_mu
-            ll += -1/2 * (emissions.shape[1] * np.log(2*np.pi) + ll_cov_logdet +
-                          np.dot(mean_diff, np.linalg.solve(ll_cov, mean_diff)))
+            ll = ll + -1/2 * (emissions.shape[1] * np.log(2*np.pi) + ll_cov_logdet +
+                              np.dot(mean_diff, np.linalg.solve(ll_cov, mean_diff)))
 
             # Condition on this emission
             # Compute the Kalman gain
             K = pred_cov.T @ np.linalg.solve(ll_cov, self.emissions_weights).T
-            filtered_cov = pred_cov - K @ ll_cov @ K.T
-            filtered_cov = filtered_cov.T / 2 + filtered_cov / 2
+            filtered_cov = iu.nearest_pd(pred_cov - K @ ll_cov @ K.T)
 
             filtered_mean = pred_mean + K @ mean_diff
             filtered_means[t, :] = filtered_mean
@@ -411,14 +408,12 @@ class Lgssm:
 
             # Compute the smoothed mean and covariance
             pred_mean = self.dynamics_weights @ filtered_mean + dynamics_inputs[t+1, :] + self.dynamics_offset
-            pred_cov = self.dynamics_weights @ filtered_cov @ self.dynamics_weights.T + self.dynamics_cov
-            pred_cov = pred_cov.T / 2 + pred_cov / 2
+            pred_cov = iu.nearest_pd(self.dynamics_weights @ filtered_cov @ self.dynamics_weights.T + self.dynamics_cov)
 
             # This is like the Kalman gain but in reverse
             # See Eq 8.11 of Saarka's "Bayesian Filtering and Smoothing"
             G = np.linalg.solve(pred_cov, self.dynamics_weights @ filtered_cov).T
-            smoothed_cov_this = filtered_cov + G @ (smoothed_cov_next - pred_cov) @ G.T
-            smoothed_cov_this = smoothed_cov_this.T / 2 + smoothed_cov_this / 2
+            smoothed_cov_this = iu.nearest_pd(filtered_cov + G @ (smoothed_cov_next - pred_cov) @ G.T)
             smoothed_means[t, :] = filtered_mean + G @ (smoothed_mean_next - pred_mean)
 
             # Compute the smoothed expectation of x_t x_{t+1}^T
@@ -630,7 +625,7 @@ class Lgssm:
                 if self.param_props['shape']['dynamics_cov'] == 'diag':
                     self.dynamics_cov = np.diag(np.diag(self.dynamics_cov))
 
-                self.dynamics_cov = 0.5 * self.dynamics_cov + 0.5 * self.dynamics_cov.T
+                self.dynamics_cov = iu.nearest_pd(self.dynamics_cov)
 
             # update obs matrix C & input matrix D
             if self.param_props['update']['emissions_weights'] and self.param_props['update']['emissions_input_weights']:
@@ -657,7 +652,7 @@ class Lgssm:
                 if self.param_props['shape']['emissions_cov'] == 'diag':
                     self.emissions_cov = np.diag(np.diag(self.emissions_cov))
 
-                self.emissions_cov = 0.5 * self.emissions_cov + 0.5 * self.emissions_cov.T
+                self.emissions_cov = iu.nearest_pd(self.emissions_cov)
 
             if not np.all(self.dynamics_cov == self.dynamics_cov.T):
                 warnings.warn('dynamics_cov is not symmetric')
