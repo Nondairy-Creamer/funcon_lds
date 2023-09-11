@@ -350,6 +350,8 @@ def parallel_get_ll(model, data):
 def nearest_pd(A):
     """Find the nearest positive-definite matrix to input
 
+    Taken from https://stackoverflow.com/questions/43238173/python-convert-matrix-to-positive-semi-definite
+
     A Python/Numpy port of John D'Errico's `nearestSPD` MATLAB code [1], which
     credits [2].
 
@@ -358,6 +360,9 @@ def nearest_pd(A):
     [2] N.J. Higham, "Computing a nearest symmetric positive semidefinite
     matrix" (1988): https://doi.org/10.1016/0024-3795(88)90223-6
     """
+
+    if is_pd(A):
+        return A
 
     B = (A + A.T) / 2
     _, s, V = np.linalg.svd(B)

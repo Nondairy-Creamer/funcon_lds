@@ -426,17 +426,17 @@ class Lgssm:
             r_nan = self.emissions_cov[np.ix_(y_nan_loc_t, y_nan_loc_t)]
 
             if t > 0:
-                smoothed_covs_sum += smoothed_cov_this
+                smoothed_covs_sum = smoothed_covs_sum + smoothed_cov_this
 
             # add in the variance from all the values of y you imputed
-            my_correction[np.ix_(y_nan_loc_t, y_nan_loc_t)] += c_nan @ smoothed_cov_this @ c_nan.T + r_nan
+            my_correction[np.ix_(y_nan_loc_t, y_nan_loc_t)] += iu.nearest_pd(c_nan @ smoothed_cov_this @ c_nan.T + r_nan)
             mzy_correction[:, y_nan_loc_t] += smoothed_cov_this @ c_nan.T
 
             smoothed_cov_next = smoothed_cov_this.copy()
 
         suff_stats = {}
-        suff_stats['smoothed_covs_sum'] = smoothed_covs_sum
-        suff_stats['smoothed_crosses_sum'] = smoothed_crosses_sum
+        suff_stats['smoothed_covs_sum'] = iu.nearest_pd(smoothed_covs_sum)
+        suff_stats['smoothed_crosses_sum'] = iu.nearest_pd(smoothed_crosses_sum)
         suff_stats['first_cov'] = smoothed_cov_this
         suff_stats['last_cov'] = last_cov
         suff_stats['my_correction'] = my_correction
@@ -653,12 +653,6 @@ class Lgssm:
                     self.emissions_cov = np.diag(np.diag(self.emissions_cov))
 
                 self.emissions_cov = iu.nearest_pd(self.emissions_cov)
-
-            if not np.all(self.dynamics_cov == self.dynamics_cov.T):
-                warnings.warn('dynamics_cov is not symmetric')
-
-            if not np.all(self.emissions_cov == self.emissions_cov.T):
-                warnings.warn('emissions_cov is not symmetric')
 
             return suff_stats[0], suff_stats[2], suff_stats[3]
 
