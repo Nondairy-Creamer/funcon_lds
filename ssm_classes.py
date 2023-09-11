@@ -143,6 +143,8 @@ class Lgssm:
             self.dynamics_cov_init = rng.standard_normal((self.dynamics_dim, self.dynamics_dim))
             self.dynamics_cov_init = noise_std * (self.dynamics_cov_init.T @ self.dynamics_cov_init / self.dynamics_dim + np.eye(self.dynamics_dim))
 
+        self.dynamics_cov_init = iu.nearest_pd(self.dynamics_cov_init)
+
         # randomize emissions weights
         self.emissions_weights_init = rng.standard_normal((self.emissions_dim, self.dynamics_dim))
         self.emissions_input_weights_init = input_weights_std * rng.standard_normal((self.emissions_dim, self.input_dim))
@@ -154,19 +156,24 @@ class Lgssm:
             self.emissions_cov_init = rng.standard_normal((self.emissions_dim, self.emissions_dim))
             self.emissions_cov_init = noise_std * (self.emissions_cov_init.T @ self.emissions_cov_init / self.emissions_dim + np.eye(self.emissions_dim))
 
+        self.emissions_cov_init = iu.nearest_pd(self.emissions_cov_init)
+
         self._pad_init_for_lags()
         self.set_to_init()
 
     def set_to_init(self):
-        self.dynamics_weights = self.dynamics_weights_init
-        self.dynamics_input_weights = self.dynamics_input_weights_init
-        self.dynamics_offset = self.dynamics_offset_init
-        self.dynamics_cov = self.dynamics_cov_init
+        self.dynamics_cov_init = iu.nearest_pd(self.dynamics_cov_init)
+        self.emissions_cov_init = iu.nearest_pd(self.emissions_cov_init)
 
-        self.emissions_weights = self.emissions_weights_init
-        self.emissions_input_weights = self.emissions_input_weights_init
-        self.emissions_offset = self.emissions_offset_init
-        self.emissions_cov = self.emissions_cov_init
+        self.dynamics_weights = self.dynamics_weights_init.copy()
+        self.dynamics_input_weights = self.dynamics_input_weights_init.copy()
+        self.dynamics_offset = self.dynamics_offset_init.copy()
+        self.dynamics_cov = self.dynamics_cov_init.copy()
+
+        self.emissions_weights = self.emissions_weights_init.copy()
+        self.emissions_input_weights = self.emissions_input_weights_init.copy()
+        self.emissions_offset = self.emissions_offset_init.copy()
+        self.emissions_cov = self.emissions_cov_init.copy()
 
     def get_params(self):
         params_out = {'init': {'dynamics_weights': self.dynamics_weights_init,
@@ -239,6 +246,7 @@ class Lgssm:
                 init_cov = rng.standard_normal((self.dynamics_dim_full, self.dynamics_dim_full))
                 init_cov = init_cov.T @ init_cov
 
+            init_cov = iu.nearest_pd(init_cov)
             latents = np.zeros((num_time, self.dynamics_dim_full))
             emissions = np.zeros((num_time, self.emissions_dim))
             inputs = inputs_lagged[d]
@@ -764,7 +772,7 @@ class Lgssm:
             emissions_var[np.isnan(emissions_var)] = np.nanmean(emissions_var[~np.isnan(emissions_var)])
             var_mat = np.diag(emissions_var)
             var_block = sl.block_diag(*([var_mat] * self.dynamics_lags))
-            init_cov_list.append(var_block)
+            init_cov_list.append(iu.nearest_pd(var_block))
 
         return init_cov_list
 
