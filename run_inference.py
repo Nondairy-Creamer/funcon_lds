@@ -81,9 +81,9 @@ def fit_synthetic(param_name, save_folder):
     # get the log likelihood of the true data
     ll_true_params = iu.parallel_get_ll(model_true, data_train)
 
-    print('log likelihood of true parameters: ', ll_true_params)
-
     if cpu_id == 0:
+        print('log likelihood of true parameters: ', ll_true_params)
+
         model_true.log_likelihood = [ll_true_params]
         lu.save_run(save_folder, model_true=model_true)
 
