@@ -364,14 +364,14 @@ def nearest_pd(A):
     if is_pd(A):
         return A
 
-    B = (A + A.T) / 2
+    B = A / 2 + A.T / 2
     _, s, V = np.linalg.svd(B)
 
     H = np.dot(V.T, np.dot(np.diag(s), V))
 
-    A2 = (B + H) / 2
+    A2 = B / 2 + H / 2
 
-    A3 = (A2 + A2.T) / 2
+    A3 = A2 / 2 + A2.T / 2
 
     if is_pd(A3):
         return A3

@@ -444,7 +444,7 @@ class Lgssm:
 
         suff_stats = {}
         suff_stats['smoothed_covs_sum'] = iu.nearest_pd(smoothed_covs_sum)
-        suff_stats['smoothed_crosses_sum'] = iu.nearest_pd(smoothed_crosses_sum)
+        suff_stats['smoothed_crosses_sum'] = smoothed_crosses_sum
         suff_stats['first_cov'] = smoothed_cov_this
         suff_stats['last_cov'] = last_cov
         suff_stats['my_correction'] = my_correction
