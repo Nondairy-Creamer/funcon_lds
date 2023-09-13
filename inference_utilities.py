@@ -262,8 +262,8 @@ def parallel_get_post(model, data, init_mean=None, init_cov=None, max_iter=1, co
             inputs = i[1].copy()
 
             ll, posterior, suff_stats = model.lgssm_smoother(emissions, inputs, init_mean, init_cov, memmap_cpu_id)
-            post_pred = model.sample(num_time=emissions.shape[0], inputs_list=[inputs], init_mean=init_mean, init_cov=init_cov, add_noise=False)
-            post_pred_noise = model.sample(num_time=emissions.shape[0], inputs_list=[inputs], init_mean=init_mean, init_cov=init_cov)
+            post_pred = model.sample(num_time=emissions.shape[0], inputs_list=[inputs], init_mean=[init_mean], init_cov=[init_cov], add_noise=False)
+            post_pred_noise = model.sample(num_time=emissions.shape[0], inputs_list=[inputs], init_mean=[init_mean], init_cov=[init_cov])
 
             posterior = posterior[:, :model.dynamics_dim]
             post_pred = post_pred['latents'][0][:, :model.dynamics_dim]
@@ -362,7 +362,10 @@ def nearest_pd(A):
     """
 
     if is_pd(A):
+    # if True:
         return A
+    else:
+        raise Exception('Matrix must be PSD')
 
     B = A / 2 + A.T / 2
     _, s, V = np.linalg.svd(B)
