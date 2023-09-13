@@ -776,7 +776,7 @@ class Lgssm:
                 warnings.simplefilter('ignore', category=RuntimeWarning)
                 emissions_var = np.nanvar(i, axis=0)
 
-            emissions_var[np.isnan(emissions_var)] = np.nanmean(emissions_var[~np.isnan(emissions_var)])
+            emissions_var[emissions_var == 0] = np.mean(emissions_var[emissions_var != 0])
             var_mat = np.diag(emissions_var)
             var_block = sl.block_diag(*([var_mat] * self.dynamics_lags))
             init_cov_list.append(iu.nearest_pd(var_block))
