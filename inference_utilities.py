@@ -172,9 +172,9 @@ def fit_em(model, data, init_mean=None, init_cov=None, num_steps=10,
 
         if cpu_id == 0:
             # set the initial mean and cov to the first smoothed mean / cov
-            for i in range(len(smoothed_means)):
-                init_mean[i] = smoothed_means[i][0, :]
-                init_cov[i] = new_init_covs[i]
+            # for i in range(len(smoothed_means)):
+            #     init_mean[i] = smoothed_means[i][0, :]
+            #     init_cov[i] = new_init_covs[i]
 
             log_likelihood_out.append(ll)
             time_out.append(time.time() - start)
@@ -364,8 +364,8 @@ def nearest_pd(A):
     if is_pd(A):
     # if True:
         return A
-    else:
-        raise Exception('Matrix must be PSD')
+    # else:
+    #     raise Exception('Matrix must be PSD')
 
     B = A / 2 + A.T / 2
     _, s, V = np.linalg.svd(B)
