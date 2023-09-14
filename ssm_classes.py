@@ -263,7 +263,7 @@ class Lgssm:
             emissions_inputs = (self.emissions_input_weights @ inputs[:, :, None])[:, :, 0]
             latent_init = rng.multivariate_normal(init_mean_this, init_cov_this)
 
-            latents[0, :] = latent_init
+            latents[0, :] = latent_init + dynamics_inputs[0, :] + dynamics_noise[0, :]
 
             emissions[0, :] = self.emissions_weights @ latents[0, :] + \
                               emissions_inputs[0, :] + \
@@ -350,7 +350,7 @@ class Lgssm:
         y = np.where(nan_loc, 0, y)
         R = np.where(np.diag(nan_loc), self.epsilon, self.emissions_cov)
 
-        pred_mean = init_mean.copy()
+        pred_mean = init_mean.copy() + dynamics_inputs[0, :]
         pred_cov = init_cov.copy()
 
         ll_mu = self.emissions_weights @ pred_mean + emissions_inputs[0, :] + self.emissions_offset
@@ -366,8 +366,8 @@ class Lgssm:
         filtered_cov = iu.nearest_pd(pred_cov - K @ ll_cov @ K.T)
 
         filtered_mean = pred_mean + K @ mean_diff
-        filtered_means[0, :] = filtered_mean
-        filtered_covs[0, :, :] = filtered_cov
+        filtered_means[0, :] = filtered_mean.copy()
+        filtered_covs[0, :, :] = filtered_cov.copy()
 
         # step through the loop and keep calculating the covariances until they converge
         for t in range(1, num_timesteps):
