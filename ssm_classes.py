@@ -350,9 +350,13 @@ class Lgssm:
         y = np.where(nan_loc, 0, y)
         R = np.where(np.diag(nan_loc), self.epsilon, self.emissions_cov)
 
+        CtRinv = np.linalg.solve(R, self.emissions_weights).T
+        CtRinvC = CtRinv @ self.emissions_weights
+
         pred_mean = init_mean.copy() + dynamics_inputs[0, :]
         pred_cov = init_cov.copy()
 
+        yyctr = y - emissions_inputs[0, :]
         ll_mu = self.emissions_weights @ pred_mean + emissions_inputs[0, :] + self.emissions_offset
 
         ll_cov = iu.nearest_pd(self.emissions_weights @ pred_cov @ self.emissions_weights.T + R)
@@ -362,10 +366,13 @@ class Lgssm:
         ll = ll + -1 / 2 * (emissions.shape[1] * np.log(2 * np.pi) + ll_cov_logdet +
                             np.dot(mean_diff, np.linalg.solve(ll_cov, mean_diff)))
 
-        K = pred_cov.T @ np.linalg.solve(ll_cov, self.emissions_weights).T
-        filtered_cov = iu.nearest_pd(pred_cov - K @ ll_cov @ K.T)
+        # K = pred_cov.T @ np.linalg.solve(ll_cov, self.emissions_weights).T
+        # filtered_cov = iu.nearest_pd(pred_cov - K @ ll_cov @ K.T)
+        filtered_cov = iu.nearest_pd(np.linalg.inv(np.linalg.inv(pred_cov) + CtRinvC))
 
-        filtered_mean = pred_mean + K @ mean_diff
+        # filtered_mean = pred_mean + K @ mean_diff
+        filtered_mean = filtered_cov @ (CtRinv @ yyctr + np.linalg.solve(pred_cov, pred_mean))
+
         filtered_means[0, :] = filtered_mean.copy()
         filtered_covs[0, :, :] = filtered_cov.copy()
 
@@ -379,11 +386,15 @@ class Lgssm:
             y = np.where(nan_loc, 0, y)
             R = np.where(np.diag(nan_loc), self.epsilon, self.emissions_cov)
 
+            CtRinv = np.linalg.solve(R, self.emissions_weights).T
+            CtRinvC = CtRinv @ self.emissions_weights
+
             # Predict the next state
             pred_mean = self.dynamics_weights @ filtered_mean + dynamics_inputs[t, :] + self.dynamics_offset
             pred_cov = iu.nearest_pd(self.dynamics_weights @ filtered_cov @ self.dynamics_weights.T + self.dynamics_cov)
 
             # Update the log likelihood
+            yyctr = y - emissions_inputs[t, :]
             ll_mu = self.emissions_weights @ pred_mean + emissions_inputs[t, :] + self.emissions_offset
 
             ll_cov = iu.nearest_pd(self.emissions_weights @ pred_cov @ self.emissions_weights.T + R)
@@ -395,10 +406,13 @@ class Lgssm:
 
             # Condition on this emission
             # Compute the Kalman gain
-            K = pred_cov.T @ np.linalg.solve(ll_cov, self.emissions_weights).T
-            filtered_cov = iu.nearest_pd(pred_cov - K @ ll_cov @ K.T)
+            # K = pred_cov.T @ np.linalg.solve(ll_cov, self.emissions_weights).T
+            # filtered_cov = iu.nearest_pd(pred_cov - K @ ll_cov @ K.T)
+            filtered_cov = iu.nearest_pd(np.linalg.inv(np.linalg.inv(pred_cov) + CtRinvC))
 
-            filtered_mean = pred_mean + K @ mean_diff
+            # filtered_mean = pred_mean + K @ mean_diff
+            filtered_mean = filtered_cov @ (CtRinv @ yyctr + np.linalg.solve(pred_cov, pred_mean))
+
             filtered_means[t, :] = filtered_mean
             filtered_covs[t, :, :] = filtered_cov
 
