@@ -146,7 +146,8 @@ def fit_em(model, data, init_mean=None, init_cov=None, num_steps=10,
             raise Exception('Number of cpus must be <= number of data sets')
 
         # lag the inputs if the model has lags
-        inputs = [model.get_lagged_data(i, model.dynamics_input_lags) for i in inputs]
+        if inputs[0].shape[1] < model.input_dim_full:
+            inputs = [model.get_lagged_data(i, model.dynamics_input_lags) for i in inputs]
 
         if init_mean is None:
             init_mean = model.estimate_init_mean(emissions)
@@ -215,7 +216,8 @@ def parallel_get_post(model, data, init_mean=None, init_cov=None, max_iter=1, co
         emissions = data['emissions']
         inputs = data['inputs']
 
-        inputs = [model.get_lagged_data(i, model.dynamics_input_lags) for i in inputs]
+        if inputs[0].shape[1] < model.input_dim_full:
+            inputs = [model.get_lagged_data(i, model.dynamics_input_lags) for i in inputs]
 
         if init_mean is None:
             init_mean = model.estimate_init_mean(emissions)
