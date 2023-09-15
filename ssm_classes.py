@@ -143,8 +143,6 @@ class Lgssm:
             self.dynamics_cov_init = rng.standard_normal((self.dynamics_dim, self.dynamics_dim))
             self.dynamics_cov_init = noise_std * (self.dynamics_cov_init.T @ self.dynamics_cov_init / self.dynamics_dim + np.eye(self.dynamics_dim))
 
-        self.dynamics_cov_init = iu.nearest_pd(self.dynamics_cov_init)
-
         # randomize emissions weights
         self.emissions_weights_init = rng.standard_normal((self.emissions_dim, self.dynamics_dim))
         self.emissions_input_weights_init = input_weights_std * rng.standard_normal((self.dynamics_input_lags, self.emissions_dim, self.input_dim))
@@ -157,15 +155,10 @@ class Lgssm:
             self.emissions_cov_init = rng.standard_normal((self.emissions_dim, self.emissions_dim))
             self.emissions_cov_init = noise_std * (self.emissions_cov_init.T @ self.emissions_cov_init / self.emissions_dim + np.eye(self.emissions_dim))
 
-        self.emissions_cov_init = iu.nearest_pd(self.emissions_cov_init)
-
         self._pad_init_for_lags()
         self.set_to_init()
 
     def set_to_init(self):
-        self.dynamics_cov_init = iu.nearest_pd(self.dynamics_cov_init)
-        self.emissions_cov_init = iu.nearest_pd(self.emissions_cov_init)
-
         self.dynamics_weights = self.dynamics_weights_init.copy()
         self.dynamics_input_weights = self.dynamics_input_weights_init.copy()
         self.dynamics_offset = self.dynamics_offset_init.copy()
@@ -251,7 +244,6 @@ class Lgssm:
             else:
                 init_cov_this = init_cov[d]
 
-            init_cov = iu.nearest_pd(init_cov_this)
             latents = np.zeros((num_time, self.dynamics_dim_full))
             emissions = np.zeros((num_time, self.emissions_dim))
             inputs = inputs_lagged[d]
@@ -359,7 +351,7 @@ class Lgssm:
         yyctr = y - emissions_inputs[0, :]
         ll_mu = self.emissions_weights @ pred_mean + emissions_inputs[0, :] + self.emissions_offset
 
-        ll_cov = iu.nearest_pd(self.emissions_weights @ pred_cov @ self.emissions_weights.T + R)
+        ll_cov = self.emissions_weights @ pred_cov @ self.emissions_weights.T + R
         ll_cov_logdet = np.linalg.slogdet(ll_cov)[1]
 
         mean_diff = y - ll_mu
@@ -367,8 +359,8 @@ class Lgssm:
                             np.dot(mean_diff, np.linalg.solve(ll_cov, mean_diff)))
 
         # K = pred_cov.T @ np.linalg.solve(ll_cov, self.emissions_weights).T
-        # filtered_cov = iu.nearest_pd(pred_cov - K @ ll_cov @ K.T)
-        filtered_cov = iu.nearest_pd(np.linalg.inv(np.linalg.inv(pred_cov) + CtRinvC))
+        # filtered_cov = pred_cov - K @ ll_cov @ K.T
+        filtered_cov = np.linalg.inv(np.linalg.inv(pred_cov) + CtRinvC)
 
         # filtered_mean = pred_mean + K @ mean_diff
         filtered_mean = filtered_cov @ (CtRinv @ yyctr + np.linalg.solve(pred_cov, pred_mean))
@@ -391,13 +383,13 @@ class Lgssm:
 
             # Predict the next state
             pred_mean = self.dynamics_weights @ filtered_mean + dynamics_inputs[t, :] + self.dynamics_offset
-            pred_cov = iu.nearest_pd(self.dynamics_weights @ filtered_cov @ self.dynamics_weights.T + self.dynamics_cov)
+            pred_cov = self.dynamics_weights @ filtered_cov @ self.dynamics_weights.T + self.dynamics_cov
 
             # Update the log likelihood
             yyctr = y - emissions_inputs[t, :]
             ll_mu = self.emissions_weights @ pred_mean + emissions_inputs[t, :] + self.emissions_offset
 
-            ll_cov = iu.nearest_pd(self.emissions_weights @ pred_cov @ self.emissions_weights.T + R)
+            ll_cov = self.emissions_weights @ pred_cov @ self.emissions_weights.T + R
             ll_cov_logdet = np.linalg.slogdet(ll_cov)[1]
 
             mean_diff = y - ll_mu
@@ -407,8 +399,8 @@ class Lgssm:
             # Condition on this emission
             # Compute the Kalman gain
             # K = pred_cov.T @ np.linalg.solve(ll_cov, self.emissions_weights).T
-            # filtered_cov = iu.nearest_pd(pred_cov - K @ ll_cov @ K.T)
-            filtered_cov = iu.nearest_pd(np.linalg.inv(np.linalg.inv(pred_cov) + CtRinvC))
+            # filtered_cov = pred_cov - K @ ll_cov @ K.T
+            filtered_cov = np.linalg.inv(np.linalg.inv(pred_cov) + CtRinvC)
 
             # filtered_mean = pred_mean + K @ mean_diff
             filtered_mean = filtered_cov @ (CtRinv @ yyctr + np.linalg.solve(pred_cov, pred_mean))
@@ -457,12 +449,12 @@ class Lgssm:
 
             # Compute the smoothed mean and covariance
             pred_mean = self.dynamics_weights @ filtered_mean + dynamics_inputs[t+1, :] + self.dynamics_offset
-            pred_cov = iu.nearest_pd(self.dynamics_weights @ filtered_cov @ self.dynamics_weights.T + self.dynamics_cov)
+            pred_cov = self.dynamics_weights @ filtered_cov @ self.dynamics_weights.T + self.dynamics_cov
 
             # This is like the Kalman gain but in reverse
             # See Eq 8.11 of Saarka's "Bayesian Filtering and Smoothing"
             G = np.linalg.solve(pred_cov, self.dynamics_weights @ filtered_cov).T
-            smoothed_cov_this = iu.nearest_pd(filtered_cov + G @ (smoothed_cov_next - pred_cov) @ G.T)
+            smoothed_cov_this = filtered_cov + G @ (smoothed_cov_next - pred_cov) @ G.T
             smoothed_means[t, :] = filtered_mean + G @ (smoothed_mean_next - pred_mean)
 
             # Compute the smoothed expectation of x_t x_{t+1}^T
@@ -478,13 +470,13 @@ class Lgssm:
                 smoothed_covs_sum = smoothed_covs_sum + smoothed_cov_this
 
             # add in the variance from all the values of y you imputed
-            my_correction[np.ix_(y_nan_loc_t, y_nan_loc_t)] += iu.nearest_pd(c_nan @ smoothed_cov_this @ c_nan.T + r_nan)
+            my_correction[np.ix_(y_nan_loc_t, y_nan_loc_t)] += c_nan @ smoothed_cov_this @ c_nan.T + r_nan
             mzy_correction[:, y_nan_loc_t] += smoothed_cov_this @ c_nan.T
 
             smoothed_cov_next = smoothed_cov_this.copy()
 
         suff_stats = {}
-        suff_stats['smoothed_covs_sum'] = iu.nearest_pd(smoothed_covs_sum)
+        suff_stats['smoothed_covs_sum'] = smoothed_covs_sum
         suff_stats['smoothed_crosses_sum'] = smoothed_crosses_sum
         suff_stats['first_cov'] = smoothed_cov_this
         suff_stats['last_cov'] = last_cov
@@ -651,8 +643,6 @@ class Lgssm:
                 if self.param_props['shape']['dynamics_cov'] == 'diag':
                     self.dynamics_cov = np.diag(np.diag(self.dynamics_cov))
 
-                self.dynamics_cov = iu.nearest_pd(self.dynamics_cov)
-
             # update obs matrix C & input matrix D
             if self.param_props['update']['emissions_weights'] and self.param_props['update']['emissions_input_weights']:
                 # do a joint update to C and D
@@ -677,8 +667,6 @@ class Lgssm:
 
                 if self.param_props['shape']['emissions_cov'] == 'diag':
                     self.emissions_cov = np.diag(np.diag(self.emissions_cov))
-
-                self.emissions_cov = iu.nearest_pd(self.emissions_cov)
 
             return suff_stats[0], suff_stats[2], suff_stats[3]
 
@@ -790,7 +778,7 @@ class Lgssm:
             emissions_var[emissions_var == 0] = np.mean(emissions_var[emissions_var != 0])
             var_mat = np.diag(emissions_var)
             var_block = sl.block_diag(*([var_mat] * self.dynamics_lags))
-            init_cov_list.append(iu.nearest_pd(var_block))
+            init_cov_list.append(var_block)
 
         return init_cov_list
 
