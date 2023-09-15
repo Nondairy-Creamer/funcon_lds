@@ -174,7 +174,7 @@ def fit_em(model, data, init_mean=None, init_cov=None, num_steps=10,
             # set the initial mean and cov to the first smoothed mean / cov
             for i in range(len(smoothed_means)):
                 init_mean[i] = smoothed_means[i][0, :] - model.dynamics_input_weights @ inputs[i][0, :]
-                init_cov[i] = new_init_covs[i]
+                init_cov[i] = new_init_covs[i] / 2 + new_init_covs[i].T / 2
 
             log_likelihood_out.append(ll)
             time_out.append(time.time() - start)
@@ -245,6 +245,7 @@ def parallel_get_post(model, data, init_mean=None, init_cov=None, max_iter=1, co
 
                 init_mean_new = smoothed_means[0, :].copy() - model.dynamics_input_weights @ inputs[0, :]
                 init_cov_new = suff_stats['first_cov'].copy()
+                init_cov_new = init_cov_new / 2 + init_cov_new.T / 2
 
                 init_mean_same = np.max(np.abs(init_mean - init_mean_new)) < converge_res
                 init_cov_same = np.max(np.abs(init_cov - init_cov_new)) < converge_res

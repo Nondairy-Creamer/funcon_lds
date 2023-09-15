@@ -253,6 +253,7 @@ class Lgssm:
             emissions_noise = add_noise * rng.multivariate_normal(np.zeros(self.emissions_dim), self.emissions_cov, size=num_time)
             dynamics_inputs = (self.dynamics_input_weights @ inputs[:, :, None])[:, :, 0]
             emissions_inputs = (self.emissions_input_weights @ inputs[:, :, None])[:, :, 0]
+
             latent_init = rng.multivariate_normal(init_mean_this, init_cov_this)
 
             latents[0, :] = latent_init + dynamics_inputs[0, :] + dynamics_noise[0, :]
@@ -640,6 +641,8 @@ class Lgssm:
                                      - self.dynamics_input_weights @ Muz2 - Muz2.T @ self.dynamics_input_weights.T
                                      + self.dynamics_weights @ Muz21.T @ self.dynamics_input_weights.T + self.dynamics_input_weights @ Muz21 @ self.dynamics_weights.T) #/ (nt - 1)
 
+                self.dynamics_cov = self.dynamics_cov / 2 + self.dynamics_cov.T / 2
+
                 if self.param_props['shape']['dynamics_cov'] == 'diag':
                     self.dynamics_cov = np.diag(np.diag(self.dynamics_cov))
 
@@ -667,6 +670,8 @@ class Lgssm:
 
                 if self.param_props['shape']['emissions_cov'] == 'diag':
                     self.emissions_cov = np.diag(np.diag(self.emissions_cov))
+
+                self.emissions_cov = self.emissions_cov / 2 + self.emissions_cov.T / 2
 
             return suff_stats[0], suff_stats[2], suff_stats[3]
 
