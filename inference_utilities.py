@@ -173,7 +173,7 @@ def fit_em(model, data, init_mean=None, init_cov=None, num_steps=10,
         if cpu_id == 0:
             # set the initial mean and cov to the first smoothed mean / cov
             for i in range(len(smoothed_means)):
-                init_mean[i] = smoothed_means[i][0, :] - inputs[i][0, :]
+                init_mean[i] = smoothed_means[i][0, :] - model.dynamics_input_weights @ inputs[i][0, :]
                 init_cov[i] = new_init_covs[i]
 
             log_likelihood_out.append(ll)
@@ -243,7 +243,7 @@ def parallel_get_post(model, data, init_mean=None, init_cov=None, max_iter=1, co
                 ll, smoothed_means, suff_stats = model.lgssm_smoother(emissions, inputs, init_mean, init_cov,
                                                                       memmap_cpu_id=memmap_cpu_id)
 
-                init_mean_new = smoothed_means[0, :].copy()
+                init_mean_new = smoothed_means[0, :].copy() - model.dynamics_input_weights @ inputs[0, :]
                 init_cov_new = suff_stats['first_cov'].copy()
 
                 init_mean_same = np.max(np.abs(init_mean - init_mean_new)) < converge_res
