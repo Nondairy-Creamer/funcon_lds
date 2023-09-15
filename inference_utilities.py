@@ -206,7 +206,7 @@ def fit_em(model, data, init_mean=None, init_cov=None, num_steps=10,
         return None, None, None, None
 
 
-def parallel_get_post(model, data, init_mean=None, init_cov=None, max_iter=1, converge_res=1e-2, time_lim=100,
+def parallel_get_post(model, data, init_mean=None, init_cov=None, max_iter=1, converge_res=1e-2, time_lim=300,
                       memmap_cpu_id=None):
     comm = pkl5.Intracomm(MPI.COMM_WORLD)
     cpu_id = comm.Get_rank()

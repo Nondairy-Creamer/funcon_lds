@@ -181,13 +181,13 @@ def run_fitting(run_params, model, data_train, data_test, save_folder, model_tru
     if cpu_id == 0:
         print('get posterior for the training data')
     posterior_train = iu.parallel_get_post(model, data_train, init_mean=init_mean, init_cov=init_cov,
-                                           max_iter=100, converge_res=1e-2, time_lim=100,
+                                           max_iter=100, converge_res=1e-2, time_lim=300,
                                            memmap_cpu_id=memmap_cpu_id)
 
     if cpu_id == 0:
         print('get posterior for the test data')
     posterior_test = iu.parallel_get_post(model, data_test, init_mean=None, init_cov=None, max_iter=100,
-                                          converge_res=1e-2, time_lim=100, memmap_cpu_id=memmap_cpu_id)
+                                          converge_res=1e-2, time_lim=300, memmap_cpu_id=memmap_cpu_id)
 
     if cpu_id == 0:
         lu.save_run(save_folder, model_trained=model, ep=-1, posterior_train=posterior_train,
@@ -239,8 +239,8 @@ def infer_posterior(param_name, data_folder):
         data_train = None
         data_test = None
 
-    posterior_train = iu.parallel_get_post(model, data_train, max_iter=100, memmap_cpu_id=memmap_cpu_id)
-    posterior_test = iu.parallel_get_post(model, data_test, max_iter=100, memmap_cpu_id=memmap_cpu_id)
+    posterior_train = iu.parallel_get_post(model, data_train, max_iter=100, memmap_cpu_id=memmap_cpu_id, time_lim=300)
+    posterior_test = iu.parallel_get_post(model, data_test, max_iter=100, memmap_cpu_id=memmap_cpu_id, time_lim=300)
 
     if cpu_id == 0:
         lu.save_run(data_folder, posterior_train=posterior_train, posterior_test=posterior_test)
