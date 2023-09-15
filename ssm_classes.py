@@ -229,7 +229,10 @@ class Lgssm:
             else:
                 inputs_list = [rng.standard_normal((num_time, self.input_dim)) for i in range(num_data_sets)]
 
-        inputs_lagged = [self.get_lagged_data(i, self.dynamics_input_lags, add_pad=True) for i in inputs_list]
+        if inputs_list[0].shape[1] < self.input_dim_full:
+            inputs_lagged = [self.get_lagged_data(i, self.dynamics_input_lags, add_pad=True) for i in inputs_list]
+        else:
+            inputs_lagged = inputs_list.copy()
 
         for d in range(num_data_sets):
             # generate a random initial mean and covariance
@@ -419,6 +422,7 @@ class Lgssm:
         """
         num_timesteps = emissions.shape[0]
 
+        # TODO: write a more robust check
         if inputs.shape[1] < self.input_dim_full:
             inputs = self.get_lagged_data(inputs, self.dynamics_input_lags)
 
