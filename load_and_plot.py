@@ -35,7 +35,7 @@ model_trained = pickle.load(model_trained_file)
 model_trained_file.close()
 
 # check if a true model exists
-model_true_path = model_folder / 'model_true.pkl'
+model_true_path = model_folder / 'models' / 'model_true.pkl'
 
 if model_true_path.exists():
     model_true_file = open(model_true_path, 'rb')

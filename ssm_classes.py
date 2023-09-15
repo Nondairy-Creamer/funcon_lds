@@ -107,8 +107,9 @@ class Lgssm:
         noise_std = 0.1
 
         # randomize dynamics weights
-        dynamics_tau = self.dynamics_lags / 3
-        dynamics_const = (np.exp(3) - 1) * np.exp(1 / dynamics_tau - 3) / (np.exp(1 / dynamics_tau) - 1)
+        lag_factor = 2
+        dynamics_tau = self.dynamics_lags / lag_factor
+        dynamics_const = (np.exp(lag_factor) - 1) * np.exp(1 / dynamics_tau - lag_factor) / (np.exp(1 / dynamics_tau) - 1)
         dynamics_time_decay = np.exp(-np.arange(self.dynamics_lags) / dynamics_tau) / dynamics_const
         # self.dynamics_weights_init = rng.standard_normal((self.dynamics_lags, self.dynamics_dim, self.dynamics_dim))
         self.dynamics_weights_init = np.tile(rng.standard_normal((1, self.dynamics_dim, self.dynamics_dim)), (self.dynamics_lags, 1, 1))
@@ -122,8 +123,8 @@ class Lgssm:
         self.dynamics_weights_init = np.real(eig_vects @ np.transpose(np.linalg.solve(np.transpose(eig_vects, (0, 2, 1)), eig_vals_mat), (0, 2, 1)))
         self.dynamics_weights_init = self.dynamics_weights_init * dynamics_time_decay[:, None, None]
 
-        dynamics_input_tau = self.dynamics_input_lags / 3
-        dynamics_input_const = (np.exp(3) - 1) * np.exp(1 / dynamics_input_tau - 3) / (np.exp(1 / dynamics_input_tau) - 1)
+        dynamics_input_tau = self.dynamics_input_lags / lag_factor
+        dynamics_input_const = (np.exp(lag_factor) - 1) * np.exp(1 / dynamics_input_tau - lag_factor) / (np.exp(1 / dynamics_input_tau) - 1)
         dynamics_input_time_decay = np.exp(-np.arange(self.dynamics_input_lags) / dynamics_input_tau) / dynamics_input_const
         if self.param_props['shape']['dynamics_input_weights'] == 'diag':
             # dynamics_input_weights_init_diag = init_std * rng.standard_normal((self.dynamics_input_lags, self.input_dim))
