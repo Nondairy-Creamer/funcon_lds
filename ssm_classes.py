@@ -103,7 +103,7 @@ class Lgssm:
         save_file.close()
 
     def randomize_weights(self, max_eig_allowed=0.99, rng=np.random.default_rng()):
-        input_weights_std = 1
+        input_weights_std = 5
         noise_std = 0.1
 
         # randomize dynamics weights

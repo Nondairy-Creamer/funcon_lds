@@ -4,7 +4,7 @@ import analysis_utilities as au
 from pathlib import Path
 
 
-use_synth = False
+use_synth = True
 use_test_data = True
 auto_select_ids = False
 window = (-60, 120)
@@ -12,13 +12,14 @@ sub_start = True
 force_calc_missing_posterior = False
 
 if use_synth:
-    model_folder = Path('C:/Users/mcreamer/Documents/python/funcon_lds/trained_models/exp_DL1_IL45_N80_R0/20230819_092054')
+    model_folder = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/syn_test/20230915_181809/')
     cell_ids_chosen = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
+    cell_ids_chosen = ['0', '1', '2', '3', '4']
     neuron_to_remove = '4'
     neuron_to_stim = '4'
 else:
     # load in the model and training data
-    model_folder = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/exp_DL4_IL45_N80_R0/20230819_201106/')
+    model_folder = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/exp_DL1_IL45_N80_R0/20230914_231216/')
     # model_folder = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/exp_DL2_IL45_N80_R0/20230831_145345/')
     # cell_ids_chosen = ['AVAL', 'AVAR', 'AVEL', 'AVER', 'AFDL', 'AFDR', 'AVJL', 'AVJR', 'AVDL', 'AVDR']
     cell_ids_chosen = ['M3L', 'RMDDR', 'FLPR', 'RIMR', 'AVER', 'AVJL', 'AVEL', 'AWBL', 'RMDVL', 'RMDVR']
@@ -87,18 +88,19 @@ if auto_select_ids and has_data and has_post:
     neuron_to_remove = 'RMDDR'
     neuron_to_stim = 'AVEL'
 
-# au.plot_log_likelihood(model)
-# au.plot_model_params(model, cell_ids_chosen=cell_ids_chosen)
-# au.plot_dynamics_eigs(model)
+au.plot_log_likelihood(model)
+au.plot_model_params(model, cell_ids_chosen=cell_ids_chosen)
+au.plot_dynamics_eigs(model)
 
 if has_data and has_post:
-    # au.plot_posterior(data, posterior_dict, cell_ids_chosen, sample_rate=model.sample_rate)
+    au.plot_posterior(data, posterior_dict, cell_ids_chosen, sample_rate=model.sample_rate)
     au.plot_stim_l2_norm(model, data, posterior_dict, cell_ids_chosen, window=window, sub_start=sub_start)
     au.plot_stim_response(data, posterior_dict, cell_ids_chosen, neuron_to_stim, window=window, sample_rate=model.sample_rate, sub_start=sub_start)
-    #
-    # posterior_dict['posterior_missing'] = au.plot_missing_neuron(model, data, posterior_dict, cell_ids_chosen, neuron_to_remove, force_calc=force_calc_missing_posterior)
-    #
-    # posterior_file = open(posterior_path, 'wb')
-    # pickle.dump(posterior_dict, posterior_file)
-    # posterior_file.close()
 
+    posterior_dict['posterior_missing'] = au.plot_missing_neuron(model, data, posterior_dict, cell_ids_chosen, neuron_to_remove, force_calc=force_calc_missing_posterior)
+
+    posterior_file = open(posterior_path, 'wb')
+    pickle.dump(posterior_dict, posterior_file)
+    posterior_file.close()
+
+    a=1

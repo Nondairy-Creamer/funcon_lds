@@ -391,16 +391,16 @@ def plot_stim_l2_norm(model, data, posterior_dict, cell_ids_chosen, window=(-60,
     inputs = data['inputs']
     cell_ids = data['cell_ids']
     post_pred = posterior_dict['post_pred']
-
-    watlas = wa.NeuroAtlas()
-    atlas_ids = list(watlas.neuron_ids)
-    anatomical_connectome_full = watlas.get_anatomical_connectome(signed=False)
-    peptide_connectome_full = watlas.get_peptidergic_connectome()
-    atlas_ids[atlas_ids.index('AWCON')] = 'AWCR'
-    atlas_ids[atlas_ids.index('AWCOFF')] = 'AWCL'
-    atlas_inds = [atlas_ids.index(i) for i in cell_ids]
-    anatomical_connectome = anatomical_connectome_full[np.ix_(atlas_inds, atlas_inds)]
-    peptide_connectome = peptide_connectome_full[np.ix_(atlas_inds, atlas_inds)]
+    #
+    # watlas = wa.NeuroAtlas()
+    # atlas_ids = list(watlas.neuron_ids)
+    # anatomical_connectome_full = watlas.get_anatomical_connectome(signed=False)
+    # peptide_connectome_full = watlas.get_peptidergic_connectome()
+    # atlas_ids[atlas_ids.index('AWCON')] = 'AWCR'
+    # atlas_ids[atlas_ids.index('AWCOFF')] = 'AWCL'
+    # atlas_inds = [atlas_ids.index(i) for i in cell_ids]
+    # anatomical_connectome = anatomical_connectome_full[np.ix_(atlas_inds, atlas_inds)]
+    # peptide_connectome = peptide_connectome_full[np.ix_(atlas_inds, atlas_inds)]
 
     chosen_neuron_inds = [cell_ids.index(i) for i in cell_ids_chosen]
 
@@ -440,7 +440,7 @@ def plot_stim_l2_norm(model, data, posterior_dict, cell_ids_chosen, window=(-60,
     w_pp = nancorrcoef([model_weights_norm.reshape(-1), post_pred_masked.reshape(-1)])[0, 1]
 
     # fit the connectome to the correlation matrix and fit it to the model weights
-    A = np.concatenate((anatomical_connectome.reshape(-1)[:, None], peptide_connectome.reshape(-1)[:, None]), axis=1)
+    # A = np.concatenate((anatomical_connectome.reshape(-1)[:, None], peptide_connectome.reshape(-1)[:, None]), axis=1)
     correlation_no_nan = correlation_masked.copy().reshape(-1)
     nan_loc = np.isnan(correlation_no_nan)
     weights_no_nan = model_weights_masked.copy().reshape(-1)
@@ -604,8 +604,8 @@ def plot_stim_response(data, posterior_dict, cell_ids_chosen, neuron_to_stim,
         post_pred_response_chosen[:, pi] = post_pred_stim_responses[:, p[0], p[1]] #/ np.max(post_pred_stim_responses[:, p[0], p[1]])
         posterior_response_chosen[:, pi] = posterior_stim_responses[:, p[0], p[1]] #/ np.max(posterior_stim_responses[:, p[0], p[1]])
 
-    ylim = (np.nanmin([measured_response_chosen - measured_response_sem_chosen, post_pred_response_chosen, posterior_response_chosen]),
-            np.nanmax([measured_response_chosen + measured_response_sem_chosen, post_pred_response_chosen, posterior_response_chosen]))
+    ylim = (np.nanpercentile([measured_response_chosen - measured_response_sem_chosen, post_pred_response_chosen, posterior_response_chosen], 1),
+            np.nanpercentile([measured_response_chosen + measured_response_sem_chosen, post_pred_response_chosen, posterior_response_chosen], 99))
 
     for i in range(measured_response_chosen.shape[1]):
         plt.figure()

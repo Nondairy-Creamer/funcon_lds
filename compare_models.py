@@ -4,8 +4,20 @@ import numpy as np
 from matplotlib import pyplot as plt
 
 # data_sets_location = Path('/home/mcreamer/Documents/trained_models/no_ridge_full_emissions/')
-data_sets_location = Path('/home/mcreamer/Documents/trained_models/R0_diag_emissions/')
-sorting_param = 'dynamics_lags'
+# sorting_param = 'dynamics_lags'
+
+# data_sets_location = Path('/home/mcreamer/Documents/trained_models/syn_ridge_sweep/')
+# sorting_param = 'ridge_lambda'
+
+# data_sets_location = Path('/home/mcreamer/Documents/trained_models/syn_ridge_sweep_fullQ/')
+# sorting_param = 'ridge_lambda'
+
+data_sets_location = Path('/home/mcreamer/Documents/trained_models/syn_ridge_sweep_fullQ_time30/')
+sorting_param = 'ridge_lambda'
+
+# data_sets_location = Path('/home/mcreamer/Documents/trained_models/DL4')
+# sorting_param = 'ridge_lambda'
+
 data = []
 
 for p in sorted(data_sets_location.rglob('data_train.pkl')):
@@ -70,6 +82,7 @@ for p in sorted(data_sets_location.rglob('data_train.pkl')):
 
 sorting_list = [i['sorting_id'] for i in data]
 data = [data[i] for i in np.argsort(sorting_list)]
+sorting_list = np.sort(sorting_list)
 
 for d in data:
     plt.figure()
@@ -84,12 +97,14 @@ test_ll = [i['post_test']['ll'] for i in data]
 
 plt.figure()
 plt.subplot(1, 2, 1)
-plt.plot(sorting_list, train_ll, label='train')
+plt.plot(sorting_list, train_ll, label='train', marker='o')
 plt.xlabel(sorting_param)
 plt.ylabel('mean log likelihood')
+plt.grid()
 plt.subplot(1, 2, 2)
-plt.plot(sorting_list, test_ll, label='test')
+plt.plot(sorting_list, test_ll, label='test', marker='o')
 plt.xlabel(sorting_param)
+plt.grid()
 plt.tight_layout()
 
 plt.show()
