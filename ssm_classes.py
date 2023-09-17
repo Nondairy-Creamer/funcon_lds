@@ -243,8 +243,15 @@ class Lgssm:
                 init_mean_this = init_mean[d]
 
             if generate_cov:
-                init_cov_this = rng.standard_normal((self.dynamics_dim_full, self.dynamics_dim_full))
-                init_cov_this = init_cov_this.T @ init_cov_this
+                q0 = np.eye(self.dynamics_dim_full)
+                init_cov_this = self.dynamics_weights @ q0 @ self.dynamics_weights.T + self.dynamics_cov
+
+                for i in range(100):
+                    init_cov_this = self.dynamics_weights @ init_cov_this @ self.dynamics_weights.T + self.dynamics_cov
+
+                init_cov_this = init_cov_this / 100
+                # init_cov_this = rng.standard_normal((self.dynamics_dim_full, self.dynamics_dim_full))
+                # init_cov_this = init_cov_this.T @ init_cov_this
             else:
                 init_cov_this = init_cov[d]
 
@@ -260,7 +267,7 @@ class Lgssm:
 
             latent_init = rng.multivariate_normal(init_mean_this, init_cov_this)
 
-            latents[0, :] = latent_init + dynamics_inputs[0, :] + dynamics_noise[0, :]
+            latents[0, :] = latent_init + dynamics_inputs[0, :]
 
             emissions[0, :] = self.emissions_weights @ latents[0, :] + \
                               emissions_inputs[0, :] + \
@@ -787,6 +794,7 @@ class Lgssm:
 
             emissions_var[emissions_var == 0] = np.mean(emissions_var[emissions_var != 0])
             var_mat = np.diag(emissions_var)
+            var_mat = np.eye(i.shape[1])
             var_block = sl.block_diag(*([var_mat] * self.dynamics_lags))
             init_cov_list.append(var_block)
 

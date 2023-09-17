@@ -5,7 +5,7 @@ import time
 from mpi4py import MPI
 from mpi4py.util import pkl5
 import inference_utilities as iu
-import plotting
+import analysis_methods as am
 import os
 import pickle
 from pathlib import Path
@@ -175,7 +175,8 @@ def run_fitting(run_params, model, data_train, data_test, save_folder, model_tru
     # fit the model using expectation maximization
     ll, model, init_mean, init_cov = \
         iu.fit_em(model, data_train, num_steps=run_params['num_train_steps'],
-                  save_folder=save_folder, memmap_cpu_id=memmap_cpu_id)
+                  save_folder=save_folder, memmap_cpu_id=memmap_cpu_id,
+                  init_mean=data_train['init_mean'].copy(), init_cov=data_train['init_cov'].copy())
 
     # sample from the model
     if cpu_id == 0:
@@ -198,7 +199,7 @@ def run_fitting(run_params, model, data_train, data_test, save_folder, model_tru
                 os.remove('/tmp/filtered_covs_' + str(i) + '.tmp')
 
         if not is_parallel and run_params['plot_figures']:
-            plotting.plot_model_params(model, model_true)
+            am.plot_model_params(model, model_true=model_true)
 
 
 def infer_posterior(param_name, data_folder):

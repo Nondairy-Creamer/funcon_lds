@@ -1,106 +1,84 @@
-import numpy as np
 import pickle
+import analysis_methods as am
 import analysis_utilities as au
+import loading_utilities as lu
 from pathlib import Path
 
+run_params = lu.get_run_params(param_name='submission_scripts/ana_test.yml')
+window = run_params['window']
+sub_pre_stim = run_params['sub_pre_stim']
+model_folders = [Path(i) for i in run_params['model_folders']]
 
-use_synth = True
-use_test_data = True
-auto_select_ids = False
-window = (-60, 120)
-sub_start = True
-force_calc_missing_posterior = False
+model_list = []
+model_true_list = []
+posterior_train_list = []
+data_train_list = []
+posterior_test_list = []
+data_test_list = []
 
-if use_synth:
-    model_folder = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/syn_test/20230915_181809/')
-    cell_ids_chosen = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
-    cell_ids_chosen = ['0', '1', '2', '3', '4']
-    neuron_to_remove = '4'
-    neuron_to_stim = '4'
+for m in model_folders:
+    m = 'trained_models' / m
+    # load in the model and the data
+    model_file = open(m / 'models' / 'model_trained.pkl', 'rb')
+    model_list.append(pickle.load(model_file))
+    model_file.close()
+
+    model_true_path = m / 'models' / 'model_true.pkl'
+    if model_true_path.exists():
+        model_true_file = open(m / 'models' / 'model_true.pkl', 'rb')
+        model_true_list.append(pickle.load(model_true_file))
+        model_true_file.close()
+    else:
+        model_true_list.append(None)
+
+    posterior_train_file = open(m / 'posterior_train.pkl', 'rb')
+    posterior_train_list.append(pickle.load(posterior_train_file))
+    posterior_train_file.close()
+
+    data_train_file = open(m / 'data_train.pkl', 'rb')
+    data_train_list.append(pickle.load(data_train_file))
+    data_train_file.close()
+
+    posterior_test_file = open(m / 'posterior_test.pkl', 'rb')
+    posterior_test_list.append(pickle.load(posterior_test_file))
+    posterior_test_file.close()
+
+    data_test_file = open(m / 'data_test.pkl', 'rb')
+    data_test_list.append(pickle.load(data_test_file))
+    data_test_file.close()
+
+best_model_ind = am.plot_model_comparison(run_params['sorting_param'], model_list, posterior_train_list, data_train_list,
+                                          posterior_test_list, data_test_list)
+model = model_list[best_model_ind]
+model_true = model_true_list[best_model_ind]
+
+if run_params['use_test_data']:
+    data = data_test_list[best_model_ind]
+    posterior_dict = posterior_test_list[best_model_ind]
+    posterior_path = 'trained_models' / model_folders[best_model_ind] / 'posterior_test.yml'
 else:
-    # load in the model and training data
-    model_folder = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/exp_DL1_IL45_N80_R0/20230914_231216/')
-    # model_folder = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/exp_DL2_IL45_N80_R0/20230831_145345/')
-    # cell_ids_chosen = ['AVAL', 'AVAR', 'AVEL', 'AVER', 'AFDL', 'AFDR', 'AVJL', 'AVJR', 'AVDL', 'AVDR']
-    cell_ids_chosen = ['M3L', 'RMDDR', 'FLPR', 'RIMR', 'AVER', 'AVJL', 'AVEL', 'AWBL', 'RMDVL', 'RMDVR']
-    # cell_ids_chosen = ['AVAL', 'AVAR', 'AVEL', 'AVER', 'AFDR', 'AVJL', 'AVJR', 'AVDL', 'AVDR']
-    # cell_ids_chosen = None
-    neuron_to_remove = 'RMDDR'
-    neuron_to_stim = 'AVEL'
+    data = data_train_list[best_model_ind]
+    posterior_dict = posterior_train_list[best_model_ind]
+    posterior_path = 'trained_models' / model_folders[best_model_ind] / 'posterior_train.yml'
 
-# load in the model and the data
-model_path = model_folder / 'models' / 'model_trained.pkl'
-
-if use_test_data:
-    data_path = model_folder / 'data_test.pkl'
-    posterior_path = model_folder / 'posterior_test.pkl'
+if run_params['auto_select_ids']:
+    cell_ids_chosen, neuron_to_remove, neuron_to_stim = au.auto_select_ids(data['inputs'], data['cell_ids'], num_neurons=run_params['num_select_ids'])
 else:
-    data_path = model_folder / 'data_train.pkl'
-    posterior_path = model_folder / 'posterior_train.pkl'
+    cell_ids_chosen = run_params['cell_ids_chosen']
+    neuron_to_remove = run_params['neuron_to_remove']
+    neuron_to_stim = run_params['neuron_to_stim']
 
-model_file = open(model_path, 'rb')
-model = pickle.load(model_file)
-model_file.close()
-cell_ids = model.cell_ids
 
-if data_path.exists():
-    data_file = open(data_path, 'rb')
-    data = pickle.load(data_file)
-    data_file.close()
+am.plot_model_params(model, model_true=model_true, cell_ids_chosen=cell_ids_chosen)
+am.plot_dynamics_eigs(model)
 
-    emissions = data['emissions']
-    inputs = data['inputs']
+am.plot_posterior(data, posterior_dict, cell_ids_chosen, sample_rate=model.sample_rate)
+am.plot_stim_l2_norm(model, data, posterior_dict, cell_ids_chosen, window=window, sub_pre_stim=run_params['sub_pre_stim'])
+am.plot_stim_response(data, posterior_dict, cell_ids_chosen, neuron_to_stim, window=window, sample_rate=model.sample_rate, sub_pre_stim=run_params['sub_pre_stim'])
 
-    has_data = True
-else:
-    has_data = False
-    data = None
+posterior_dict['posterior_missing'] = am.plot_missing_neuron(model, data, posterior_dict, cell_ids_chosen, neuron_to_remove, force_calc=run_params['force_calc_missing_posterior'])
 
-if posterior_path.exists():
-    posterior_file = open(posterior_path, 'rb')
-    posterior_dict = pickle.load(posterior_file)
-    posterior_file.close()
+posterior_file = open(posterior_path.with_suffix('.pkl'), 'wb')
+pickle.dump(posterior_dict, posterior_file)
+posterior_file.close()
 
-    has_post = True
-else:
-    has_post = False
-    posterior_dict = None
-
-if cell_ids_chosen is None:
-    cell_ids_chosen = cell_ids.copy()
-
-if auto_select_ids and has_data and has_post:
-    num_neurons = 10
-    measured_stim_responses_ave, measured_stim_responses_ave_sem, measured_stim_responses = \
-        au.get_stim_response(data['emissions'], data['inputs'], window=window, return_pre=False)
-    measured_stim_responses_ave_l2 = au.rms(measured_stim_responses_ave, axis=0)
-    num_stim = [i.shape[0] for i in measured_stim_responses]
-
-    most_measured_neurons = np.argsort(num_stim, axis=0)[-num_neurons:]
-    cell_ids_chosen = [cell_ids[i] for i in most_measured_neurons]
-
-    measured_stim_responses_ave_l2_chosen = measured_stim_responses_ave_l2[np.ix_(most_measured_neurons, most_measured_neurons)]
-
-    measured_stim_responses_ave_l2_chosen[np.eye(len(most_measured_neurons), dtype=bool)] = 0
-    ave_response_to_stim = np.nanmean(np.exp(measured_stim_responses_ave_l2_chosen), axis=0)
-    neuron_to_remove = cell_ids_chosen[np.nanargmax(ave_response_to_stim)]
-    neuron_to_stim = neuron_to_remove
-    neuron_to_remove = 'RMDDR'
-    neuron_to_stim = 'AVEL'
-
-au.plot_log_likelihood(model)
-au.plot_model_params(model, cell_ids_chosen=cell_ids_chosen)
-au.plot_dynamics_eigs(model)
-
-if has_data and has_post:
-    au.plot_posterior(data, posterior_dict, cell_ids_chosen, sample_rate=model.sample_rate)
-    au.plot_stim_l2_norm(model, data, posterior_dict, cell_ids_chosen, window=window, sub_start=sub_start)
-    au.plot_stim_response(data, posterior_dict, cell_ids_chosen, neuron_to_stim, window=window, sample_rate=model.sample_rate, sub_start=sub_start)
-
-    posterior_dict['posterior_missing'] = au.plot_missing_neuron(model, data, posterior_dict, cell_ids_chosen, neuron_to_remove, force_calc=force_calc_missing_posterior)
-
-    posterior_file = open(posterior_path, 'wb')
-    pickle.dump(posterior_dict, posterior_file)
-    posterior_file.close()
-
-    a=1
