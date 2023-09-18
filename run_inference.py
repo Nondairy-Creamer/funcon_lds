@@ -255,6 +255,8 @@ def continue_fit(param_name, save_folder, extra_train_steps):
         model_trained = None
         data_train = None
         data_test = None
+        init_mean = None
+        init_cov = None
 
     run_fitting(run_params, model_trained, data_train, data_test, save_folder,
                 init_mean=init_mean, init_cov=init_cov, current_step=current_step)
