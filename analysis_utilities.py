@@ -40,7 +40,7 @@ def stack_weights(weights, num_split, axis=-1):
     return np.stack(np.split(weights, num_split, axis=axis))
 
 
-def get_stim_response(data, inputs, window=(-60, 120), sub_pre_stim=False, return_pre=True):
+def get_impulse_response_function(data, inputs, window=(-60, 120), sub_pre_stim=False, return_pre=True):
     num_neurons = data[0].shape[1]
 
     responses = []
@@ -151,6 +151,10 @@ def nancorrcoef(data):
 
     for ii, i in enumerate(data):
         for ji, j in enumerate(data):
+            # columnize everything in data
+            i = i.reshape(-1)
+            j = j.reshape(-1)
+
             i = (i - np.nanmean(i, axis=0)) / np.nanstd(i, ddof=1)
             j = (j - np.nanmean(j, axis=0)) / np.nanstd(j, ddof=1)
 
