@@ -45,8 +45,8 @@ def main(param_name, folder_name=None, extra_train_steps=None):
                 run_params['slurm']['time'] = '24:00:00'
                 fit_model_command = 'run_inference.infer_posterior(\'' + str(param_name) + '\',\'' + str(save_folder) + '\')\"'
             elif run_type == 'cont':
-                fit_model_command = 'run_inference.continue_fit' + run_params['fit_file'] + \
-                                    '(\'' + str(param_name) + '\',\'' + str(save_folder) + '\',' + str(extra_train_steps) + ')\"'
+                fit_model_command = 'run_inference.continue_fit(\'' + str(param_name) + '\',\'' + str(save_folder) + \
+                                    '\',' + str(extra_train_steps) + ')\"'
             else:
                 raise Exception('run type not recognized')
 
