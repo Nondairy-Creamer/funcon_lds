@@ -290,7 +290,7 @@ def plot_weights_all_data_sets(weight_mtx, num_data_sets, colormap, color_lims, 
             plt.savefig(string)
         else:
             plt.show()
-
+    plt.close()
 
 def plot_weights_mean_median(weight_mtx, colormap, save=False, fig_path='', data_title='', data_name=''):
     color_lims = np.nanquantile(np.abs(weight_mtx).flatten(), 0.99)
@@ -324,7 +324,10 @@ def plot_weights_mean_median_split(weight_mtx, colormap, num_lags, save=False, f
     for i in range(2):
         for j in range(num_cols):
             ix = i * num_cols + j
-            if ix < len(temp):
+            if len(temp) == 2:
+                pos = axs[i].imshow(temp[i], aspect='auto', interpolation='none', cmap=colormap,
+                                    norm=plt.Normalize(vmin=-color_lims, vmax=color_lims))
+            elif ix < len(temp):
                 pos = axs[i, j].imshow(temp[ix], aspect='auto', interpolation='none', cmap=colormap,
                                        norm=plt.Normalize(vmin=-color_lims, vmax=color_lims))
     fig.colorbar(pos, ax=axs.ravel().tolist(), pad=0.04, aspect=30)
@@ -408,6 +411,7 @@ def impulse_response_func(num_sim, cell_ids, cell_ids_chosen, num_neurons, num_d
                 #     x_model.append(x_t_bar[0, :, :])
 
                 pred_x_0_col = np.empty((emissions_num_lags * num_neurons, stim_times.size))
+                # todo instead of emissions init, set to zeros (find the right dims)
                 for i in range(stim_times.size):
                     # get initial values of emissions before stimulation
                     pred_x_0 = curr_emissions[stim_times[i] - emissions_num_lags:stim_times[i], :]
@@ -454,48 +458,68 @@ def plot_l2_norms(emissions, inputs, cell_ids, cell_ids_chosen, avg_pred_x_all_d
     chosen_neuron_inds = [cell_ids.index(i) for i in cell_ids_chosen]
 
     plot_x = np.arange(len(chosen_neuron_inds))
-    # measured_stim_responses = au.get_stim_response(emissions, inputs, window=(0, emissions[0].shape[0]))
-    measured_stim_responses = au.get_stim_response(emissions, inputs, window=window)[0]
+    # measured_stim_responses = au.get_stim_response(emissions, inputs, sub_start=True, window=(0, emissions[0].shape[0]))
+    measured_stim_responses = au.get_stim_response(emissions, inputs, sub_start=True, window=window)[0]
     measured_response_norm = au.rms(measured_stim_responses, axis=0)
     measured_response_norm = measured_response_norm[np.ix_(chosen_neuron_inds, chosen_neuron_inds)]
     measured_response_norm[np.eye(measured_response_norm.shape[0], dtype=bool)] = 0
-    measured_response_norm = measured_response_norm / np.nanmax(measured_response_norm)
+
+    # measured_response_norm = measured_response_norm / np.nanmax(measured_response_norm)
 
     # pred_response_norm_plot = np.zeros((len(chosen_neuron_inds), len(chosen_neuron_inds)))
-    # only take the l2 norm of the trace AFTER the stim, so remove the initialization at timestep 0
     pred_response_norm = au.rms(avg_pred_x_all_data, axis=0)
     pred_response_norm_plot = pred_response_norm[chosen_neuron_inds, :]
     # pred_response_norm_plot[:, n] = pred_response_norm
 
     # set diag = 0 and normalize
     pred_response_norm_plot[np.eye(pred_response_norm_plot.shape[0], dtype=bool)] = 0
-    pred_response_norm_plot = pred_response_norm_plot / np.nanmax(pred_response_norm_plot)
-    # pred_response_norm = pred_response_norm / np.nanmax(pred_response_norm)
-    # temp = np.empty((len(chosen_neuron_inds), len(chosen_neuron_inds)))
-    # temp[:] = np.nan
-    # temp[:, 0] = pred_response_norm
-    # pred_response_norm = temp
+
+    # pred_response_norm_plot = pred_response_norm_plot / np.nanmax(pred_response_norm_plot)
+
+    # correlations:
+    corr_data, corr_data_subset = get_correlation(emissions, inputs, cell_ids, cell_ids_chosen, avg_pred_x_all_data,
+                                                  colormap, save=True, fig_path=fig_path)
 
     plt.figure()
-    fig, ax = plt.subplots(1, 2)
-    obj = ax[0].imshow(measured_response_norm, interpolation='nearest', cmap=colormap)
-    ax[0].set_title('measured response L2 norm')
-    ax[0].set_xticks(plot_x, cell_ids_chosen)
-    ax[0].set_yticks(plot_x, cell_ids_chosen)
-    for label in ax[0].get_xticklabels():
+    fig, ax = plt.subplots(2, 2)
+    obj = ax[0, 0].imshow(measured_response_norm, interpolation='nearest', cmap=colormap)
+    ax[0, 0].set_title('measured response L2 norm')
+    ax[0, 0].set_xticks(plot_x, cell_ids_chosen)
+    ax[0, 0].set_yticks(plot_x, cell_ids_chosen)
+    for label in ax[0, 0].get_xticklabels():
         label.set_rotation(90)
     obj.set_clim((-1, 1))
 
-    obj = ax[1].imshow(pred_response_norm_plot, interpolation='nearest', cmap=colormap)
-    ax[1].set_title('model response L2 norm')
-    ax[1].set_xticks(plot_x, cell_ids_chosen)
-    ax[1].set_yticks(plot_x, cell_ids_chosen)
-    for label in ax[1].get_xticklabels():
+    obj = ax[0, 1].imshow(pred_response_norm_plot, interpolation='nearest', cmap=colormap)
+    ax[0, 1].set_title('model response L2 norm')
+    ax[0, 1].set_xticks(plot_x, cell_ids_chosen)
+    ax[0, 1].set_yticks(plot_x, cell_ids_chosen)
+    for label in ax[0, 1].get_xticklabels():
+        label.set_rotation(90)
+    obj.set_clim((-1, 1))
+
+    obj = ax[1, 0].imshow(corr_data_subset, interpolation='nearest', cmap=colormap)
+    ax[1, 0].set_title('correlation subset')
+    ax[1, 0].set_xticks(plot_x, cell_ids_chosen)
+    ax[1, 0].set_yticks(plot_x, cell_ids_chosen)
+    for label in ax[1, 0].get_xticklabels():
         label.set_rotation(90)
     obj.set_clim((-1, 1))
 
     if save:
         string = fig_path + 'l2norm.png'
+        plt.savefig(string)
+    else:
+        plt.show()
+
+    plt.figure()
+    obj = plt.imshow(corr_data, interpolation='nearest', cmap=colormap)
+    plt.title('correlation')
+    plt.clim((-1, 1))
+    plt.colorbar(obj)
+
+    if save:
+        string = fig_path + 'corr.png'
         plt.savefig(string)
     else:
         plt.show()
@@ -510,43 +534,50 @@ def plot_imp_resp(emissions, inputs, neuron_inds_chosen, num_neurons, num_data_s
     window = (-60, 120)
     # list of neuron indices
     chosen_neuron_inds = [cell_ids.index(i) for i in cell_ids_chosen]
-    measured_stim_responses = au.get_stim_response(emissions, inputs, window=window)[0]
-    measured_response_norm = au.rms(measured_stim_responses, axis=0)
-    measured_response_norm = measured_response_norm[chosen_neuron_inds, :][:, chosen_neuron_inds]
-    measured_response_norm[np.eye(measured_response_norm.shape[0], dtype=bool)] = 0
-    measured_response_norm = measured_response_norm / np.nanmax(measured_response_norm)
+    measured_stim_responses = au.get_stim_response(emissions, inputs, sub_start=True, window=window)[0]
+    # measured_response_norm = au.rms(measured_stim_responses, axis=0)
+    # measured_response_norm = measured_response_norm[chosen_neuron_inds, :][:, chosen_neuron_inds]
+    # measured_response_norm[np.eye(measured_response_norm.shape[0], dtype=bool)] = 0
+    # measured_response_norm = measured_response_norm / np.nanmax(measured_response_norm)
+
+    # # add on the avg emissions initial conditions before the stimulus
+    # model_pred_resp = np.zeros((np.abs(window[0]), num_neurons, num_data_sets))
+    # for d in range(num_data_sets):
+    #     stim_times = np.where(inputs[d][:, cell_ids.index(neuron_to_stim)])[0]
+    #     temp = np.zeros((np.abs(window[0]), num_neurons, stim_times.size))
+    #     for i in range(stim_times.size):
+    #         # get initial values of emissions before stimulation
+    #         if (stim_times[i] - np.abs(window[0])) < 0:
+    #             temp[(np.abs(window[0]) - stim_times[i]):, :, i] = emissions[d][:stim_times[i], :]
+    #         else:
+    #             temp[:, :, i] = emissions[d][(stim_times[i] - np.abs(window[0])):stim_times[i], :]
+    #     model_pred_resp[:, :, d] = np.nanmean(temp, axis=2)
+    # model_pred_resp_avg = np.nanmean(model_pred_resp, axis=2)
+
+    # get the index of the neuron that was stimulated out of all the cell indices
+    neuron_to_stim_ind = cell_ids.index(neuron_to_stim)
+    # but we already removed all the other indices except for the subset we're analyzing, so find the corr. index of the
+    # stim neuron out of the subset
+    neuron_to_stim_ind = chosen_neuron_inds.index(neuron_to_stim_ind)
+
+    # time x all responding neurons for the stim neuron
+    # plot_model_resp = np.concatenate((model_pred_resp_avg, avg_pred_x_all_data[:, :, neuron_to_stim_ind]), axis=0)
+    plot_model_resp = np.concatenate((measured_stim_responses[:60, :, cell_ids.index(neuron_to_stim)],
+                                      avg_pred_x_all_data[:, :, neuron_to_stim_ind]), axis=0)
 
     # pull out subset of meas stim responses to compare against model
-    measured_response_norm = measured_response_norm[:, chosen_neuron_inds, :]
-
-    # add on the avg emissions initial conditions before the stimulus
-    model_pred_resp = np.zeros((np.abs(window[0]), num_neurons, num_data_sets))
-    for d in range(num_data_sets):
-        stim_times = np.where(inputs[d][:, cell_ids.index(neuron_to_stim)])[0]
-        temp = np.zeros((np.abs(window[0]), num_neurons, stim_times.size))
-        for i in range(stim_times.size):
-            # get initial values of emissions before stimulation
-            if (stim_times[i] - np.abs(window[0])) < 0:
-                temp[(np.abs(window[0]) - stim_times[i]):, :, i] = emissions[d][:stim_times[i], :]
-            else:
-                temp[:, :, i] = emissions[d][(stim_times[i] - np.abs(window[0])):stim_times[i], :]
-        model_pred_resp[:, :, d] = np.nanmean(temp, axis=2)
-    model_pred_resp_avg = np.nanmean(model_pred_resp, axis=2)
-
-    neuron_to_stim_ind = cell_ids.index(neuron_to_stim)
-
-    # time x all responding neurons x subset of stim neurons
-    plot_model_resp = np.concatenate((model_pred_resp_avg, avg_pred_x_all_data[:, :, neuron_to_stim_ind]), axis=0)
+    measured_stim_responses = measured_stim_responses[:, chosen_neuron_inds, :]
 
     plot_x = np.arange(window[0], window[1]) * sample_rate
-    ylim = (np.nanmin(measured_response_norm[:, :, neuron_to_stim_ind]),
-            np.nanmax(measured_response_norm[:, :, neuron_to_stim_ind]))
+    temp = np.concatenate((measured_stim_responses[:, :, cell_ids.index(neuron_to_stim)], plot_model_resp[:, neuron_inds_chosen]),
+                          axis=1)
+    ylim = (np.nanmin(temp), np.nanmax(temp))
 
     # then plot the measured results from the experimental data
     for i in range(len(neuron_inds_chosen)):
         plt.figure()
         plt.title('stimulated input neuron: ' + neuron_to_stim)
-        plt.plot(plot_x, measured_response_norm[:, i, neuron_to_stim_ind])
+        plt.plot(plot_x, measured_stim_responses[:, i, cell_ids.index(neuron_to_stim)])
         plt.plot(plot_x, plot_model_resp[:, neuron_inds_chosen[i]])
         plt.xlabel('time')
         plt.ylabel('avg response in ' + cell_ids_chosen[i])
@@ -591,49 +622,69 @@ def plot_input_weights_neurons(b_hat, num_lags, cell_ids, colormap, data_name, s
     else:
         plt.show()
 
+def nancorrcoef(data):
+    num_data = len(data)
+    corr_coef = np.zeros((num_data, num_data))
 
-def plot_correlation(emissions, inputs, cell_ids, cell_ids_chosen, avg_pred_x_all_data, colormap, save=False,
+    for ii, i in enumerate(data):
+        for ji, j in enumerate(data):
+            i = (i - np.nanmean(i, axis=0)) / np.nanstd(i, ddof=1)
+            j = (j - np.nanmean(j, axis=0)) / np.nanstd(j, ddof=1)
+
+            corr_coef[ii, ji] = np.nanmean(i * j)
+
+    return corr_coef
+def get_correlation(emissions, inputs, cell_ids, cell_ids_chosen, avg_pred_x_all_data, colormap, save=False,
                      fig_path=''):
     window = (0, 120)
     # list of neuron indices
     chosen_neuron_inds = [cell_ids.index(i) for i in cell_ids_chosen]
 
     plot_x = np.arange(len(chosen_neuron_inds))
-    # measured_stim_responses = au.get_stim_response(emissions, inputs, window=(0, emissions[0].shape[0]))
-    measured_stim_responses = au.get_stim_response(emissions, inputs, window=window)
-    measured_response_norm = au.rms(measured_stim_responses, axis=0)
+    # measured_stim_responses = au.get_stim_response(emissions, inputs, sub_start=True, window=(0, emissions[0].shape[0]))
+    measured_stim_responses = au.get_stim_response(emissions, inputs, sub_start=True, window=window)
+    measured_response_norm = au.rms(measured_stim_responses[0], axis=0)
     measured_response_norm = measured_response_norm[chosen_neuron_inds, :][:, chosen_neuron_inds]
     measured_response_norm[np.eye(measured_response_norm.shape[0], dtype=bool)] = 0
-    measured_response_norm = measured_response_norm / np.nanmax(measured_response_norm)
+    # measured_response_norm = measured_response_norm / np.nanmax(measured_response_norm)
 
     # pred_response_norm_plot = np.zeros((len(chosen_neuron_inds), len(chosen_neuron_inds)))
     # only take the l2 norm of the trace AFTER the stim, so remove the initialization at timestep 0
-    pred_response_norm = au.rms(avg_pred_x_all_data[1:, :, :], axis=0)
+    pred_response_norm = au.rms(avg_pred_x_all_data, axis=0)
     pred_response_norm_plot = pred_response_norm[chosen_neuron_inds, :]
 
     # set diag = 0 and normalize
     pred_response_norm_plot[np.eye(pred_response_norm_plot.shape[0], dtype=bool)] = 0
-    pred_response_norm_plot = pred_response_norm_plot / np.nanmax(pred_response_norm_plot)
+    # pred_response_norm_plot = pred_response_norm_plot / np.nanmax(pred_response_norm_plot)
 
     # subtract the mean off the data first before finding the corr coeff
-    measured_response_norm_avg = np.mean(measured_response_norm)
-    measured_response_norm -= measured_response_norm_avg
-    pred_response_norm_plot_avg = np.mean(pred_response_norm_plot)
-    pred_response_norm_plot -= pred_response_norm_plot_avg
+    # measured_response_norm_avg = np.mean(measured_response_norm)
+    # measured_response_norm -= measured_response_norm_avg
+    # pred_response_norm_plot_avg = np.mean(pred_response_norm_plot)
+    # pred_response_norm_plot -= pred_response_norm_plot_avg
 
-    corr = np.corrcoef(measured_response_norm, pred_response_norm_plot)
+    corr_meas_to_pred = nancorrcoef([measured_response_norm.flatten(), pred_response_norm_plot.flatten()])[0, 1]
+    # corr_data = np.nanmean(emissions, axis=2).T @ np.nanmean(emissions, axis=2)
+    corr_data = np.abs(au.nan_corr_data(emissions))
+
+    # set diag = 0 and normalize
+    corr_data[np.eye(corr_data.shape[0], dtype=bool)] = 0
+    # corr_data = corr_data / np.nanmax(corr_data)
+
+    corr_data_subset = corr_data[:, chosen_neuron_inds][chosen_neuron_inds, :]
+    corr_meas_to_corr = nancorrcoef([measured_response_norm.flatten(), corr_data_subset.flatten()])[0, 1]
+    corr_pred_to_corr = nancorrcoef([pred_response_norm_plot.flatten(), corr_data_subset.flatten()])[0, 1]
+
     plt.figure()
-    fig, ax = plt.subplots(1, 1)
-    obj = ax[0].imshow(corr, interpolation='nearest', cmap=colormap)
-    ax[0].set_title('correlation')
-    ax[0].set_xticks(plot_x, cell_ids_chosen)
-    ax[0].set_yticks(plot_x, cell_ids_chosen)
-    for label in ax[0].get_xticklabels():
-        label.set_rotation(90)
-    obj.set_clim((-1, 1))
+    values = [corr_meas_to_pred, corr_meas_to_corr, corr_pred_to_corr]
+    labels = ['corr_meas_to_pred', 'corr_meas_to_corr', 'corr_pred_to_corr']
+    plt.bar(labels, values)
+    plt.title('correlations')
 
     if save:
-        string = fig_path + 'corr.png'
+        string = fig_path + 'corr_bar.png'
         plt.savefig(string)
     else:
         plt.show()
+
+    return corr_data, corr_data_subset
