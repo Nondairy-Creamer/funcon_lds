@@ -155,6 +155,9 @@ def fit_em(model, data, init_mean=None, init_cov=None, num_steps=10,
         if init_cov is None:
             init_cov = model.estimate_init_cov(emissions)
 
+        starting_log_likelihood = model.log_likelihood
+        starting_time = model.train_time
+
     else:
         emissions = None
         inputs = None
@@ -163,8 +166,6 @@ def fit_em(model, data, init_mean=None, init_cov=None, num_steps=10,
 
     log_likelihood_out = []
     time_out = []
-    starting_log_likelihood = model.log_likelihood
-    starting_time = model.train_time
 
     start = time.time()
     for ep in range(starting_step, starting_step + num_steps):
