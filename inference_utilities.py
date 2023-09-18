@@ -131,7 +131,7 @@ def solve_masked(A, b, mask=None, ridge_penalty=None):
 
 
 def fit_em(model, data, init_mean=None, init_cov=None, num_steps=10,
-           save_folder='em_test', save_every=10, memmap_cpu_id=None):
+           save_folder='em_test', save_every=10, memmap_cpu_id=None, starting_step=0):
     comm = pkl5.Intracomm(MPI.COMM_WORLD)
     cpu_id = comm.Get_rank()
     size = comm.Get_size()
@@ -163,9 +163,11 @@ def fit_em(model, data, init_mean=None, init_cov=None, num_steps=10,
 
     log_likelihood_out = []
     time_out = []
+    starting_log_likelihood = model.log_likelihood
+    starting_time = model.train_time
 
     start = time.time()
-    for ep in range(num_steps):
+    for ep in range(starting_step, starting_step + num_steps):
         model = comm.bcast(model, root=0)
 
         ll, smoothed_means, new_init_covs = \
@@ -179,8 +181,12 @@ def fit_em(model, data, init_mean=None, init_cov=None, num_steps=10,
 
             log_likelihood_out.append(ll)
             time_out.append(time.time() - start)
-            model.log_likelihood = log_likelihood_out
-            model.train_time = time_out
+            if starting_step > 0:
+                model.log_likelihood = np.concatenate((starting_log_likelihood, log_likelihood_out))
+                model.train_time = np.concatenate((starting_time, time_out))
+            else:
+                model.log_likelihood = log_likelihood_out
+                model.train_time = time_out
 
             if np.mod(ep + 1, save_every) == 0:
                 smoothed_means = [i[:, :model.dynamics_dim] for i in smoothed_means]
@@ -194,10 +200,10 @@ def fit_em(model, data, init_mean=None, init_cov=None, num_steps=10,
                 lu.save_run(save_folder, model_trained=model, ep=ep+1, posterior_train=posterior_train)
 
             if model.verbose:
-                print('Finished step', ep + 1, '/', num_steps)
+                print('Finished step', ep + 1, '/', starting_step + num_steps)
                 print('log likelihood =', log_likelihood_out[-1])
                 print('Time elapsed =', time_out[-1], 's')
-                time_remaining = time_out[-1] / (ep + 1) * (num_steps - ep - 1)
+                time_remaining = time_out[-1] / (ep - starting_step + 1) * (num_steps - (ep - starting_step) - 1)
                 print('Estimated remaining =', time_remaining, 's')
 
     if cpu_id == 0:

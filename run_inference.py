@@ -160,47 +160,6 @@ def fit_experimental(param_name, save_folder):
     run_fitting(run_params, model_trained, data_train, data_test, save_folder)
 
 
-def run_fitting(run_params, model, data_train, data_test, save_folder, model_true=None):
-    comm = pkl5.Intracomm(MPI.COMM_WORLD)
-    size = comm.Get_size()
-    cpu_id = comm.Get_rank()
-    is_parallel = size > 1
-
-    # if memory gets to big, use memmap. Reduces speed but significantly reduces memory
-    if run_params['use_memmap']:
-        memmap_cpu_id = cpu_id
-    else:
-        memmap_cpu_id = None
-
-    # fit the model using expectation maximization
-    ll, model, init_mean, init_cov = \
-        iu.fit_em(model, data_train, num_steps=run_params['num_train_steps'],
-                  save_folder=save_folder, memmap_cpu_id=memmap_cpu_id)
-
-    # sample from the model
-    if cpu_id == 0:
-        print('get posterior for the training data')
-    posterior_train = iu.parallel_get_post(model, data_train, init_mean=init_mean, init_cov=init_cov,
-                                           max_iter=100, converge_res=1e-2, time_lim=300,
-                                           memmap_cpu_id=memmap_cpu_id)
-
-    if cpu_id == 0:
-        print('get posterior for the test data')
-    posterior_test = iu.parallel_get_post(model, data_test, init_mean=None, init_cov=None, max_iter=100,
-                                          converge_res=1e-2, time_lim=300, memmap_cpu_id=memmap_cpu_id)
-
-    if cpu_id == 0:
-        lu.save_run(save_folder, model_trained=model, ep=-1, posterior_train=posterior_train,
-                    posterior_test=posterior_test)
-
-        if run_params['use_memmap']:
-            for i in range(size):
-                os.remove('/tmp/filtered_covs_' + str(i) + '.tmp')
-
-        if not is_parallel and run_params['plot_figures']:
-            am.plot_model_params(model, model_true=model_true)
-
-
 def infer_posterior(param_name, data_folder):
     # fit a posterior to test data
     # set up the option to parallelize the model fitting over CPUs
@@ -244,3 +203,107 @@ def infer_posterior(param_name, data_folder):
 
     if cpu_id == 0:
         lu.save_run(data_folder, posterior_train=posterior_train, posterior_test=posterior_test)
+
+
+def continue_fit(param_name, save_folder, extra_train_steps):
+    # set up the option to parallelize the model fitting over CPUs
+    comm = pkl5.Intracomm(MPI.COMM_WORLD)
+    size = comm.Get_size()
+    cpu_id = comm.Get_rank()
+
+    run_params = lu.get_run_params(param_name=param_name)
+
+    # cpu_id 0 is the parent node which will send out the data to the children nodes
+    if cpu_id == 0:
+        save_folder = Path(save_folder)
+        # load in the data for the model and do any preprocessing here
+        data_train_path = save_folder / 'data_train.pkl'
+        data_train_file = open(data_train_path, 'rb')
+        data_train = pickle.load(data_train_file)
+        data_train_file.close()
+
+        data_test_path = save_folder / 'data_test.pkl'
+        data_test_file = open(data_test_path, 'rb')
+        data_test = pickle.load(data_test_file)
+        data_test_file.close()
+
+        posterior_train_path = save_folder / 'posterior_train.pkl'
+        posterior_train_file = open(posterior_train_path, 'rb')
+        posterior_train = pickle.load(posterior_train_file)
+        posterior_train_file.close()
+
+        model_path = save_folder / 'models' / 'model_trained.pkl'
+        model_file = open(model_path, 'rb')
+        model_trained = pickle.load(model_file)
+        model_file.close()
+
+        init_mean = posterior_train['init_mean']
+        init_cov = posterior_train['init_cov']
+        num_neurons = data_train['emissions'][0].shape[1]
+        # create a mask for the dynamics_input_weights. This allows us to fit dynamics weights that are diagonal
+        # if a neuron never receives stimulation, mask its weight too
+        input_mask = np.eye(num_neurons)
+        has_stims = np.any(np.concatenate(data_train['inputs'], axis=0), axis=0)
+        input_mask[np.diag(~has_stims)] = 0
+        # set the model properties so the model fits with this mask
+        run_params['param_props']['mask']['dynamics_input_weights'] = input_mask
+        run_params['num_train_steps'] = extra_train_steps
+        current_step = len(model_trained.log_likelihood)
+
+    else:
+        # if you are a child node, just set everything to None and only calculate your sufficient statistics
+        model_trained = None
+        data_train = None
+        data_test = None
+
+    run_fitting(run_params, model_trained, data_train, data_test, save_folder,
+                init_mean=init_mean, init_cov=init_cov, current_step=current_step)
+
+
+def run_fitting(run_params, model, data_train, data_test, save_folder,
+                init_mean=None, init_cov=None, model_true=None, current_step=0):
+    comm = pkl5.Intracomm(MPI.COMM_WORLD)
+    size = comm.Get_size()
+    cpu_id = comm.Get_rank()
+    is_parallel = size > 1
+
+    # if memory gets to big, use memmap. Reduces speed but significantly reduces memory
+    if run_params['use_memmap']:
+        memmap_cpu_id = cpu_id
+    else:
+        memmap_cpu_id = None
+
+    if init_mean is None:
+        init_mean = model.estimate_init_mean(data_train['emissions'])
+
+    if init_cov is None:
+        init_cov = model.estimate_init_cov(data_train['emissions'])
+
+    # fit the model using expectation maximization
+    ll, model, init_mean, init_cov = \
+        iu.fit_em(model, data_train, num_steps=run_params['num_train_steps'], init_mean=init_mean, init_cov=init_cov,
+                  save_folder=save_folder, memmap_cpu_id=memmap_cpu_id, starting_step=current_step)
+
+    # sample from the model
+    if cpu_id == 0:
+        print('get posterior for the training data')
+    posterior_train = iu.parallel_get_post(model, data_train, init_mean=init_mean, init_cov=init_cov,
+                                           max_iter=100, converge_res=1e-2, time_lim=300,
+                                           memmap_cpu_id=memmap_cpu_id)
+
+    if cpu_id == 0:
+        print('get posterior for the test data')
+    posterior_test = iu.parallel_get_post(model, data_test, init_mean=None, init_cov=None, max_iter=100,
+                                          converge_res=1e-2, time_lim=300, memmap_cpu_id=memmap_cpu_id)
+
+    if cpu_id == 0:
+        lu.save_run(save_folder, model_trained=model, ep=-1, posterior_train=posterior_train,
+                    posterior_test=posterior_test)
+
+        if run_params['use_memmap']:
+            for i in range(size):
+                os.remove('/tmp/filtered_covs_' + str(i) + '.tmp')
+
+        if not is_parallel and run_params['plot_figures']:
+            am.plot_model_params(model, model_true=model_true)
+
