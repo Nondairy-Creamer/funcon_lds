@@ -19,7 +19,6 @@ def main(param_name, folder_name=None, extra_train_steps=None):
         if extra_train_steps is None:
             run_type = 'post'
         else:
-            extra_train_steps = int(extra_train_steps)
             run_type = 'cont'
 
     param_name = Path(param_name)
@@ -104,7 +103,7 @@ if __name__ == '__main__':
     elif num_args == 4:
         param_name = sys.argv[1]
         folder_name = sys.argv[2]
-        extra_train_steps = sys.argv[3]
+        extra_train_steps = int(sys.argv[3])
     else:
         raise Exception('Unsupported number of arguments: (' + str(num_args))
 
