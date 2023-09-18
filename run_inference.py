@@ -212,6 +212,7 @@ def continue_fit(param_name, save_folder, extra_train_steps):
     cpu_id = comm.Get_rank()
 
     run_params = lu.get_run_params(param_name=param_name)
+    run_params['num_train_steps'] = extra_train_steps
 
     # cpu_id 0 is the parent node which will send out the data to the children nodes
     if cpu_id == 0:
@@ -247,7 +248,6 @@ def continue_fit(param_name, save_folder, extra_train_steps):
         input_mask[np.diag(~has_stims)] = 0
         # set the model properties so the model fits with this mask
         run_params['param_props']['mask']['dynamics_input_weights'] = input_mask
-        run_params['num_train_steps'] = extra_train_steps
         starting_step = len(model_trained.log_likelihood)
 
     else:
