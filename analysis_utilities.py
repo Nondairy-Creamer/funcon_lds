@@ -11,8 +11,8 @@ def auto_select_ids(inputs, cell_ids, num_neurons=10):
     return cell_ids_chosen, neuron_to_remove, neuron_to_stim
 
 
-def rms(data, axis=-1):
-    return np.sqrt(np.nanmean(data**2, axis=axis))
+def p_norm(data, power=1, axis=-1):
+    return np.nanmean(np.abs(data)**power, axis=axis)**(1/power)
 
 
 def nan_convolve(data, filter, mode='valid'):

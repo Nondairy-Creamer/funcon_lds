@@ -5,6 +5,7 @@ import analysis_utilities as au
 import loading_utilities as lu
 from pathlib import Path
 
+# run_params = lu.get_run_params(param_name='submission_scripts/ana_test.yml')
 run_params = lu.get_run_params(param_name='submission_scripts/ana_exp_DL.yml')
 # run_params = lu.get_run_params(param_name='submission_scripts/ana_syn_reg.yml')
 window = run_params['window']
@@ -86,10 +87,10 @@ posterior = posterior_dict['posterior']
 
 # get the impulse response functions (IRF)
 measured_irf, measured_irf_sem = au.get_impulse_response_function(emissions, inputs, window=window, sub_pre_stim=sub_pre_stim, return_pre=True)[:2]
-measured_irf_rms = au.rms(measured_irf[-window[0]:], axis=0)
+measured_irf_rms = au.p_norm(measured_irf[-window[0]:], axis=0)
 posterior_irf = au.get_impulse_response_function(posterior, inputs, window=window, sub_pre_stim=sub_pre_stim, return_pre=True)[0]
 post_pred_irf = au.get_impulse_response_function(post_pred, inputs, window=window, sub_pre_stim=sub_pre_stim, return_pre=True)[0]
-post_pred_irf_rms = au.rms(post_pred_irf[-window[0]:], axis=0)
+post_pred_irf_rms = au.p_norm(post_pred_irf[-window[0]:], axis=0)
 data_corr = np.abs(au.nan_corr_data(emissions))
 
 am.plot_model_params(model, model_true=model_true, cell_ids_chosen=cell_ids_chosen)

@@ -308,7 +308,7 @@ def plot_stim_l2_norm(model, measured_irf, post_pred_irf, data_corr, cell_ids_ch
     chosen_neuron_inds = [cell_ids.index(i) for i in cell_ids_chosen]
     is_synth = '0' in cell_ids
 
-    model_weights = au.rms(au.stack_weights(model.dynamics_weights[:model.dynamics_dim, :], model.dynamics_lags, axis=1), axis=0)
+    model_weights = au.p_norm(au.stack_weights(model.dynamics_weights[:model.dynamics_dim, :], model.dynamics_lags, axis=1), axis=0)
 
     # set the diagonal to nan to do stats on everything else
     data_corr[np.eye(data_corr.shape[0], dtype=bool)] = np.nan
@@ -379,7 +379,7 @@ def plot_stim_l2_norm(model, measured_irf, post_pred_irf, data_corr, cell_ids_ch
 def compare_irf_w_anatomy(model, measured_irf, post_pred_irf, data_corr):
     cell_ids = model.cell_ids
 
-    model_weights = au.rms(au.stack_weights(model.dynamics_weights[:model.dynamics_dim, :], model.dynamics_lags, axis=1), axis=0)
+    model_weights = au.p_norm(au.stack_weights(model.dynamics_weights[:model.dynamics_dim, :], model.dynamics_lags, axis=1), axis=0)
 
     # load in anatomical data
     watlas = wa.NeuroAtlas()
@@ -475,7 +475,7 @@ def plot_stim_response(measured_irf, measured_irf_sem, posterior_irf, post_pred_
     posterior_irf = posterior_irf[:, chosen_neuron_inds, :][:, :, chosen_neuron_inds]
 
     # find the 5 highest responses to plot
-    measured_stim_responses_l2 = au.rms(measured_irf, axis=0)
+    measured_stim_responses_l2 = au.p_norm(measured_irf, axis=0)
     measured_stim_responses_l2[np.eye(measured_stim_responses_l2.shape[0], dtype=bool)] = 0
     sorted_vals = np.sort(measured_stim_responses_l2.reshape(-1))
     plot_inds = []
