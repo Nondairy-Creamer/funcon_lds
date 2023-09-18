@@ -273,11 +273,12 @@ def run_fitting(run_params, model, data_train, data_test, save_folder,
     else:
         memmap_cpu_id = None
 
-    if init_mean is None:
-        init_mean = model.estimate_init_mean(data_train['emissions'])
+    if cpu_id == 0:
+        if init_mean is None:
+            init_mean = model.estimate_init_mean(data_train['emissions'])
 
-    if init_cov is None:
-        init_cov = model.estimate_init_cov(data_train['emissions'])
+        if init_cov is None:
+            init_cov = model.estimate_init_cov(data_train['emissions'])
 
     # fit the model using expectation maximization
     ll, model, init_mean, init_cov = \
