@@ -248,7 +248,7 @@ def continue_fit(param_name, save_folder, extra_train_steps):
         # set the model properties so the model fits with this mask
         run_params['param_props']['mask']['dynamics_input_weights'] = input_mask
         run_params['num_train_steps'] = extra_train_steps
-        current_step = len(model_trained.log_likelihood)
+        starting_step = len(model_trained.log_likelihood)
 
     else:
         # if you are a child node, just set everything to None and only calculate your sufficient statistics
@@ -257,13 +257,14 @@ def continue_fit(param_name, save_folder, extra_train_steps):
         data_test = None
         init_mean = None
         init_cov = None
+        starting_step = 0
 
     run_fitting(run_params, model_trained, data_train, data_test, save_folder,
-                init_mean=init_mean, init_cov=init_cov, current_step=current_step)
+                init_mean=init_mean, init_cov=init_cov, starting_step=starting_step)
 
 
 def run_fitting(run_params, model, data_train, data_test, save_folder,
-                init_mean=None, init_cov=None, model_true=None, current_step=0):
+                init_mean=None, init_cov=None, model_true=None, starting_step=0):
     comm = pkl5.Intracomm(MPI.COMM_WORLD)
     size = comm.Get_size()
     cpu_id = comm.Get_rank()
@@ -285,7 +286,7 @@ def run_fitting(run_params, model, data_train, data_test, save_folder,
     # fit the model using expectation maximization
     ll, model, init_mean, init_cov = \
         iu.fit_em(model, data_train, num_steps=run_params['num_train_steps'], init_mean=init_mean, init_cov=init_cov,
-                  save_folder=save_folder, memmap_cpu_id=memmap_cpu_id, starting_step=current_step)
+                  save_folder=save_folder, memmap_cpu_id=memmap_cpu_id, starting_step=starting_step)
 
     # sample from the model
     if cpu_id == 0:
