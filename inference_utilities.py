@@ -306,6 +306,7 @@ def parallel_get_post(model, data, init_mean=None, init_cov=None, max_iter=1, co
                           'post_pred_noise': post_pred_noise,
                           'init_mean': init_mean,
                           'init_cov': init_cov,
+                          'cell_ids': model.cell_ids,
                           }
 
         return inference_test

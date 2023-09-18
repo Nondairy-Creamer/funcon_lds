@@ -120,7 +120,6 @@ def find_stim_events(inputs, window_size=1000):
     return max_data_set, time_window
 
 
-
 def nan_corr_data(data):
     # calculate the average cross correlation between neurons
     emissions_cov = []

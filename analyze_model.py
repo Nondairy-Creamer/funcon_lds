@@ -99,7 +99,6 @@ am.plot_posterior(data, posterior_dict, cell_ids_chosen, sample_rate=model.sampl
 am.plot_stim_l2_norm(model, measured_irf_rms, post_pred_irf_rms, data_corr, cell_ids_chosen)
 if not is_synth:
     am.compare_irf_w_anatomy(model, measured_irf_rms, post_pred_irf_rms, data_corr)
-am.plot_stim_response(data, posterior_dict, cell_ids_chosen, neuron_to_stim, window=window, sample_rate=model.sample_rate)
 am.plot_stim_response(measured_irf, measured_irf_sem, posterior_irf, post_pred_irf, cell_ids, cell_ids_chosen, window,
                       sample_rate=model.sample_rate, num_plot=5)
 posterior_dict['posterior_missing'] = am.plot_missing_neuron(model, data, posterior_dict, cell_ids_chosen, neuron_to_remove, force_calc=run_params['force_calc_missing_posterior'])
