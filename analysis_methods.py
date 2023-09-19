@@ -27,7 +27,7 @@ def plot_model_params(model, model_true=None, cell_ids_chosen=None):
     plt.figure()
     plt.plot(model.log_likelihood, label='fit parameters')
     if has_ground_truth:
-        plt.axhline(model_true.log_likelihood[0], color='k', linestyle=':' , label='true parameters')
+        plt.axhline(model_true.log_likelihood[0], color='k', linestyle=':', label='true parameters')
         plt.legend()
     plt.xlabel('EM iteration')
     plt.ylabel('log likelihood')
