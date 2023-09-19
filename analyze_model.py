@@ -5,9 +5,9 @@ import analysis_utilities as au
 import loading_utilities as lu
 from pathlib import Path
 
-# run_params = lu.get_run_params(param_name='submission_scripts/ana_test.yml')
-run_params = lu.get_run_params(param_name='submission_scripts/ana_exp_DL.yml')
-# run_params = lu.get_run_params(param_name='submission_scripts/ana_syn_reg.yml')
+# run_params = lu.get_run_params(param_name='analysis_params/ana_test.yml')
+run_params = lu.get_run_params(param_name='analysis_params/ana_exp_DL.yml')
+# run_params = lu.get_run_params(param_name='analysis_params/ana_syn_ridge_sweep.yml')
 window = run_params['window']
 sub_pre_stim = run_params['sub_pre_stim']
 model_folders = [Path(i) for i in run_params['model_folders']]

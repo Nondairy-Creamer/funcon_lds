@@ -88,8 +88,8 @@ if __name__ == '__main__':
     num_args = len(sys.argv)
 
     if num_args == 1:
-        param_name = 'submission_scripts/syn_test.yml'
-        # param_name = 'submission_scripts/exp_test.yml'
+        param_name = 'submission_params/syn_test.yml'
+        # param_name = 'submission_params/exp_test.yml'
         folder_name = None
         extra_train_steps = None
     elif num_args == 2:
