@@ -353,14 +353,17 @@ def impulse_response_func(num_sim, cell_ids, cell_ids_chosen, num_neurons, num_d
         # responses
         # now it is a vector of time points x all responding neurons x subset of stim neurons
         avg_pred_x_all_data = np.zeros((num_sim, num_neurons, len(cell_ids_chosen)))
+        a_hat_avg = np.nanmean(all_a_hat, axis=2)
+        a_hat_split = np.array(np.split(a_hat_avg, emissions_num_lags, axis=1))
+        a_bar = get_lagged_weights(a_hat_split, emissions_num_lags)
         for n in range(len(cell_ids_chosen)):
             neuron_to_stim = cell_ids_chosen[n]
             avg_pred_x[:] = 0
             for d in range(num_data_sets):
                 curr_emissions = emissions[d]
                 curr_emissions[np.isnan(curr_emissions)] = 0
-                temp_a_hat = all_a_hat[:, :, d]
-                temp_a_hat[np.isnan(temp_a_hat)] = 0
+                # temp_a_hat = all_a_hat[:, :, d]
+                # temp_a_hat[np.isnan(temp_a_hat)] = 0
                 temp_b_hat = all_b_hat[:, :, d]
                 temp_b_hat[np.isnan(temp_b_hat)] = 0
 
@@ -368,8 +371,10 @@ def impulse_response_func(num_sim, cell_ids, cell_ids_chosen, num_neurons, num_d
                 # a_bar = np.zeros((emissions_num_lags * num_neurons, emissions_num_lags * num_neurons))
                 # a_bar[:num_neurons, :] = all_a_hat[:, :emissions_num_lags * num_neurons, d]
                 # a_bar[num_neurons:, :-num_neurons] = np.eye(num_neurons * (emissions_num_lags - 1))
-                a_hat_split = np.array(np.split(all_a_hat[:, :, d], emissions_num_lags, axis=1))
-                a_bar = get_lagged_weights(a_hat_split, emissions_num_lags)
+                # a_hat_split = np.array(np.split(all_a_hat[:, :, d], emissions_num_lags, axis=1))
+                # use averaged ahat
+                # a_hat_split = np.array(np.split(a_hat_avg, emissions_num_lags, axis=1))
+                # a_bar = get_lagged_weights(a_hat_split, emissions_num_lags)
 
                 # b_bar mtx
                 # b_bar = np.zeros((inputs_num_lags * num_neurons, inputs_num_lags * num_neurons))
@@ -410,12 +415,12 @@ def impulse_response_func(num_sim, cell_ids, cell_ids_chosen, num_neurons, num_d
                 #                            @ u_t_bar[t:t+num_sim, :, i]
                 #     x_model.append(x_t_bar[0, :, :])
 
-                pred_x_0_col = np.empty((emissions_num_lags * num_neurons, stim_times.size))
-                # todo instead of emissions init, set to zeros (find the right dims)
-                for i in range(stim_times.size):
-                    # get initial values of emissions before stimulation
-                    pred_x_0 = curr_emissions[stim_times[i] - emissions_num_lags:stim_times[i], :]
-                    pred_x_0_col[:, i] = np.reshape(pred_x_0, (emissions_num_lags * num_neurons))
+                pred_x_0_col = np.zeros((emissions_num_lags * num_neurons, stim_times.size))
+                # instead of initializing with previous emissions before stim, set to zeros
+                # for i in range(stim_times.size):
+                #     # get initial values of emissions before stimulation
+                #     pred_x_0 = curr_emissions[stim_times[i] - emissions_num_lags:stim_times[i], :]
+                #     pred_x_0_col[:, i] = np.reshape(pred_x_0, (emissions_num_lags * num_neurons))
 
                 pred_x_bar = np.zeros((num_sim, num_neurons * emissions_num_lags, stim_times.size))
                 pred_x_bar[0, :, :] = pred_x_0_col

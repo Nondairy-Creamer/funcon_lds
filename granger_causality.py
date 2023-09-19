@@ -6,10 +6,10 @@ import gc_utilities as gcu
 import os
 import sys
 
-# param_name = sys.argv[1]
-#
-# run_params = lu.get_run_params(param_name=f'submission_scripts/{param_name}')
-run_params = lu.get_run_params('submission_scripts/gc_DL6_IL45.yml')
+param_name = sys.argv[1]
+
+run_params = lu.get_run_params(param_name=f'submission_scripts/{param_name}')
+# run_params = lu.get_run_params('submission_scripts/gc_DL6_IL45.yml')
 
 make_avg_med_figs = run_params['make_avg_med_figs']
 make_best_figs = run_params['make_best_figs']
