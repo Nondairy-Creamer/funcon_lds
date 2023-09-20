@@ -339,6 +339,122 @@ def plot_weights_mean_median_split(weight_mtx, colormap, num_lags, save=False, f
 
 
 # sample from model for a specific stimulated neuron for num_sim
+# def impulse_response_func(num_sim, cell_ids, cell_ids_chosen, num_neurons, num_data_sets, emissions, inputs, all_a_hat,
+#                           all_b_hat, emissions_num_lags, inputs_num_lags, f_name='impulse_response_data',
+#                           load_dir='/Users/lsmith/Documents/python/', rerun=False):
+#     f_name = f_name + str(emissions_num_lags) + str(inputs_num_lags) + '.pkl'
+#     if os.path.exists(load_dir + f_name) and os.path.isfile(load_dir + f_name) and not rerun:
+#         with open(load_dir + f_name, 'rb') as f:
+#             avg_pred_x_all_data = pickle.load(f)
+#
+#     else:
+#         avg_pred_x = np.zeros((num_sim, num_neurons, num_data_sets))
+#         # fixed problem: was overwriting avg_pred_x_all_data for each stim neuron, so it only saved the last neuron's
+#         # responses
+#         # now it is a vector of time points x all responding neurons x subset of stim neurons
+#         avg_pred_x_all_data = np.zeros((num_sim, num_neurons, len(cell_ids_chosen)))
+#         a_hat_avg = np.nanmean(all_a_hat, axis=2)
+#         a_hat_avg[np.isnan(a_hat_avg)] = 0
+#         a_hat_split = np.array(np.split(a_hat_avg, emissions_num_lags, axis=1))
+#         a_bar = get_lagged_weights(a_hat_split, emissions_num_lags)
+#         for n in range(len(cell_ids_chosen)):
+#             neuron_to_stim = cell_ids_chosen[n]
+#             avg_pred_x[:] = 0
+#             for d in range(num_data_sets):
+#                 curr_emissions = emissions[d]
+#                 curr_emissions[np.isnan(curr_emissions)] = 0
+#                 # temp_a_hat = all_a_hat[:, :, d]
+#                 # temp_a_hat[np.isnan(temp_a_hat)] = 0
+#                 temp_b_hat = all_b_hat[:, :, d]
+#                 temp_b_hat[np.isnan(temp_b_hat)] = 0
+#
+#                 # build the a_bar mtx: block mtx
+#                 # a_bar = np.zeros((emissions_num_lags * num_neurons, emissions_num_lags * num_neurons))
+#                 # a_bar[:num_neurons, :] = all_a_hat[:, :emissions_num_lags * num_neurons, d]
+#                 # a_bar[num_neurons:, :-num_neurons] = np.eye(num_neurons * (emissions_num_lags - 1))
+#                 # use averaged ahat instead
+#                 # a_hat_split = np.array(np.split(temp_a_hat, emissions_num_lags, axis=1))
+#                 # a_bar = get_lagged_weights(a_hat_split, emissions_num_lags)
+#
+#                 # b_bar mtx
+#                 # b_bar = np.zeros((inputs_num_lags * num_neurons, inputs_num_lags * num_neurons))
+#                 # b_bar[:num_neurons, :] = all_b_hat[:, :inputs_num_lags * num_neurons, d]
+#                 b_hat_split = np.array(np.split(all_b_hat[:, :, d], inputs_num_lags, axis=1))
+#                 b_bar = get_lagged_weights(b_hat_split, emissions_num_lags, fill='zeros')
+#
+#                 # use np.where to find locations where inputs are stimulated, get back the rows of where a certain
+#                 # neuron was stimmed, then use these row locations for the simulation
+#                 stim_times = np.where(inputs[d][:, cell_ids.index(neuron_to_stim)])[0]
+#
+#                 # lagged emissions
+#                 # x_t_bar = get_lagged_data(curr_emissions, emissions_num_lags)
+#                 # x_t_minus_1_bar = np.zeros((init_time, x_history[d].shape[1], stim_times.shape[0]))
+#                 # for i in range(stim_times.shape[0]): #all instances of neuron being stimmed
+#                 # (we avg these later)
+#                 #     for j in range(1, init_time+1): #j is num of lags back in time
+#                 #         x_t_minus_1_bar[j, :, i] = x_history[d][i-j, :]
+#
+#                 # inputs
+#                 u_t_bar = get_lagged_data(inputs[d], inputs_num_lags)
+#                 # u_t_bar = np.zeros((init_time+num_sim, u_history[d].shape[1], stim_times.shape[0]))
+#                 # for i in range(stim_times.shape[0]):  # all instances of neuron being stimmed (should be 3)
+#                 # (we avg these later)
+#                 #     for j in range(init_time*2):  # j is num of lags back in time
+#                 #         u_t_bar[j, :, i] = u_history[d][i - j, :]
+#
+#                 # inputs can be calculated outside the simulation
+#                 system_inputs = u_t_bar @ b_bar.T
+#
+#                 # x_model = []
+#                 # x_t_bar = np.zeros((num_sim, x_history[d].shape[1], stim_times.shape[0]))
+#                 # for t in range(num_sim):
+#                 #     for i in range(stim_times.shape[0]):
+#                 #         x_t_bar[:, :, i] = a_bar[num_neurons*t:num_neurons*(t+num_sim), num_neurons*t:num_neurons*(t+num_sim), i] \
+#                 #                            @ x_t_minus_1_bar[:, :, i] \
+#                 #                            + b_bar[num_neurons*t:num_neurons*(t+num_sim), num_neurons*t:num_neurons*(t+num_sim), i] \
+#                 #                            @ u_t_bar[t:t+num_sim, :, i]
+#                 #     x_model.append(x_t_bar[0, :, :])
+#
+#                 pred_x_0_col = np.zeros((emissions_num_lags * num_neurons, stim_times.size))
+#                 # instead of initializing with previous emissions before stim, set to zeros
+#                 for i in range(stim_times.size):
+#                     # get initial values of emissions before stimulation
+#                     pred_x_0 = curr_emissions[stim_times[i] - emissions_num_lags:stim_times[i], :]
+#                     pred_x_0_col[:, i] = np.reshape(pred_x_0, (emissions_num_lags * num_neurons))
+#
+#                 pred_x_bar = np.zeros((num_sim, num_neurons * emissions_num_lags, stim_times.size))
+#                 pred_x_bar[0, :, :] = pred_x_0_col
+#                 pred_x = np.zeros((num_sim, num_neurons, stim_times.size))
+#
+#                 for i in range(stim_times.size):
+#                     for t in range(1, num_sim):
+#                         pred_x_bar[t, :, i] = a_bar @ pred_x_bar[t - 1, :, i] + system_inputs[t, :]
+#
+#                     pred_x[:, :, i] = pred_x_bar[:, :num_neurons, i]
+#
+#                     # plt.figure()
+#                     # plt.imshow(pred_x[:, :, i].T[~nans, :], aspect='auto', interpolation='nearest')
+#                     # # plt.show()
+#
+#                 # plt.figure()
+#                 # plt.subplot(1, 2, 1)
+#                 # plt.imshow(a_bar, aspect='auto', interpolation='nearest')
+#                 # plt.subplot(1, 2, 2)
+#                 # plt.imshow(b_bar, aspect='auto', interpolation='nearest')
+#                 # # plt.show()
+#
+#                 # average the predicted model response after the stimulation over all stimulation events
+#                 avg_pred_x[:, :, d] = np.nanmean(pred_x, axis=2)
+#
+#             # average (across all datasets) the predicted responses in all neurons after stim
+#             avg_pred_x_all_data[:, :, n] = np.nanmean(avg_pred_x, axis=2)
+#
+#     with open(load_dir + f_name, 'wb') as f:
+#         pickle.dump(avg_pred_x_all_data, f)
+#
+#     return avg_pred_x_all_data
+
+# sample from model for a specific stimulated neuron for num_sim
 def impulse_response_func(num_sim, cell_ids, cell_ids_chosen, num_neurons, num_data_sets, emissions, inputs, all_a_hat,
                           all_b_hat, emissions_num_lags, inputs_num_lags, f_name='impulse_response_data',
                           load_dir='/Users/lsmith/Documents/python/', rerun=False):
@@ -354,31 +470,26 @@ def impulse_response_func(num_sim, cell_ids, cell_ids_chosen, num_neurons, num_d
         # now it is a vector of time points x all responding neurons x subset of stim neurons
         avg_pred_x_all_data = np.zeros((num_sim, num_neurons, len(cell_ids_chosen)))
         a_hat_avg = np.nanmean(all_a_hat, axis=2)
-        a_hat_split = np.array(np.split(a_hat_avg, emissions_num_lags, axis=1))
-        a_bar = get_lagged_weights(a_hat_split, emissions_num_lags)
+        a_hat_avg[np.isnan(a_hat_avg)] = 0
         for n in range(len(cell_ids_chosen)):
             neuron_to_stim = cell_ids_chosen[n]
             avg_pred_x[:] = 0
             for d in range(num_data_sets):
                 curr_emissions = emissions[d]
                 curr_emissions[np.isnan(curr_emissions)] = 0
-                # temp_a_hat = all_a_hat[:, :, d]
-                # temp_a_hat[np.isnan(temp_a_hat)] = 0
+                temp_a_hat = all_a_hat[:, :, d]
+                temp_a_hat[np.isnan(temp_a_hat)] = 0
                 temp_b_hat = all_b_hat[:, :, d]
                 temp_b_hat[np.isnan(temp_b_hat)] = 0
 
                 # build the a_bar mtx: block mtx
-                # a_bar = np.zeros((emissions_num_lags * num_neurons, emissions_num_lags * num_neurons))
-                # a_bar[:num_neurons, :] = all_a_hat[:, :emissions_num_lags * num_neurons, d]
-                # a_bar[num_neurons:, :-num_neurons] = np.eye(num_neurons * (emissions_num_lags - 1))
-                # a_hat_split = np.array(np.split(all_a_hat[:, :, d], emissions_num_lags, axis=1))
-                # use averaged ahat
+                # use averaged ahat instead
+                a_hat_split = np.array(np.split(temp_a_hat, emissions_num_lags, axis=1))
+                a_bar = get_lagged_weights(a_hat_split, emissions_num_lags)
                 # a_hat_split = np.array(np.split(a_hat_avg, emissions_num_lags, axis=1))
                 # a_bar = get_lagged_weights(a_hat_split, emissions_num_lags)
 
                 # b_bar mtx
-                # b_bar = np.zeros((inputs_num_lags * num_neurons, inputs_num_lags * num_neurons))
-                # b_bar[:num_neurons, :] = all_b_hat[:, :inputs_num_lags * num_neurons, d]
                 b_hat_split = np.array(np.split(all_b_hat[:, :, d], inputs_num_lags, axis=1))
                 b_bar = get_lagged_weights(b_hat_split, emissions_num_lags, fill='zeros')
 
@@ -386,41 +497,18 @@ def impulse_response_func(num_sim, cell_ids, cell_ids_chosen, num_neurons, num_d
                 # neuron was stimmed, then use these row locations for the simulation
                 stim_times = np.where(inputs[d][:, cell_ids.index(neuron_to_stim)])[0]
 
-                # lagged emissions
-                # x_t_bar = get_lagged_data(curr_emissions, emissions_num_lags)
-                # x_t_minus_1_bar = np.zeros((init_time, x_history[d].shape[1], stim_times.shape[0]))
-                # for i in range(stim_times.shape[0]): #all instances of neuron being stimmed (should be 3)
-                # (we avg these later)
-                #     for j in range(1, init_time+1): #j is num of lags back in time
-                #         x_t_minus_1_bar[j, :, i] = x_history[d][i-j, :]
-
                 # inputs
                 u_t_bar = get_lagged_data(inputs[d], inputs_num_lags)
-                # u_t_bar = np.zeros((init_time+num_sim, u_history[d].shape[1], stim_times.shape[0]))
-                # for i in range(stim_times.shape[0]):  # all instances of neuron being stimmed (should be 3)
-                # (we avg these later)
-                #     for j in range(init_time*2):  # j is num of lags back in time
-                #         u_t_bar[j, :, i] = u_history[d][i - j, :]
 
                 # inputs can be calculated outside the simulation
                 system_inputs = u_t_bar @ b_bar.T
 
-                # x_model = []
-                # x_t_bar = np.zeros((num_sim, x_history[d].shape[1], stim_times.shape[0]))
-                # for t in range(num_sim):
-                #     for i in range(stim_times.shape[0]):
-                #         x_t_bar[:, :, i] = a_bar[num_neurons*t:num_neurons*(t+num_sim), num_neurons*t:num_neurons*(t+num_sim), i] \
-                #                            @ x_t_minus_1_bar[:, :, i] \
-                #                            + b_bar[num_neurons*t:num_neurons*(t+num_sim), num_neurons*t:num_neurons*(t+num_sim), i] \
-                #                            @ u_t_bar[t:t+num_sim, :, i]
-                #     x_model.append(x_t_bar[0, :, :])
-
                 pred_x_0_col = np.zeros((emissions_num_lags * num_neurons, stim_times.size))
                 # instead of initializing with previous emissions before stim, set to zeros
-                # for i in range(stim_times.size):
-                #     # get initial values of emissions before stimulation
-                #     pred_x_0 = curr_emissions[stim_times[i] - emissions_num_lags:stim_times[i], :]
-                #     pred_x_0_col[:, i] = np.reshape(pred_x_0, (emissions_num_lags * num_neurons))
+                for i in range(stim_times.size):
+                    # get initial values of emissions before stimulation
+                    pred_x_0 = curr_emissions[stim_times[i] - emissions_num_lags:stim_times[i], :]
+                    pred_x_0_col[:, i] = np.reshape(pred_x_0, (emissions_num_lags * num_neurons))
 
                 pred_x_bar = np.zeros((num_sim, num_neurons * emissions_num_lags, stim_times.size))
                 pred_x_bar[0, :, :] = pred_x_0_col
@@ -432,19 +520,7 @@ def impulse_response_func(num_sim, cell_ids, cell_ids_chosen, num_neurons, num_d
 
                     pred_x[:, :, i] = pred_x_bar[:, :num_neurons, i]
 
-                    # plt.figure()
-                    # plt.imshow(pred_x[:, :, i].T[~nans, :], aspect='auto', interpolation='nearest')
-                    # # plt.show()
-
-                # plt.figure()
-                # plt.subplot(1, 2, 1)
-                # plt.imshow(a_bar, aspect='auto', interpolation='nearest')
-                # plt.subplot(1, 2, 2)
-                # plt.imshow(b_bar, aspect='auto', interpolation='nearest')
-                # # plt.show()
-
-                # average the predicted model response after the stimulation over all stimulation events (should be 3
-                # usually)
+                # average the predicted model response after the stimulation over all stimulation events
                 avg_pred_x[:, :, d] = np.nanmean(pred_x, axis=2)
 
             # average (across all datasets) the predicted responses in all neurons after stim
@@ -455,7 +531,6 @@ def impulse_response_func(num_sim, cell_ids, cell_ids_chosen, num_neurons, num_d
 
     return avg_pred_x_all_data
 
-
 def plot_l2_norms(emissions, inputs, cell_ids, cell_ids_chosen, avg_pred_x_all_data, colormap, save=False, fig_path=''):
     # plotting from matt code
     window = (0, 120)
@@ -463,7 +538,6 @@ def plot_l2_norms(emissions, inputs, cell_ids, cell_ids_chosen, avg_pred_x_all_d
     chosen_neuron_inds = [cell_ids.index(i) for i in cell_ids_chosen]
 
     plot_x = np.arange(len(chosen_neuron_inds))
-    # measured_stim_responses = au.get_stim_response(emissions, inputs, sub_start=True, window=(0, emissions[0].shape[0]))
     measured_stim_responses = au.get_stim_response(emissions, inputs, sub_start=True, window=window)[0]
     measured_response_norm = au.rms(measured_stim_responses, axis=0)
     measured_response_norm = measured_response_norm[np.ix_(chosen_neuron_inds, chosen_neuron_inds)]
@@ -471,10 +545,8 @@ def plot_l2_norms(emissions, inputs, cell_ids, cell_ids_chosen, avg_pred_x_all_d
 
     # measured_response_norm = measured_response_norm / np.nanmax(measured_response_norm)
 
-    # pred_response_norm_plot = np.zeros((len(chosen_neuron_inds), len(chosen_neuron_inds)))
     pred_response_norm = au.rms(avg_pred_x_all_data, axis=0)
     pred_response_norm_plot = pred_response_norm[chosen_neuron_inds, :]
-    # pred_response_norm_plot[:, n] = pred_response_norm
 
     # set diag = 0 and normalize
     pred_response_norm_plot[np.eye(pred_response_norm_plot.shape[0], dtype=bool)] = 0
@@ -486,7 +558,7 @@ def plot_l2_norms(emissions, inputs, cell_ids, cell_ids_chosen, avg_pred_x_all_d
                                                   colormap, save=True, fig_path=fig_path)
 
     plt.figure()
-    fig, ax = plt.subplots(2, 2)
+    fig, ax = plt.subplots(2, 2, figsize=(12, 12), gridspec_kw=dict(hspace=0.25, wspace=0.25))
     obj = ax[0, 0].imshow(measured_response_norm, interpolation='nearest', cmap=colormap)
     ax[0, 0].set_title('measured response L2 norm')
     ax[0, 0].set_xticks(plot_x, cell_ids_chosen)

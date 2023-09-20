@@ -54,50 +54,76 @@ all_a_hat, all_a_hat_0, all_b_hat, mse = gcu.run_gc(num_data_sets, emissions_num
                                                     inputs, emissions, f_name='synth_data',
                                                     load_dir='/Users/lsmith/Documents/python/', rerun=True)
 
-for d in range(num_data_sets):
-    plt.figure()
-    plt.title('dataset %(dataset)i GC for %(lags)i lags: a_hat' % {"dataset": d, "lags": emissions_num_lags})
-    a_hat_pos = plt.imshow(all_a_hat[:, :, d], aspect='auto', interpolation='nearest', cmap=colormap)
-    plt.colorbar(a_hat_pos)
-    plt.show()
-
-    plt.figure()
-    plt.title('dataset %(dataset)i GC for %(lags)i lags: b_hat' % {"dataset": d, "lags": inputs_num_lags})
-    b_hat_pos = plt.imshow(all_b_hat[:, :, d], aspect='auto', interpolation='nearest', cmap=colormap)
-    plt.colorbar(b_hat_pos)
-    plt.show()
-
 # create averaged a_hat and b_hat matrices over all non-NaN values over all datasets
 # save all a_hat and b_hat full mtxes first as 3d array, then nanmean over each element along 3rd axis
 a_hat_avg = np.nanmean(all_a_hat, axis=2)
 b_hat_avg = np.nanmean(all_b_hat, axis=2)
 
-fig3, axs3 = plt.subplots(nrows=1, ncols=1)
-plt.title('averaged a_hat over all datasets')
-avg_a_hat_pos = plt.imshow(a_hat_avg, interpolation='nearest', cmap=colormap)
-color_limits = np.nanmax(np.abs(a_hat_avg))
-plt.clim((-color_limits, color_limits))
-plt.colorbar(avg_a_hat_pos)
-plt.show()
+# pick subset of neurons to look at
+cell_ids = ['AVAL', 'AVAR', 'AVEL', 'AVER', 'AFDL']
+cell_ids_chosen = ['AVAL', 'AVAR', 'AVEL', 'AVER', 'AFDL']
+neuron_to_stim = 'AFDL'
+# array of neuron indices
+neuron_inds_chosen = np.array([cell_ids.index(i) for i in cell_ids_chosen])
+neuron_stim_index = cell_ids.index(neuron_to_stim)
 
-A_pos = plt.imshow(A_true[:num_neurons, :], interpolation='nearest', cmap=colormap)
-plt.title('true A')
-plt.clim((-color_limits, color_limits))
-plt.colorbar(A_pos)
-plt.show()
+num_sim = 120
 
-fig4, axs4 = plt.subplots(nrows=1, ncols=1)
-plt.title('averaged b_hat over all datasets')
-avg_b_hat_pos = plt.imshow(b_hat_avg, interpolation='nearest', cmap=colormap)
-color_limits = np.nanmax(np.abs(b_hat_avg))
-plt.clim((-color_limits, color_limits))
-plt.colorbar(avg_b_hat_pos)
-plt.show()
+avg_pred_x_all_data = gcu.impulse_response_func(num_sim, cell_ids, cell_ids_chosen, num_neurons, num_data_sets,
+                                                emissions, inputs, all_a_hat, all_b_hat, emissions_num_lags,
+                                                inputs_num_lags, f_name='synth_impulse_response_data',
+                                                rerun=run_params['imp_resp_func_rerun'])
 
-B_pos = plt.imshow(B_true[:num_neurons, :], interpolation='nearest', cmap=colormap)
-plt.title('true dynamics_input_weights (B)')
-plt.clim((-color_limits, color_limits))
-plt.colorbar(B_pos)
-plt.show()
+gcu.plot_l2_norms(emissions, inputs, cell_ids, cell_ids_chosen, avg_pred_x_all_data, colormap,
+                  save=False, fig_path=fig_path)
+
+# plot on y axis the gc results for a chosen neuron after stimulus of another neuron
+# so plot the a_hat matrix value corresponding to these two neurons vs time, where we start later in time lags and go up
+# until no lags
+
+gcu.plot_imp_resp(emissions, inputs, neuron_inds_chosen, num_neurons, num_data_sets, cell_ids, cell_ids_chosen,
+                  neuron_to_stim, avg_pred_x_all_data, save=False, fig_path=fig_path)
+
+
+# for d in range(num_data_sets):
+#     plt.figure()
+#     plt.title('dataset %(dataset)i GC for %(lags)i lags: a_hat' % {"dataset": d, "lags": emissions_num_lags})
+#     a_hat_pos = plt.imshow(all_a_hat[:, :, d], aspect='auto', interpolation='nearest', cmap=colormap)
+#     plt.colorbar(a_hat_pos)
+#     plt.show()
+#
+#     plt.figure()
+#     plt.title('dataset %(dataset)i GC for %(lags)i lags: b_hat' % {"dataset": d, "lags": inputs_num_lags})
+#     b_hat_pos = plt.imshow(all_b_hat[:, :, d], aspect='auto', interpolation='nearest', cmap=colormap)
+#     plt.colorbar(b_hat_pos)
+#     plt.show()
+
+# fig3, axs3 = plt.subplots(nrows=1, ncols=1)
+# plt.title('averaged a_hat over all datasets')
+# avg_a_hat_pos = plt.imshow(a_hat_avg, interpolation='nearest', cmap=colormap)
+# color_limits = np.nanmax(np.abs(a_hat_avg))
+# plt.clim((-color_limits, color_limits))
+# plt.colorbar(avg_a_hat_pos)
+# plt.show()
+#
+# A_pos = plt.imshow(A_true[:num_neurons, :], interpolation='nearest', cmap=colormap)
+# plt.title('true A')
+# plt.clim((-color_limits, color_limits))
+# plt.colorbar(A_pos)
+# plt.show()
+#
+# fig4, axs4 = plt.subplots(nrows=1, ncols=1)
+# plt.title('averaged b_hat over all datasets')
+# avg_b_hat_pos = plt.imshow(b_hat_avg, interpolation='nearest', cmap=colormap)
+# color_limits = np.nanmax(np.abs(b_hat_avg))
+# plt.clim((-color_limits, color_limits))
+# plt.colorbar(avg_b_hat_pos)
+# plt.show()
+#
+# B_pos = plt.imshow(B_true[:num_neurons, :], interpolation='nearest', cmap=colormap)
+# plt.title('true dynamics_input_weights (B)')
+# plt.clim((-color_limits, color_limits))
+# plt.colorbar(B_pos)
+# plt.show()
 
 a = 0
