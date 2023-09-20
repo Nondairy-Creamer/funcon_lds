@@ -131,7 +131,7 @@ def solve_masked(A, b, mask=None, ridge_penalty=None):
 
 
 def fit_em(model, data, init_mean=None, init_cov=None, num_steps=10,
-           save_folder='em_test', save_every=10, memmap_cpu_id=None):
+           save_folder='em_test', save_every=10, memmap_cpu_id=None, starting_step=0):
     comm = pkl5.Intracomm(MPI.COMM_WORLD)
     cpu_id = comm.Get_rank()
     size = comm.Get_size()
@@ -146,13 +146,17 @@ def fit_em(model, data, init_mean=None, init_cov=None, num_steps=10,
             raise Exception('Number of cpus must be <= number of data sets')
 
         # lag the inputs if the model has lags
-        inputs = [model.get_lagged_data(i, model.dynamics_input_lags) for i in inputs]
+        if inputs[0].shape[1] < model.input_dim_full:
+            inputs = [model.get_lagged_data(i, model.dynamics_input_lags) for i in inputs]
 
         if init_mean is None:
             init_mean = model.estimate_init_mean(emissions)
 
         if init_cov is None:
             init_cov = model.estimate_init_cov(emissions)
+
+        starting_log_likelihood = model.log_likelihood
+        starting_time = model.train_time
 
     else:
         emissions = None
@@ -164,7 +168,7 @@ def fit_em(model, data, init_mean=None, init_cov=None, num_steps=10,
     time_out = []
 
     start = time.time()
-    for ep in range(num_steps):
+    for ep in range(starting_step, starting_step + num_steps):
         model = comm.bcast(model, root=0)
 
         ll, smoothed_means, new_init_covs = \
@@ -173,13 +177,17 @@ def fit_em(model, data, init_mean=None, init_cov=None, num_steps=10,
         if cpu_id == 0:
             # set the initial mean and cov to the first smoothed mean / cov
             for i in range(len(smoothed_means)):
-                init_mean[i] = smoothed_means[i][0, :]
-                init_cov[i] = new_init_covs[i]
+                init_mean[i] = smoothed_means[i][0, :] - model.dynamics_input_weights @ inputs[i][0, :]
+                init_cov[i] = new_init_covs[i] / 2 + new_init_covs[i].T / 2
 
             log_likelihood_out.append(ll)
             time_out.append(time.time() - start)
-            model.log_likelihood = log_likelihood_out
-            model.train_time = time_out
+            if starting_step > 0:
+                model.log_likelihood = np.concatenate((starting_log_likelihood, log_likelihood_out))
+                model.train_time = np.concatenate((starting_time, time_out))
+            else:
+                model.log_likelihood = log_likelihood_out
+                model.train_time = time_out
 
             if np.mod(ep + 1, save_every) == 0:
                 smoothed_means = [i[:, :model.dynamics_dim] for i in smoothed_means]
@@ -193,10 +201,10 @@ def fit_em(model, data, init_mean=None, init_cov=None, num_steps=10,
                 lu.save_run(save_folder, model_trained=model, ep=ep+1, posterior_train=posterior_train)
 
             if model.verbose:
-                print('Finished step', ep + 1, '/', num_steps)
+                print('Finished step', ep + 1, '/', starting_step + num_steps)
                 print('log likelihood =', log_likelihood_out[-1])
                 print('Time elapsed =', time_out[-1], 's')
-                time_remaining = time_out[-1] / (ep + 1) * (num_steps - ep - 1)
+                time_remaining = time_out[-1] / (ep - starting_step + 1) * (num_steps - (ep - starting_step) - 1)
                 print('Estimated remaining =', time_remaining, 's')
 
     if cpu_id == 0:
@@ -205,7 +213,7 @@ def fit_em(model, data, init_mean=None, init_cov=None, num_steps=10,
         return None, None, None, None
 
 
-def parallel_get_post(model, data, init_mean=None, init_cov=None, max_iter=1, converge_res=1e-2, time_lim=100,
+def parallel_get_post(model, data, init_mean=None, init_cov=None, max_iter=1, converge_res=1e-2, time_lim=300,
                       memmap_cpu_id=None):
     comm = pkl5.Intracomm(MPI.COMM_WORLD)
     cpu_id = comm.Get_rank()
@@ -214,6 +222,9 @@ def parallel_get_post(model, data, init_mean=None, init_cov=None, max_iter=1, co
     if cpu_id == 0:
         emissions = data['emissions']
         inputs = data['inputs']
+
+        if inputs[0].shape[1] < model.input_dim_full:
+            inputs = [model.get_lagged_data(i, model.dynamics_input_lags) for i in inputs]
 
         if init_mean is None:
             init_mean = model.estimate_init_mean(emissions)
@@ -243,8 +254,9 @@ def parallel_get_post(model, data, init_mean=None, init_cov=None, max_iter=1, co
                 ll, smoothed_means, suff_stats = model.lgssm_smoother(emissions, inputs, init_mean, init_cov,
                                                                       memmap_cpu_id=memmap_cpu_id)
 
-                init_mean_new = smoothed_means[0, :].copy()
+                init_mean_new = smoothed_means[0, :].copy() - model.dynamics_input_weights @ inputs[0, :]
                 init_cov_new = suff_stats['first_cov'].copy()
+                init_cov_new = init_cov_new / 2 + init_cov_new.T / 2
 
                 init_mean_same = np.max(np.abs(init_mean - init_mean_new)) < converge_res
                 init_cov_same = np.max(np.abs(init_cov - init_cov_new)) < converge_res
@@ -262,8 +274,8 @@ def parallel_get_post(model, data, init_mean=None, init_cov=None, max_iter=1, co
             inputs = i[1].copy()
 
             ll, posterior, suff_stats = model.lgssm_smoother(emissions, inputs, init_mean, init_cov, memmap_cpu_id)
-            post_pred = model.sample(num_time=emissions.shape[0], inputs_list=[inputs], init_mean=init_mean, init_cov=init_cov, add_noise=False)
-            post_pred_noise = model.sample(num_time=emissions.shape[0], inputs_list=[inputs], init_mean=init_mean, init_cov=init_cov)
+            post_pred = model.sample(num_time=emissions.shape[0], inputs_list=[inputs], init_mean=[init_mean], init_cov=[init_cov], add_noise=False)
+            post_pred_noise = model.sample(num_time=emissions.shape[0], inputs_list=[inputs], init_mean=[init_mean], init_cov=[init_cov])
 
             posterior = posterior[:, :model.dynamics_dim]
             post_pred = post_pred['latents'][0][:, :model.dynamics_dim]
@@ -301,6 +313,7 @@ def parallel_get_post(model, data, init_mean=None, init_cov=None, max_iter=1, co
                           'post_pred_noise': post_pred_noise,
                           'init_mean': init_mean,
                           'init_cov': init_cov,
+                          'cell_ids': model.cell_ids,
                           }
 
         return inference_test
@@ -345,4 +358,13 @@ def parallel_get_ll(model, data):
         return np.sum(ll)
 
     return None
+
+
+def is_pd(B):
+    """Returns true when input is positive-definite, via Cholesky"""
+    try:
+        _ = np.linalg.cholesky(B)
+        return True
+    except np.linalg.LinAlgError:
+        return False
 
