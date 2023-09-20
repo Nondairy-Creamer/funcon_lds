@@ -268,7 +268,7 @@ def plot_missing_neuron(model, data, posterior_dict, cell_ids_chosen, neuron_to_
     # plot the posterior with a neuron missing
     # get the posterior with a neuron missing
     if 'posterior_missing' in posterior_dict.keys():
-        if posterior_dict['posterior_missing']['missing_neuron'] != neuron_to_remove:
+        if neuron_to_remove not in posterior_dict['posterior_missing']:
             force_calc = True
     else:
         force_calc = True
@@ -280,7 +280,7 @@ def plot_missing_neuron(model, data, posterior_dict, cell_ids_chosen, neuron_to_
         posterior_missing = (posterior_missing @ model.emissions_weights.T)
         posterior_missing = posterior_missing[time_window[0]:time_window[1], missing_neuron_ind]
     else:
-        posterior_missing = posterior_dict['posterior_missing']['posterior']
+        posterior_missing = posterior_dict['posterior_missing'][neuron_to_remove]
 
     emissions = emissions[time_window[0]:time_window[1], missing_neuron_ind]
     inputs = inputs[time_window[0]:time_window[1], :]
@@ -492,11 +492,13 @@ def plot_stim_response(measured_irf, measured_irf_sem, posterior_irf, post_pred_
     post_pred_response_chosen = np.zeros((measured_irf.shape[0], num_plot))
     posterior_response_chosen = np.zeros((measured_irf.shape[0], num_plot))
 
+    plot_label = []
     for pi, p in enumerate(plot_inds):
         measured_response_sem_chosen[:, pi] = measured_irf_sem[:, p[0], p[1]]
         measured_response_chosen[:, pi] = measured_irf[:, p[0], p[1]]
         post_pred_response_chosen[:, pi] = post_pred_irf[:, p[0], p[1]]
         posterior_response_chosen[:, pi] = posterior_irf[:, p[0], p[1]]
+        plot_label.append((cell_ids_chosen[p[0]], cell_ids_chosen[p[1]]))
 
     ylim = (np.nanpercentile([measured_response_chosen - measured_response_sem_chosen, post_pred_response_chosen, posterior_response_chosen], 1),
             np.nanpercentile([measured_response_chosen + measured_response_sem_chosen, post_pred_response_chosen, posterior_response_chosen], 99))
@@ -512,11 +514,11 @@ def plot_stim_response(measured_irf, measured_irf_sem, posterior_irf, post_pred_
         plt.axvline(0, color='k', linestyle='--')
         plt.axhline(0, color='k', linestyle='--')
         plt.ylim(ylim)
-        plt.ylabel(cell_ids_chosen[i])
+        plt.ylabel(plot_label[i][0])
         plt.xlabel('time (s)')
 
         plt.legend()
-        plt.title('average responses to stimulation of: ' + cell_ids_chosen[plot_inds[i][1]])
+        plt.title('average responses to stimulation of: ' + plot_label[i][1])
 
     plt.show()
 
