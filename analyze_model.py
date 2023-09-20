@@ -6,6 +6,7 @@ import loading_utilities as lu
 from pathlib import Path
 
 # run_params = lu.get_run_params(param_name='analysis_params/ana_test.yml')
+# run_params = lu.get_run_params(param_name='analysis_params/ana_syn_test_analysis.yml')
 run_params = lu.get_run_params(param_name='analysis_params/ana_exp_DL.yml')
 # run_params = lu.get_run_params(param_name='analysis_params/ana_syn_ridge_sweep.yml')
 window = run_params['window']
@@ -52,6 +53,7 @@ for m in model_folders:
 
 best_model_ind = am.plot_model_comparison(run_params['sorting_param'], model_list, posterior_train_list, data_train_list,
                                           posterior_test_list, data_test_list)
+
 model = model_list[best_model_ind]
 model_true = model_true_list[best_model_ind]
 
@@ -97,9 +99,8 @@ am.plot_model_params(model, model_true=model_true, cell_ids_chosen=cell_ids_chos
 am.plot_dynamics_eigs(model)
 
 am.plot_posterior(data, posterior_dict, cell_ids_chosen, sample_rate=model.sample_rate)
-am.plot_stim_l2_norm(model, measured_irf_rms, post_pred_irf_rms, data_corr, cell_ids_chosen)
-if not is_synth:
-    am.compare_irf_w_anatomy(model, measured_irf_rms, post_pred_irf_rms, data_corr)
+am.plot_stim_norm(model, measured_irf_rms, post_pred_irf_rms, data_corr, cell_ids_chosen)
+am.compare_irf_w_anatomy(model, measured_irf_rms, post_pred_irf_rms, data_corr)
 am.plot_stim_response(measured_irf, measured_irf_sem, posterior_irf, post_pred_irf, cell_ids, cell_ids_chosen, window,
                       sample_rate=model.sample_rate, num_plot=5)
 posterior_dict['posterior_missing'] = am.plot_missing_neuron(model, data, posterior_dict, cell_ids_chosen, neuron_to_remove, force_calc=run_params['force_calc_missing_posterior'])

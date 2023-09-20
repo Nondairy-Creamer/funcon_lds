@@ -300,13 +300,12 @@ def plot_missing_neuron(model, data, posterior_dict, cell_ids_chosen, neuron_to_
     plt.legend()
     plt.show()
 
-    return {'posterior': posterior_missing, 'missing_neuron': neuron_to_remove}
+    return {neuron_to_remove: posterior_missing}
 
 
-def plot_stim_l2_norm(model, measured_irf, post_pred_irf, data_corr, cell_ids_chosen):
+def plot_stim_norm(model, measured_irf, post_pred_irf, data_corr, cell_ids_chosen):
     cell_ids = model.cell_ids
     chosen_neuron_inds = [cell_ids.index(i) for i in cell_ids_chosen]
-    is_synth = '0' in cell_ids
 
     model_weights = au.p_norm(au.stack_weights(model.dynamics_weights[:model.dynamics_dim, :], model.dynamics_lags, axis=1), axis=0)
 
@@ -337,7 +336,7 @@ def plot_stim_l2_norm(model, measured_irf, post_pred_irf, data_corr, cell_ids_ch
 
     ax = plt.subplot(2, 2, 1)
     plt.imshow(measured_response_norm_plt, interpolation='nearest', cmap=colormap)
-    plt.title('measured response L2 norm')
+    plt.title('measured response')
     plt.xticks(plot_x, cell_ids_chosen)
     plt.yticks(plot_x, cell_ids_chosen)
     for label in ax.get_xticklabels():
@@ -346,7 +345,7 @@ def plot_stim_l2_norm(model, measured_irf, post_pred_irf, data_corr, cell_ids_ch
 
     ax = plt.subplot(2, 2, 2)
     plt.imshow(post_pred_response_norm_plt, interpolation='nearest', cmap=colormap)
-    plt.title('post pred response L2 norm')
+    plt.title('post pred response')
     plt.xticks(plot_x, cell_ids_chosen)
     plt.yticks(plot_x, cell_ids_chosen)
     for label in ax.get_xticklabels():
@@ -364,7 +363,7 @@ def plot_stim_l2_norm(model, measured_irf, post_pred_irf, data_corr, cell_ids_ch
 
     ax = plt.subplot(2, 2, 4)
     plt.imshow(model_weights_norm_plt, interpolation='nearest', cmap=colormap)
-    plt.title('model weights L2 norm')
+    plt.title('model weights')
     plt.xticks(plot_x, cell_ids_chosen)
     plt.yticks(plot_x, cell_ids_chosen)
     for label in ax.get_xticklabels():
@@ -378,19 +377,9 @@ def plot_stim_l2_norm(model, measured_irf, post_pred_irf, data_corr, cell_ids_ch
 
 def compare_irf_w_anatomy(model, measured_irf, post_pred_irf, data_corr):
     cell_ids = model.cell_ids
+    is_synth = '0' in cell_ids
 
     model_weights = au.p_norm(au.stack_weights(model.dynamics_weights[:model.dynamics_dim, :], model.dynamics_lags, axis=1), axis=0)
-
-    # load in anatomical data
-    watlas = wa.NeuroAtlas()
-    atlas_ids = list(watlas.neuron_ids)
-    anatomical_connectome_full = watlas.get_anatomical_connectome(signed=False)
-    peptide_connectome_full = watlas.get_peptidergic_connectome()
-    atlas_ids[atlas_ids.index('AWCON')] = 'AWCR'
-    atlas_ids[atlas_ids.index('AWCOFF')] = 'AWCL'
-    atlas_inds = [atlas_ids.index(i) for i in cell_ids]
-    anatomical_connectome = anatomical_connectome_full[np.ix_(atlas_inds, atlas_inds)]
-    peptide_connectome = peptide_connectome_full[np.ix_(atlas_inds, atlas_inds)]
 
     # set the diagonal to nan to do stats on everything else
     data_corr[np.eye(data_corr.shape[0], dtype=bool)] = np.nan
@@ -405,25 +394,51 @@ def compare_irf_w_anatomy(model, measured_irf, post_pred_irf, data_corr):
     post_pred_irf = post_pred_irf.reshape(-1)[mask_column]
     model_weights = model_weights.reshape(-1)[mask_column]
     data_corr = data_corr.reshape(-1)[mask_column]
-    anatomical_connectome = anatomical_connectome.reshape(-1)[mask_column]
-    peptide_connectome = peptide_connectome.reshape(-1)[mask_column]
 
-    # get the best linear combination of the two connectomes to the correlation matrix and model weights
-    ctome_stacked = np.stack((anatomical_connectome, peptide_connectome)).T
-    ctome_corr = ctome_stacked @ np.linalg.lstsq(ctome_stacked, data_corr)[0]
-    ctome_model = ctome_stacked @ np.linalg.lstsq(ctome_stacked, model_weights)[0]
-
-    # compare each of the weights against measured
     corr_metric = np.corrcoef([measured_irf, post_pred_irf, data_corr, model_weights])
-    ctome_to_corr = np.corrcoef([ctome_corr, data_corr])[0, 1]
-    ctome_to_model = np.corrcoef([ctome_model, model_weights])[0, 1]
 
-    # make figure comparing the metrics to the connectome
-    plt.figure()
-    plot_x = np.arange(2)
-    plt.bar(plot_x, [ctome_to_corr, ctome_to_model])
-    plt.xticks(plot_x, ['data correlation', 'model weights'])
-    plt.xlabel('correlation to connectome')
+    # if the data is not synthetic, compare it with the anatomical connectome
+    if not is_synth:
+        # load in anatomical data
+        watlas = wa.NeuroAtlas()
+        atlas_ids = list(watlas.neuron_ids)
+        anatomical_connectome_full = watlas.get_anatomical_connectome(signed=False)
+        peptide_connectome_full = watlas.get_peptidergic_connectome()
+        atlas_ids[atlas_ids.index('AWCON')] = 'AWCR'
+        atlas_ids[atlas_ids.index('AWCOFF')] = 'AWCL'
+        atlas_inds = [atlas_ids.index(i) for i in cell_ids]
+        anatomical_connectome = anatomical_connectome_full[np.ix_(atlas_inds, atlas_inds)]
+        peptide_connectome = peptide_connectome_full[np.ix_(atlas_inds, atlas_inds)]
+
+        anatomical_connectome = anatomical_connectome.reshape(-1)[mask_column]
+        peptide_connectome = peptide_connectome.reshape(-1)[mask_column]
+
+        # get the best linear combination of the two connectomes to the correlation matrix and model weights
+        ctome_stacked = np.stack((anatomical_connectome, peptide_connectome)).T
+        ctome_corr = ctome_stacked @ np.linalg.lstsq(ctome_stacked, data_corr)[0]
+        ctome_model = ctome_stacked @ np.linalg.lstsq(ctome_stacked, model_weights)[0]
+
+        # compare each of the weights against measured
+        ctome_to_corr = np.corrcoef([ctome_corr, data_corr])[0, 1]
+        ctome_to_model = np.corrcoef([ctome_model, model_weights])[0, 1]
+
+        # make figure comparing the metrics to the connectome
+        plt.figure()
+        plot_x = np.arange(2)
+        plt.bar(plot_x, [ctome_to_corr, ctome_to_model])
+        plt.xticks(plot_x, ['data correlation', 'model weights'])
+        plt.xlabel('correlation to connectome')
+
+        # show the scatter plots for the comparison to IRF
+        plt.figure()
+        plt.subplot(2, 2, 1)
+        plt.scatter(data_corr, ctome_corr)
+        plt.xlabel('data correlation')
+        plt.ylabel('connectome')
+        plt.subplot(2, 2, 2)
+        plt.scatter(model_weights, ctome_model)
+        plt.xlabel('model weights')
+        plt.ylabel('connectome')
 
     # compare the metrics to the measured IRF
     plt.figure()
@@ -431,17 +446,6 @@ def compare_irf_w_anatomy(model, measured_irf, post_pred_irf, data_corr):
     plt.bar(plot_x, [corr_metric[0, 2], corr_metric[0, 1], corr_metric[0, 3]])
     plt.xticks(plot_x, ['data correlation', 'post_pred', 'model_weights'])
     plt.ylabel('correlation to impulse responses')
-
-    # show the scatter plots for the comparison to IRF
-    plt.figure()
-    plt.subplot(2, 2, 1)
-    plt.scatter(data_corr, ctome_corr)
-    plt.xlabel('data correlation')
-    plt.ylabel('connectome')
-    plt.subplot(2, 2, 2)
-    plt.scatter(model_weights, ctome_model)
-    plt.xlabel('model weights')
-    plt.ylabel('connectome')
 
     # show the scatter plots for the comparison to IRF
     plt.figure()
@@ -557,13 +561,13 @@ def plot_model_comparison(sorting_param, model_list, posterior_train_list, data_
     train_ll = [train_ll[i] / num_non_nan_train[i] for i in range(len(train_ll))]
     test_ll = [test_ll[i] / num_non_nan_test[i] for i in range(len(test_ll))]
 
+    best_model_ind = np.argmax(test_ll)
+
     sorting_list_inds = np.argsort(sorting_list)
     sorting_list = np.sort(sorting_list)
     ll_over_train = [ll_over_train[i] for i in sorting_list_inds]
     train_ll = [train_ll[i] for i in sorting_list_inds]
     test_ll = [test_ll[i] for i in sorting_list_inds]
-
-    best_model_ind = np.argmax(test_ll)
 
     for ii, i in enumerate(ll_over_train):
         plt.figure()
