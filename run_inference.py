@@ -200,7 +200,7 @@ def infer_posterior(param_name, data_folder):
             posterior_train = pickle.load(posterior_train_file)
             posterior_train_file.close()
             init_mean_train = posterior_train['init_mean']
-            init_cov_train = posterior_train['init_mean']
+            init_cov_train = posterior_train['init_cov']
         else:
             init_mean_train = None
             init_cov_train = None
@@ -211,7 +211,7 @@ def infer_posterior(param_name, data_folder):
             posterior_test = pickle.load(posterior_test_file)
             posterior_test_file.close()
             init_mean_test = posterior_test['init_mean']
-            init_cov_test = posterior_test['init_mean']
+            init_cov_test = posterior_test['init_cov']
         else:
             init_mean_test = None
             init_cov_test = None
@@ -267,7 +267,7 @@ def continue_fit(param_name, save_folder, extra_train_steps):
             posterior_test = pickle.load(posterior_test_file)
             posterior_test_file.close()
             init_mean_test = posterior_test['init_mean']
-            init_cov_test = posterior_test['init_mean']
+            init_cov_test = posterior_test['init_cov']
         else:
             init_mean_test = None
             init_cov_test = None
