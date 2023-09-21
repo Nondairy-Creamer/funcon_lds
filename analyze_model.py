@@ -89,10 +89,10 @@ posterior = posterior_dict['posterior']
 
 # get the impulse response functions (IRF)
 measured_irf, measured_irf_sem, measured_irf_all = au.get_impulse_response_function(emissions, inputs, window=window, sub_pre_stim=sub_pre_stim, return_pre=True)
-measured_irf_rms = au.p_norm(measured_irf[-window[0]:], axis=0)
+measured_irf_rms = au.ave_fun(measured_irf[-window[0]:], axis=0)
 posterior_irf = au.get_impulse_response_function(posterior, inputs, window=window, sub_pre_stim=sub_pre_stim, return_pre=True)[0]
 post_pred_irf = au.get_impulse_response_function(post_pred, inputs, window=window, sub_pre_stim=sub_pre_stim, return_pre=True)[0]
-post_pred_irf_rms = au.p_norm(post_pred_irf[-window[0]:], axis=0)
+post_pred_irf_rms = au.ave_fun(post_pred_irf[-window[0]:], axis=0)
 # data_corr = np.abs(au.nan_corr_data(emissions))
 data_corr = au.nan_corr_data(emissions)
 

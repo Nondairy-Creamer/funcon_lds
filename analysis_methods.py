@@ -310,7 +310,7 @@ def plot_irf_norm(model, measured_irf, post_pred_irf, data_corr, cell_ids_chosen
     cell_ids = model.cell_ids
     chosen_neuron_inds = [cell_ids.index(i) for i in cell_ids_chosen]
 
-    model_weights = au.p_norm(au.stack_weights(model.dynamics_weights[:model.dynamics_dim, :], model.dynamics_lags, axis=1), axis=0)
+    model_weights = au.ave_fun(au.stack_weights(model.dynamics_weights[:model.dynamics_dim, :], model.dynamics_lags, axis=1), axis=0)
 
     # set the diagonal to nan to do stats on everything else
     data_corr[np.eye(data_corr.shape[0], dtype=bool)] = np.nan
@@ -381,6 +381,8 @@ def plot_irf_norm(model, measured_irf, post_pred_irf, data_corr, cell_ids_chosen
     plt.figure()
     plt.scatter(post_pred_response_norm_plt.reshape(-1), measured_response_norm_plt.reshape(-1), label='post pred, ' + str(post_pred_score))
     plt.scatter(data_corr_plt.reshape(-1), measured_response_norm_plt.reshape(-1), label='data corr, ' + str(data_corr_score))
+    xlim = plt.xlim()
+    plt.plot(xlim, xlim)
     plt.ylabel('measured irf')
     plt.legend()
 
@@ -391,7 +393,7 @@ def compare_irf_w_anatomy(model, measured_irf, post_pred_irf, data_corr):
     cell_ids = model.cell_ids
     is_synth = '0' in cell_ids
 
-    model_weights = au.p_norm(au.stack_weights(model.dynamics_weights[:model.dynamics_dim, :], model.dynamics_lags, axis=1), axis=0)
+    model_weights = au.ave_fun(au.stack_weights(model.dynamics_weights[:model.dynamics_dim, :], model.dynamics_lags, axis=1), axis=0)
 
     # set the diagonal to nan to do stats on everything else
     data_corr[np.eye(data_corr.shape[0], dtype=bool)] = np.nan
@@ -469,15 +471,21 @@ def compare_irf_w_anatomy(model, measured_irf, post_pred_irf, data_corr):
     # show the scatter plots for the comparison to IRF
     plt.figure()
     plt.subplot(2, 2, 1)
-    plt.scatter(data_corr, measured_irf)
+    plt.scatter(data_corr, measured_irf, s=2)
+    xlim = plt.xlim()
+    plt.plot(xlim, xlim, color='k')
     plt.xlabel('data correlation')
     plt.ylabel('measured impulse response')
     plt.subplot(2, 2, 2)
-    plt.scatter(post_pred_irf, measured_irf)
+    plt.scatter(post_pred_irf, measured_irf, s=2)
+    xlim = plt.xlim()
+    plt.plot(xlim, xlim, color='k')
     plt.xlabel('model impulse responses')
     plt.ylabel('measured impulse response')
     plt.subplot(2, 2, 3)
-    plt.scatter(post_pred_irf, data_corr)
+    plt.scatter(post_pred_irf, data_corr, s=2)
+    xlim = plt.xlim()
+    plt.plot(xlim, xlim, color='k')
     plt.xlabel('model impulse responses')
     plt.ylabel('data correlation')
     plt.tight_layout()
@@ -498,7 +506,7 @@ def plot_irf(measured_irf, measured_irf_sem, posterior_irf, post_pred_irf, cell_
     posterior_irf = posterior_irf[:, chosen_neuron_inds, :][:, :, chosen_neuron_inds]
 
     # find the 5 highest responses to plot
-    measured_stim_responses_l2 = au.p_norm(measured_irf, axis=0)
+    measured_stim_responses_l2 = au.ave_fun(measured_irf, axis=0)
     measured_stim_responses_l2[np.eye(measured_stim_responses_l2.shape[0], dtype=bool)] = 0
     sorted_vals = np.sort(measured_stim_responses_l2.reshape(-1))
     plot_inds = []
