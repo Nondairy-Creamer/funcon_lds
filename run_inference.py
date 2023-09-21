@@ -193,13 +193,41 @@ def infer_posterior(param_name, data_folder):
         data_test_file = open(data_test_path, 'rb')
         data_test = pickle.load(data_test_file)
         data_test_file.close()
+
+        posterior_train_path = data_folder / 'posterior_train.pkl'
+        if posterior_train_path.exists():
+            posterior_train_file = open(posterior_train_path, 'rb')
+            posterior_train = pickle.load(posterior_train_file)
+            posterior_train_file.close()
+            init_mean_train = posterior_train['init_mean']
+            init_cov_train = posterior_train['init_mean']
+        else:
+            init_mean_train = None
+            init_cov_train = None
+
+        posterior_test_path = data_folder / 'posterior_test.pkl'
+        if posterior_test_path.exists():
+            posterior_test_file = open(posterior_test_path, 'rb')
+            posterior_test = pickle.load(posterior_test_file)
+            posterior_test_file.close()
+            init_mean_test = posterior_test['init_mean']
+            init_cov_test = posterior_test['init_mean']
+        else:
+            init_mean_test = None
+            init_cov_test = None
     else:
         model = None
         data_train = None
         data_test = None
+        init_mean_train = None
+        init_cov_train = None
+        init_mean_test = None
+        init_cov_test = None
 
-    posterior_train = iu.parallel_get_post(model, data_train, max_iter=100, memmap_cpu_id=memmap_cpu_id, time_lim=300)
-    posterior_test = iu.parallel_get_post(model, data_test, max_iter=100, memmap_cpu_id=memmap_cpu_id, time_lim=300)
+    posterior_train = iu.parallel_get_post(model, data_train, max_iter=100, memmap_cpu_id=memmap_cpu_id, time_lim=300,
+                                           init_mean=init_mean_train, init_cov=init_cov_train)
+    posterior_test = iu.parallel_get_post(model, data_test, max_iter=100, memmap_cpu_id=memmap_cpu_id, time_lim=300,
+                                          init_mean=init_mean_test, init_cov=init_cov_test)
 
     if cpu_id == 0:
         lu.save_run(data_folder, posterior_train=posterior_train, posterior_test=posterior_test)
@@ -233,6 +261,17 @@ def continue_fit(param_name, save_folder, extra_train_steps):
         posterior_train = pickle.load(posterior_train_file)
         posterior_train_file.close()
 
+        posterior_test_path = save_folder / 'posterior_test.pkl'
+        if posterior_test_path.exists():
+            posterior_test_file = open(posterior_test_path, 'rb')
+            posterior_test = pickle.load(posterior_test_file)
+            posterior_test_file.close()
+            init_mean_test = posterior_test['init_mean']
+            init_cov_test = posterior_test['init_mean']
+        else:
+            init_mean_test = None
+            init_cov_test = None
+
         model_path = save_folder / 'models' / 'model_trained.pkl'
         model_file = open(model_path, 'rb')
         model_trained = pickle.load(model_file)
@@ -257,14 +296,17 @@ def continue_fit(param_name, save_folder, extra_train_steps):
         data_test = None
         init_mean = None
         init_cov = None
+        init_mean_test = None
+        init_cov_test = None
         starting_step = 0
 
-    run_fitting(run_params, model_trained, data_train, data_test, save_folder,
-                init_mean=init_mean, init_cov=init_cov, starting_step=starting_step)
+    run_fitting(run_params, model_trained, data_train, data_test, save_folder, starting_step=starting_step,
+                init_mean_train=init_mean, init_cov_train=init_cov,
+                init_mean_test=init_mean_test, init_cov_test=init_cov_test)
 
 
-def run_fitting(run_params, model, data_train, data_test, save_folder,
-                init_mean=None, init_cov=None, model_true=None, starting_step=0):
+def run_fitting(run_params, model, data_train, data_test, save_folder, model_true=None, starting_step=0,
+                init_mean_train=None, init_cov_train=None, init_mean_test=None, init_cov_test=None):
     comm = pkl5.Intracomm(MPI.COMM_WORLD)
     size = comm.Get_size()
     cpu_id = comm.Get_rank()
@@ -277,28 +319,28 @@ def run_fitting(run_params, model, data_train, data_test, save_folder,
         memmap_cpu_id = None
 
     if cpu_id == 0:
-        if init_mean is None:
-            init_mean = model.estimate_init_mean(data_train['emissions'])
+        if init_mean_train is None:
+            init_mean_train = model.estimate_init_mean(data_train['emissions'])
 
-        if init_cov is None:
-            init_cov = model.estimate_init_cov(data_train['emissions'])
+        if init_cov_train is None:
+            init_cov_train = model.estimate_init_cov(data_train['emissions'])
 
     # fit the model using expectation maximization
-    ll, model, init_mean, init_cov = \
-        iu.fit_em(model, data_train, num_steps=run_params['num_train_steps'], init_mean=init_mean, init_cov=init_cov,
+    ll, model, init_mean_train, init_cov_train = \
+        iu.fit_em(model, data_train, num_steps=run_params['num_train_steps'], init_mean=init_mean_train, init_cov=init_cov_train,
                   save_folder=save_folder, memmap_cpu_id=memmap_cpu_id, starting_step=starting_step)
 
     # sample from the model
     if cpu_id == 0:
         print('get posterior for the training data')
-    posterior_train = iu.parallel_get_post(model, data_train, init_mean=init_mean, init_cov=init_cov,
+    posterior_train = iu.parallel_get_post(model, data_train, init_mean=init_mean_train, init_cov=init_cov_train,
                                            max_iter=100, converge_res=1e-2, time_lim=300,
                                            memmap_cpu_id=memmap_cpu_id)
 
     if cpu_id == 0:
         print('get posterior for the test data')
-    posterior_test = iu.parallel_get_post(model, data_test, init_mean=None, init_cov=None, max_iter=100,
-                                          converge_res=1e-2, time_lim=300, memmap_cpu_id=memmap_cpu_id)
+    posterior_test = iu.parallel_get_post(model, data_test, init_mean=init_mean_test, init_cov=init_cov_test,
+                                          max_iter=100, converge_res=1e-2, time_lim=300, memmap_cpu_id=memmap_cpu_id)
 
     if cpu_id == 0:
         lu.save_run(save_folder, model_trained=model, ep=-1, posterior_train=posterior_train,
