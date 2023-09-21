@@ -12,7 +12,8 @@ def auto_select_ids(inputs, cell_ids, num_neurons=10):
 
 
 def p_norm(data, power=1, axis=-1):
-    return np.nanmean(np.abs(data)**power, axis=axis)**(1/power)
+    # return np.nanmean(np.abs(data)**power, axis=axis)**(1/power)
+    return np.nanmean(data**power, axis=axis)**(1/power)
 
 
 def nan_convolve(data, filter, mode='valid'):
@@ -118,6 +119,33 @@ def find_stim_events(inputs, window_size=1000):
     time_window = (max_ind, max_ind + max_window)
 
     return max_data_set, time_window
+
+
+def r2(y_true, y_hat):
+    y_true = y_true.reshape(-1)
+    y_hat = y_hat.reshape(-1)
+
+    mask = ~np.isnan(y_true) & ~np.isnan(y_hat)
+    y_true = y_true[mask]
+    y_hat = y_hat[mask]
+
+    ss_res = np.sum((y_true - y_hat) ** 2)
+    ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)
+
+    return 1 - ss_res / ss_tot
+
+
+def corr(y_true, y_hat, mean_sub=True):
+    y_true = y_true.reshape(-1)
+    y_hat = y_hat.reshape(-1)
+    if mean_sub:
+        y_true = y_true - np.mean(y_true)
+        y_hat = y_hat - np.mean(y_hat)
+
+    y_true_std = np.std(y_true, ddof=1)
+    y_hat_std = np.std(y_hat, ddof=1)
+
+    return np.mean(y_true * y_hat) / y_true_std / y_hat_std
 
 
 def nan_corr_data(data):
