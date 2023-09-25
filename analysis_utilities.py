@@ -141,6 +141,11 @@ def r2(y_true, y_hat):
 def corr(y_true, y_hat, mean_sub=True):
     y_true = y_true.reshape(-1)
     y_hat = y_hat.reshape(-1)
+
+    mask = ~np.isnan(y_true) & ~np.isnan(y_hat)
+    y_true = y_true[mask]
+    y_hat = y_hat[mask]
+
     if mean_sub:
         y_true = y_true - np.mean(y_true)
         y_hat = y_hat - np.mean(y_hat)
