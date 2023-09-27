@@ -479,13 +479,11 @@ def impulse_response_func(num_sim, cell_ids, cell_ids_chosen, num_neurons, num_d
                 curr_emissions[np.isnan(curr_emissions)] = 0
                 temp_a_hat = all_a_hat[:, :, d]
                 temp_a_hat[np.isnan(temp_a_hat)] = 0
-                temp_b_hat = all_b_hat[:, :, d]
-                temp_b_hat[np.isnan(temp_b_hat)] = 0
 
                 # build the a_bar mtx: block mtx
-                # use averaged ahat instead
                 a_hat_split = np.array(np.split(temp_a_hat, emissions_num_lags, axis=1))
                 a_bar = get_lagged_weights(a_hat_split, emissions_num_lags)
+                # use averaged ahat instead
                 # a_hat_split = np.array(np.split(a_hat_avg, emissions_num_lags, axis=1))
                 # a_bar = get_lagged_weights(a_hat_split, emissions_num_lags)
 
@@ -505,10 +503,10 @@ def impulse_response_func(num_sim, cell_ids, cell_ids_chosen, num_neurons, num_d
 
                 pred_x_0_col = np.zeros((emissions_num_lags * num_neurons, stim_times.size))
                 # instead of initializing with previous emissions before stim, set to zeros
-                for i in range(stim_times.size):
-                    # get initial values of emissions before stimulation
-                    pred_x_0 = curr_emissions[stim_times[i] - emissions_num_lags:stim_times[i], :]
-                    pred_x_0_col[:, i] = np.reshape(pred_x_0, (emissions_num_lags * num_neurons))
+                # for i in range(stim_times.size):
+                #     # get initial values of emissions before stimulation
+                #     pred_x_0 = curr_emissions[stim_times[i] - emissions_num_lags:stim_times[i], :]
+                #     pred_x_0_col[:, i] = np.reshape(pred_x_0, (emissions_num_lags * num_neurons))
 
                 pred_x_bar = np.zeros((num_sim, num_neurons * emissions_num_lags, stim_times.size))
                 pred_x_bar[0, :, :] = pred_x_0_col
@@ -538,20 +536,16 @@ def plot_l2_norms(emissions, inputs, cell_ids, cell_ids_chosen, avg_pred_x_all_d
     chosen_neuron_inds = [cell_ids.index(i) for i in cell_ids_chosen]
 
     plot_x = np.arange(len(chosen_neuron_inds))
-    measured_stim_responses = au.get_stim_response(emissions, inputs, sub_start=True, window=window)[0]
-    measured_response_norm = au.rms(measured_stim_responses, axis=0)
+    measured_stim_responses = au.get_impulse_response_function(emissions, inputs, sub_pre_stim=True, window=window)[0]
+    measured_response_norm = au.p_norm(measured_stim_responses, axis=0)
     measured_response_norm = measured_response_norm[np.ix_(chosen_neuron_inds, chosen_neuron_inds)]
     measured_response_norm[np.eye(measured_response_norm.shape[0], dtype=bool)] = 0
 
-    # measured_response_norm = measured_response_norm / np.nanmax(measured_response_norm)
-
-    pred_response_norm = au.rms(avg_pred_x_all_data, axis=0)
+    pred_response_norm = au.p_norm(avg_pred_x_all_data, axis=0)
     pred_response_norm_plot = pred_response_norm[chosen_neuron_inds, :]
 
-    # set diag = 0 and normalize
+    # set diag = 0
     pred_response_norm_plot[np.eye(pred_response_norm_plot.shape[0], dtype=bool)] = 0
-
-    # pred_response_norm_plot = pred_response_norm_plot / np.nanmax(pred_response_norm_plot)
 
     # correlations:
     corr_data, corr_data_subset = get_correlation(emissions, inputs, cell_ids, cell_ids_chosen, avg_pred_x_all_data,
@@ -604,6 +598,44 @@ def plot_l2_norms(emissions, inputs, cell_ids, cell_ids_chosen, avg_pred_x_all_d
     print(measured_response_norm @ pred_response_norm_plot)
     print(np.nansum(measured_response_norm @ pred_response_norm_plot))
 
+    # normalize:
+    measured_response_norm = measured_response_norm / np.nanmax(measured_response_norm)
+    pred_response_norm_plot = pred_response_norm_plot / np.nanmax(pred_response_norm_plot)
+    corr_data_subset = corr_data_subset / np.nanmax(corr_data_subset)
+
+    plt.figure()
+    fig, ax = plt.subplots(2, 2, figsize=(12, 12), gridspec_kw=dict(hspace=0.25, wspace=0.25))
+    plt.suptitle("normalized")
+    obj = ax[0, 0].imshow(measured_response_norm, interpolation='nearest', cmap=colormap)
+    ax[0, 0].set_title('measured response L2 norm')
+    ax[0, 0].set_xticks(plot_x, cell_ids_chosen)
+    ax[0, 0].set_yticks(plot_x, cell_ids_chosen)
+    for label in ax[0, 0].get_xticklabels():
+        label.set_rotation(90)
+    obj.set_clim((-1, 1))
+
+    obj = ax[0, 1].imshow(pred_response_norm_plot, interpolation='nearest', cmap=colormap)
+    ax[0, 1].set_title('model response L2 norm')
+    ax[0, 1].set_xticks(plot_x, cell_ids_chosen)
+    ax[0, 1].set_yticks(plot_x, cell_ids_chosen)
+    for label in ax[0, 1].get_xticklabels():
+        label.set_rotation(90)
+    obj.set_clim((-1, 1))
+
+    obj = ax[1, 0].imshow(corr_data_subset, interpolation='nearest', cmap=colormap)
+    ax[1, 0].set_title('correlation subset')
+    ax[1, 0].set_xticks(plot_x, cell_ids_chosen)
+    ax[1, 0].set_yticks(plot_x, cell_ids_chosen)
+    for label in ax[1, 0].get_xticklabels():
+        label.set_rotation(90)
+    obj.set_clim((-1, 1))
+
+    if save:
+        string = fig_path + 'l2norm_normalized.png'
+        plt.savefig(string)
+    else:
+        plt.show()
+
 
 def plot_imp_resp(emissions, inputs, neuron_inds_chosen, num_neurons, num_data_sets, cell_ids, cell_ids_chosen,
                   neuron_to_stim, avg_pred_x_all_data, save=False, fig_path=''):
@@ -611,8 +643,8 @@ def plot_imp_resp(emissions, inputs, neuron_inds_chosen, num_neurons, num_data_s
     window = (-60, 120)
     # list of neuron indices
     chosen_neuron_inds = [cell_ids.index(i) for i in cell_ids_chosen]
-    measured_stim_responses = au.get_stim_response(emissions, inputs, sub_start=True, window=window)[0]
-    # measured_response_norm = au.rms(measured_stim_responses, axis=0)
+    measured_stim_responses = au.get_impulse_response_function(emissions, inputs, sub_pre_stim=True, window=window)[0]
+    # measured_response_norm = au.p_norm(measured_stim_responses, axis=0)
     # measured_response_norm = measured_response_norm[chosen_neuron_inds, :][:, chosen_neuron_inds]
     # measured_response_norm[np.eye(measured_response_norm.shape[0], dtype=bool)] = 0
     # measured_response_norm = measured_response_norm / np.nanmax(measured_response_norm)
@@ -717,31 +749,21 @@ def get_correlation(emissions, inputs, cell_ids, cell_ids_chosen, avg_pred_x_all
     # list of neuron indices
     chosen_neuron_inds = [cell_ids.index(i) for i in cell_ids_chosen]
 
-    plot_x = np.arange(len(chosen_neuron_inds))
-    # measured_stim_responses = au.get_stim_response(emissions, inputs, sub_start=True, window=(0, emissions[0].shape[0]))
-    measured_stim_responses = au.get_stim_response(emissions, inputs, sub_start=True, window=window)
-    measured_response_norm = au.rms(measured_stim_responses[0], axis=0)
+    # measured_stim_responses = au.get_impulse_response_function(emissions, inputs, sub_pre_stim=True, window=(0, emissions[0].shape[0]))
+    measured_stim_responses = au.get_impulse_response_function(emissions, inputs, sub_pre_stim=True, window=window)
+    measured_response_norm = au.p_norm(measured_stim_responses[0], axis=0)
     measured_response_norm = measured_response_norm[chosen_neuron_inds, :][:, chosen_neuron_inds]
     measured_response_norm[np.eye(measured_response_norm.shape[0], dtype=bool)] = 0
     # measured_response_norm = measured_response_norm / np.nanmax(measured_response_norm)
 
-    # pred_response_norm_plot = np.zeros((len(chosen_neuron_inds), len(chosen_neuron_inds)))
-    # only take the l2 norm of the trace AFTER the stim, so remove the initialization at timestep 0
-    pred_response_norm = au.rms(avg_pred_x_all_data, axis=0)
+    pred_response_norm = au.p_norm(avg_pred_x_all_data, axis=0)
     pred_response_norm_plot = pred_response_norm[chosen_neuron_inds, :]
 
     # set diag = 0 and normalize
     pred_response_norm_plot[np.eye(pred_response_norm_plot.shape[0], dtype=bool)] = 0
     # pred_response_norm_plot = pred_response_norm_plot / np.nanmax(pred_response_norm_plot)
 
-    # subtract the mean off the data first before finding the corr coeff
-    # measured_response_norm_avg = np.mean(measured_response_norm)
-    # measured_response_norm -= measured_response_norm_avg
-    # pred_response_norm_plot_avg = np.mean(pred_response_norm_plot)
-    # pred_response_norm_plot -= pred_response_norm_plot_avg
-
     corr_meas_to_pred = nancorrcoef([measured_response_norm.flatten(), pred_response_norm_plot.flatten()])[0, 1]
-    # corr_data = np.nanmean(emissions, axis=2).T @ np.nanmean(emissions, axis=2)
     corr_data = np.abs(au.nan_corr_data(emissions))
 
     # set diag = 0 and normalize
@@ -765,3 +787,42 @@ def get_correlation(emissions, inputs, cell_ids, cell_ids_chosen, avg_pred_x_all
         plt.show()
 
     return corr_data, corr_data_subset
+
+def plot_dynamics_subset(weight_mtx, cell_ids_chosen, chosen_neuron_inds, colormap, num_lags, save=False, fig_path='',
+                         data_name=''):
+    num_cols = num_lags // 2 + num_lags % 2
+    fig, ax = plt.subplots(2, num_cols, figsize=(14, 9), subplot_kw=dict(box_aspect=1),
+                           gridspec_kw=dict(hspace=0.25, wspace=0.25))
+    plot_x = np.arange(len(chosen_neuron_inds))
+    plt.suptitle("a_hat subset " + data_name)
+
+    temp = np.split(weight_mtx, num_lags, axis=1)
+    temp = [temp[i][chosen_neuron_inds, :][:, chosen_neuron_inds] for i in range(len(temp))]
+    color_lims = np.nanquantile(np.abs(np.array(temp)).flatten(), 0.99)
+
+    for i in range(2):
+        for j in range(num_cols):
+            ix = i * num_cols + j
+            if len(temp) == 2:
+                pos = ax[i].imshow(temp[i], aspect='auto', interpolation='none', cmap=colormap,
+                                   norm=plt.Normalize(vmin=-color_lims, vmax=color_lims))
+                ax[i].set_xticks(plot_x, cell_ids_chosen)
+                ax[i].set_yticks(plot_x, cell_ids_chosen)
+                ax[i].set_title(f"lag {i+1}")
+                for label in ax[i].get_xticklabels():
+                    label.set_rotation(90)
+            elif ix < len(temp):
+                pos = ax[i, j].imshow(temp[ix], aspect='auto', interpolation='none', cmap=colormap,
+                                      norm=plt.Normalize(vmin=-color_lims, vmax=color_lims))
+                ax[i, j].set_title(f"lag {ix+1}")
+                ax[i, j].set_xticks(plot_x, cell_ids_chosen)
+                ax[i, j].set_yticks(plot_x, cell_ids_chosen)
+                for label in ax[i, j].get_xticklabels():
+                    label.set_rotation(90)
+    # fig.colorbar(pos, ax=ax.ravel().tolist(), pad=0.04, aspect=30)
+    fig.colorbar(pos, ax=ax)
+    if save:
+        string = fig_path + 'ahat_subset_' + data_name + '.png'
+        plt.savefig(string)
+    else:
+        plt.show()

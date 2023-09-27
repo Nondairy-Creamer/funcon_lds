@@ -5,11 +5,13 @@ import matplotlib as mpl
 import gc_utilities as gcu
 import os
 import sys
+import analysis_methods as am
+import analysis_utilities as au
 
-# param_name = sys.argv[1]
-#
-# run_params = lu.get_run_params(param_name=f'submission_scripts/{param_name}')
-run_params = lu.get_run_params('submission_scripts/gc_DL6_IL45.yml')
+param_name = sys.argv[1]
+
+run_params = lu.get_run_params(param_name=f'submission_params/{param_name}')
+# run_params = lu.get_run_params('submission_params/gc_DL1_IL45.yml')
 
 make_avg_med_figs = run_params['make_avg_med_figs']
 make_best_figs = run_params['make_best_figs']
@@ -76,22 +78,27 @@ color_limits_b_hat = np.nanquantile(np.abs(all_b_hat).flatten(), 0.99)
 # plt.colorbar(A_pos)
 # # plt.show()
 
+# create averaged a_hat and b_hat matrices over all non-NaN values over all datasets
+# save all a_hat and b_hat full mtxes first as 3d array, then nanmean over each element along 3rd axis
+a_hat_avg = np.nanmean(all_a_hat, axis=2)
+a_hat_0_avg = np.nanmean(all_a_hat_0, axis=2)
+b_hat_avg = np.nanmean(all_b_hat, axis=2)
+
+# repeat but with median instead of mean
+a_hat_median = np.nanmedian(all_a_hat, axis=2)
+a_hat_0_median = np.nanmedian(all_a_hat_0, axis=2)
+b_hat_median = np.nanmedian(all_b_hat, axis=2)
+if emissions_num_lags > 1:
+    gcu.plot_dynamics_subset(a_hat_0_avg, cell_ids_chosen, neuron_inds_chosen, colormap, emissions_num_lags, save=True,
+                             fig_path=fig_path, data_name='avg')
+    gcu.plot_dynamics_subset(a_hat_0_median, cell_ids_chosen, neuron_inds_chosen, colormap, emissions_num_lags,
+                             save=True, fig_path=fig_path, data_name='median')
+
 if make_avg_med_figs:
     gcu.plot_weights_all_data_sets(all_a_hat_0, num_data_sets, colormap, color_limits_a_hat_0, emissions_num_lags,
                                    save=True, fig_path=fig_path, data_name='a_hat')
     gcu.plot_weights_all_data_sets(all_b_hat, num_data_sets, colormap, color_limits_b_hat, inputs_num_lags, save=True,
                                    fig_path=fig_path, data_name='b_hat')
-
-    # create averaged a_hat and b_hat matrices over all non-NaN values over all datasets
-    # save all a_hat and b_hat full mtxes first as 3d array, then nanmean over each element along 3rd axis
-    a_hat_avg = np.nanmean(all_a_hat, axis=2)
-    a_hat_0_avg = np.nanmean(all_a_hat_0, axis=2)
-    b_hat_avg = np.nanmean(all_b_hat, axis=2)
-
-    # repeat but with median instead of mean
-    a_hat_median = np.nanmedian(all_a_hat, axis=2)
-    a_hat_0_median = np.nanmedian(all_a_hat_0, axis=2)
-    b_hat_median = np.nanmedian(all_b_hat, axis=2)
 
     # mean
     gcu.plot_weights_mean_median(a_hat_avg, colormap, save=True, fig_path=fig_path,
@@ -203,6 +210,22 @@ num_sim = 120
 avg_pred_x_all_data = gcu.impulse_response_func(num_sim, cell_ids, cell_ids_chosen, num_neurons, num_data_sets,
                                                 emissions, inputs, all_a_hat, all_b_hat, emissions_num_lags,
                                                 inputs_num_lags, rerun=run_params['imp_resp_func_rerun'])
+# corr plots from matt's code
+window = window = (-60, 120)
+measured_irf = au.get_impulse_response_function(emissions, inputs, sub_pre_stim=True, window=window)[0]
+measured_irf = au.p_norm(measured_irf, axis=0)
+post_pred_irf = au.p_norm(avg_pred_x_all_data[:, neuron_inds_chosen, :], axis=0)
+corr_data, corr_data_subset = gcu.get_correlation(emissions, inputs, cell_ids, cell_ids_chosen, avg_pred_x_all_data,
+                                                  colormap, save=True, fig_path=fig_path)
+data_corr = np.abs(au.nan_corr_data(emissions))
+corr_data_subset = data_corr[:, neuron_inds_chosen][neuron_inds_chosen, :]
+a_hat_avg = np.nanmean(all_a_hat, axis=2)
+a_hat_norm = au.p_norm(au.stack_weights(a_hat_avg, emissions_num_lags, axis=1), axis=0)
+am.compare_irf_w_anatomy(cell_ids_chosen, a_hat_norm[np.ix_(neuron_inds_chosen, neuron_inds_chosen)],
+                         measured_irf[np.ix_(neuron_inds_chosen, neuron_inds_chosen)],
+                         post_pred_irf,
+                         corr_data_subset, fig_path)
+
 
 gcu.plot_l2_norms(emissions, inputs, cell_ids, cell_ids_chosen, avg_pred_x_all_data, colormap,
                   save=True, fig_path=fig_path)
@@ -231,6 +254,9 @@ gcu.plot_l2_norms(emissions, inputs, cell_ids, cell_ids_chosen, avg_pred_x_all_d
                   colormap, save=True, fig_path=fig_path + 'best_')
 gcu.plot_imp_resp(emissions, inputs, neuron_inds_chosen, num_neurons, num_data_sets, cell_ids, cell_ids_chosen,
                   neuron_to_stim, avg_pred_x_all_data_best, save=True, fig_path=fig_path + 'best_')
+
+
+print(emissions_num_lags)
 a = 0
 
 # todo: hold out 30 datasets for test ds, train on rest

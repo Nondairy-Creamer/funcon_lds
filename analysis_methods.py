@@ -375,11 +375,11 @@ def plot_stim_norm(model, measured_irf, post_pred_irf, data_corr, cell_ids_chose
     plt.show()
 
 
-def compare_irf_w_anatomy(model, measured_irf, post_pred_irf, data_corr):
-    cell_ids = model.cell_ids
+def compare_irf_w_anatomy(cell_ids, model_weights, measured_irf, post_pred_irf, data_corr, fig_path):
+    # cell_ids = model.cell_ids
     is_synth = '0' in cell_ids
 
-    model_weights = au.p_norm(au.stack_weights(model.dynamics_weights[:model.dynamics_dim, :], model.dynamics_lags, axis=1), axis=0)
+    # model_weights = au.p_norm(au.stack_weights(model.dynamics_weights[:model.dynamics_dim, :], model.dynamics_lags, axis=1), axis=0)
 
     # set the diagonal to nan to do stats on everything else
     data_corr[np.eye(data_corr.shape[0], dtype=bool)] = np.nan
@@ -428,6 +428,8 @@ def compare_irf_w_anatomy(model, measured_irf, post_pred_irf, data_corr):
         plt.bar(plot_x, [ctome_to_corr, ctome_to_model])
         plt.xticks(plot_x, ['data correlation', 'model weights'])
         plt.xlabel('correlation to connectome')
+        string = fig_path + 'bar_conn.png'
+        plt.savefig(string)
 
         # show the scatter plots for the comparison to IRF
         plt.figure()
@@ -439,6 +441,8 @@ def compare_irf_w_anatomy(model, measured_irf, post_pred_irf, data_corr):
         plt.scatter(model_weights, ctome_model)
         plt.xlabel('model weights')
         plt.ylabel('connectome')
+        string = fig_path + 'scatter_irf_conn.png'
+        plt.savefig(string)
 
     # compare the metrics to the measured IRF
     plt.figure()
@@ -446,6 +450,8 @@ def compare_irf_w_anatomy(model, measured_irf, post_pred_irf, data_corr):
     plt.bar(plot_x, [corr_metric[0, 2], corr_metric[0, 1], corr_metric[0, 3]])
     plt.xticks(plot_x, ['data correlation', 'post_pred', 'model_weights'])
     plt.ylabel('correlation to impulse responses')
+    string = fig_path + 'bar_irf.png'
+    plt.savefig(string)
 
     # show the scatter plots for the comparison to IRF
     plt.figure()
@@ -463,8 +469,9 @@ def compare_irf_w_anatomy(model, measured_irf, post_pred_irf, data_corr):
     plt.ylabel('data correlation')
     plt.tight_layout()
 
-    plt.show()
-
+    # plt.show()
+    string = fig_path + 'scatter_irf.png'
+    plt.savefig(string)
 
 def plot_stim_response(measured_irf, measured_irf_sem, posterior_irf, post_pred_irf, cell_ids, cell_ids_chosen, window,
                        sample_rate=0.5, num_plot=5):
