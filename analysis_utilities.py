@@ -1,4 +1,70 @@
 import numpy as np
+import analysis_methods as am
+from pathlib import Path
+import pickle
+import warnings
+import wormneuroatlas as wa
+from scipy import stats as ss
+
+
+def get_best_model(model_folders, sorting_param, use_test_data=True, plot_figs=True, best_model_ind=None):
+    model_folders = [Path(i) for i in model_folders]
+    model_list = []
+    model_true_list = []
+    posterior_train_list = []
+    data_train_list = []
+    posterior_test_list = []
+    data_test_list = []
+
+    for m in model_folders:
+        m = 'trained_models' / m
+        # load in the model and the data
+        model_file = open(m / 'models' / 'model_trained.pkl', 'rb')
+        model_list.append(pickle.load(model_file))
+        model_file.close()
+
+        model_true_path = m / 'models' / 'model_true.pkl'
+        if model_true_path.exists():
+            model_true_file = open(m / 'models' / 'model_true.pkl', 'rb')
+            model_true_list.append(pickle.load(model_true_file))
+            model_true_file.close()
+        else:
+            model_true_list.append(None)
+
+        posterior_train_file = open(m / 'posterior_train.pkl', 'rb')
+        posterior_train_list.append(pickle.load(posterior_train_file))
+        posterior_train_file.close()
+
+        data_train_file = open(m / 'data_train.pkl', 'rb')
+        data_train_list.append(pickle.load(data_train_file))
+        data_train_file.close()
+
+        posterior_test_file = open(m / 'posterior_test.pkl', 'rb')
+        posterior_test_list.append(pickle.load(posterior_test_file))
+        posterior_test_file.close()
+
+        data_test_file = open(m / 'data_test.pkl', 'rb')
+        data_test_list.append(pickle.load(data_test_file))
+        data_test_file.close()
+
+    best_model_ind = am.plot_model_comparison(sorting_param, model_list, posterior_train_list,
+                                              data_train_list, posterior_test_list, data_test_list,
+                                              plot_figs=plot_figs, best_model_ind=best_model_ind)
+
+    model = model_list[best_model_ind]
+    model_true = model_true_list[best_model_ind]
+    data_corr = nan_corr_data(data_train_list[best_model_ind]['emissions'])
+
+    if use_test_data:
+        data = data_test_list[best_model_ind]
+        posterior_dict = posterior_test_list[best_model_ind]
+        posterior_path = 'trained_models' / model_folders[best_model_ind] / 'posterior_test.yml'
+    else:
+        data = data_train_list[best_model_ind]
+        posterior_dict = posterior_train_list[best_model_ind]
+        posterior_path = 'trained_models' / model_folders[best_model_ind] / 'posterior_train.yml'
+
+    return model, model_true, data, posterior_dict, posterior_path, data_corr
 
 
 def auto_select_ids(inputs, cell_ids, num_neurons=10):
@@ -80,7 +146,9 @@ def get_impulse_response_function(data, inputs, window=(-60, 120), sub_pre_stim=
             else:
                 responses[ri] = np.zeros((0, window[1], num_neurons))
 
-    ave_responses = [np.nanmean(j, axis=0) for j in responses]
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', category=RuntimeWarning)
+        ave_responses = [np.nanmean(j, axis=0) for j in responses]
     ave_responses = np.stack(ave_responses)
     ave_responses = np.transpose(ave_responses, axes=(1, 2, 0))
 
@@ -89,6 +157,23 @@ def get_impulse_response_function(data, inputs, window=(-60, 120), sub_pre_stim=
     ave_responses_sem = np.transpose(ave_responses_sem, axes=(1, 2, 0))
 
     return ave_responses, ave_responses_sem, responses
+
+
+def get_anatomical_data(cell_ids):
+    # load in anatomical data
+    watlas = wa.NeuroAtlas()
+    atlas_ids = list(watlas.neuron_ids)
+    anatomical_connectome_full = watlas.get_anatomical_connectome(signed=False)
+    peptide_connectome_full = watlas.get_peptidergic_connectome()
+    gap_junction_connectome_full = watlas.get_gap_junctions()
+    atlas_ids[atlas_ids.index('AWCON')] = 'AWCR'
+    atlas_ids[atlas_ids.index('AWCOFF')] = 'AWCL'
+    atlas_inds = [atlas_ids.index(i) for i in cell_ids]
+    chem_syn_conn = anatomical_connectome_full[np.ix_(atlas_inds, atlas_inds)]
+    gap_conn = gap_junction_connectome_full[np.ix_(atlas_inds, atlas_inds)]
+    pep_conn = peptide_connectome_full[np.ix_(atlas_inds, atlas_inds)]
+
+    return chem_syn_conn, gap_conn, pep_conn
 
 
 def find_stim_events(inputs, window_size=1000):
@@ -124,7 +209,7 @@ def find_stim_events(inputs, window_size=1000):
     return max_data_set, time_window
 
 
-def r2(y_true, y_hat):
+def nan_r2(y_true, y_hat):
     y_true = y_true.reshape(-1)
     y_hat = y_hat.reshape(-1)
 
@@ -138,7 +223,7 @@ def r2(y_true, y_hat):
     return 1 - ss_res / ss_tot
 
 
-def corr(y_true, y_hat, mean_sub=True):
+def nan_corr(y_true, y_hat, mean_sub=True):
     y_true = y_true.reshape(-1)
     y_hat = y_hat.reshape(-1)
 
@@ -153,29 +238,44 @@ def corr(y_true, y_hat, mean_sub=True):
     y_true_std = np.std(y_true, ddof=1)
     y_hat_std = np.std(y_hat, ddof=1)
 
-    return np.mean(y_true * y_hat) / y_true_std / y_hat_std
+    corr = np.mean(y_true * y_hat) / y_true_std / y_hat_std
+
+    # now estimate the confidence intervals for the correlation
+    alpha = 0.5
+    n = y_true.shape[0]
+    z_a = ss.norm.ppf(1 - alpha / 2)
+    z_r = np.log((1 + corr) / (1 - corr)) / 2
+    l = z_r - (z_a / np.sqrt(n - 3))
+    u = z_r + (z_a / np.sqrt(n - 3))
+    ci_l = (np.exp(2 * l) - 1) / (np.exp(2 * l) + 1)
+    ci_u = (np.exp(2 * u) - 1) / (np.exp(2 * u) + 1)
+    ci = (ci_l, ci_u)
+
+    return corr, ci
 
 
 def nan_corr_data(data):
-    # calculate the average cross correlation between neurons
-    emissions_cov = []
-    num_neurons = data[0].shape[1]
-    for i in range(len(data)):
-        emissions_this = data[i]
-        nan_loc = np.isnan(emissions_this)
-        em_z_score = (emissions_this - np.nanmean(emissions_this, axis=0)) / np.nanstd(emissions_this, axis=0)
-        em_z_score[nan_loc] = 0
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', category=RuntimeWarning)
+        # calculate the average cross correlation between neurons
+        emissions_cov = []
+        num_neurons = data[0].shape[1]
+        for i in range(len(data)):
+            emissions_this = data[i]
+            nan_loc = np.isnan(emissions_this)
+            em_z_score = (emissions_this - np.nanmean(emissions_this, axis=0)) / np.nanstd(emissions_this, ddof=1, axis=0)
+            em_z_score[nan_loc] = 0
 
-        # figure out how many times the two neurons were measured together
-        num_measured = np.zeros((num_neurons, num_neurons))
-        for j1 in range(num_neurons):
-            for j2 in range(num_neurons):
-                num_measured[j1, j2] = np.sum(~nan_loc[:, j1] & ~nan_loc[:, j2])
+            # figure out how many times the two neurons were measured together
+            num_measured = np.zeros((num_neurons, num_neurons))
+            for j1 in range(num_neurons):
+                for j2 in range(num_neurons):
+                    num_measured[j1, j2] = np.sum(~nan_loc[:, j1] & ~nan_loc[:, j2])
 
-        emissions_cov_this = em_z_score.T @ em_z_score / num_measured
-        emissions_cov.append(emissions_cov_this)
+            emissions_cov_this = em_z_score.T @ em_z_score / num_measured
+            emissions_cov.append(emissions_cov_this)
 
-    correlation = np.nanmean(np.stack(emissions_cov), axis=0)
+        correlation = np.nanmean(np.stack(emissions_cov), axis=0)
 
     return correlation
 
