@@ -8,16 +8,16 @@ import sys
 import analysis_methods as am
 import analysis_utilities as au
 
-param_name = sys.argv[1]
-
-run_params = lu.get_run_params(param_name=f'submission_params/{param_name}')
-# run_params = lu.get_run_params('submission_params/gc_DL1_IL45.yml')
+# param_name = sys.argv[1]
+#
+# run_params = lu.get_run_params(param_name=f'submission_params/{param_name}')
+run_params = lu.get_run_params('submission_params/gc_DL6_IL45.yml')
 
 make_avg_med_figs = run_params['make_avg_med_figs']
 make_best_figs = run_params['make_best_figs']
 
 colormap = mpl.colormaps['coolwarm']
-fig_path = run_params['fig_path']
+fig_path = run_params['fig_path'] + 'diff_ahat_init_0/'
 
 # make separate directory for figs from this script
 new_dir_name = run_params['fig_dir']
@@ -42,9 +42,9 @@ all_a_hat, all_a_hat_0, all_b_hat, mse = gcu.run_gc(num_data_sets, emissions_num
                                                     inputs, emissions, rerun=run_params['gc_rerun'])
 
 # pick subset of neurons to look at
-cell_ids_chosen = ['AVAL', 'AVAR', 'AVEL', 'AVER', 'AFDL', 'AFDR', 'AVJL', 'AVJR', 'AVDL', 'AVDR']
+cell_ids_chosen = ['M3L', 'RMDDR', 'FLPR', 'RIMR', 'AVER', 'AVJL', 'AVEL', 'AWBL', 'RMDVL', 'RMDVR']
 # neuron_to_remove = 'AVDL'
-neuron_to_stim = 'AFDR'
+neuron_to_stim = 'M3L'
 # array of neuron indices
 neuron_inds_chosen = np.array([cell_ids.index(i) for i in cell_ids_chosen])
 neuron_stim_index = cell_ids.index(neuron_to_stim)
@@ -144,46 +144,69 @@ if make_avg_med_figs:
                                    'median_b_hat_subset', True, neuron_inds_chosen, save=True, fig_path=fig_path)
 
     # eval stuff
-    zero_nan_a_hat = a_hat_avg
+    # zero_nan_a_hat = a_hat_avg.copy()
+    # zero_nan_a_hat[np.isnan(zero_nan_a_hat)] = 0
+    # eig_vals = np.linalg.eigvals(zero_nan_a_hat[:, :num_neurons])
+
+    dynamics_eye_pad = np.eye(num_neurons * (emissions_num_lags - 1))
+    dynamics_zeros_pad = np.zeros((num_neurons * (emissions_num_lags - 1), num_neurons))
+    dynamics_pad = np.concatenate((dynamics_eye_pad, dynamics_zeros_pad), axis=1)
+
+    zero_nan_a_hat = np.concatenate((a_hat_median, dynamics_pad), axis=0)
     zero_nan_a_hat[np.isnan(zero_nan_a_hat)] = 0
-    eig_vals = np.linalg.eigvals(zero_nan_a_hat[:, :num_neurons])
+    eig_vals = np.linalg.eigvals(zero_nan_a_hat)
+
+
 
     plt.figure()
     plt.scatter(np.real(eig_vals), np.imag(eig_vals))
-    # plt.show()
+    # # plt.show()
     string = fig_path + 'eigs.png'
     plt.savefig(string)
-
-    zero_nan_a_hat_med = a_hat_median
-    zero_nan_a_hat_med[np.isnan(zero_nan_a_hat_med)] = 0
-    eig_vals = np.linalg.eigvals(zero_nan_a_hat_med[:, :num_neurons])
-
-    plt.figure()
-    plt.scatter(np.real(eig_vals), np.imag(eig_vals))
-    # plt.show()
-    string = fig_path + 'eigs_med.png'
-    plt.savefig(string)
+    #
+    # zero_nan_a_hat_med = a_hat_median
+    # zero_nan_a_hat_med[np.isnan(zero_nan_a_hat_med)] = 0
+    # eig_vals = np.linalg.eigvals(zero_nan_a_hat_med[:, :num_neurons])
+    #
+    # plt.figure()
+    # plt.scatter(np.real(eig_vals), np.imag(eig_vals))
+    # # plt.show()
+    # string = fig_path + 'eigs_med.png'
+    # plt.savefig(string)
 
 if make_best_figs:
+    nans = np.any(np.isnan(emissions[best_data_set]), axis=0)
+    best_a_no_nans = all_a_hat[~nans, :, best_data_set]
+    nans_mask = np.tile(nans, emissions_num_lags)
+    best_a_no_nans = best_a_no_nans[:, ~nans_mask]
+    for i in range(emissions_num_lags):
+        np.fill_diagonal(best_a_no_nans[:, (num_neurons - nans.sum())*i:(num_neurons - nans.sum())*(i+1)], np.nan)
+
+    nans_b = np.any(np.isnan(inputs[best_data_set]), axis=0)
+    best_b_no_nans = all_b_hat[~nans_b, :, best_data_set]
+    nans_mask = np.tile(nans_b, inputs_num_lags)
+    best_b_no_nans = best_b_no_nans[:, ~nans_mask]
+
     gcu.plot_weights_mean_median(all_b_hat[:, :, best_data_set], colormap, save=True, fig_path=fig_path,
                                  data_title='best b_hat', data_name='best_b_hat')
     gcu.plot_weights_mean_median(all_a_hat_0[:, :, best_data_set], colormap, save=True, fig_path=fig_path,
                                  data_title='best a_hat, diag=0', data_name='best_a_hat_0')
 
+    gcu.plot_weights_mean_median(best_b_no_nans, colormap, save=True, fig_path=fig_path,
+                                 data_title='best b_hat no nans', data_name='best_b_hat_no_nans')
+    gcu.plot_weights_mean_median(best_a_no_nans, colormap, save=True, fig_path=fig_path,
+                                 data_title='best a_hat no nans, diag=0', data_name='best_a_hat_no_nans')
+
     if emissions_num_lags > 1:
-        gcu.plot_weights_mean_median_split(all_a_hat_0[:, :, best_data_set], colormap, emissions_num_lags, save=True,
+        gcu.plot_weights_mean_median_split(best_a_no_nans, colormap, emissions_num_lags, save=True,
                                            fig_path=fig_path, data_title='best a_hat (diag=0)',
                                            data_name='best_a_hat_0_split')
 
-    gcu.plot_input_weights_neurons(all_b_hat[:, :, best_data_set], inputs_num_lags, cell_ids, colormap, 'best_b_hat',
-                                   False, [], save=True, fig_path=fig_path)
+    gcu.plot_input_weights_neurons(best_b_no_nans, inputs_num_lags, cell_ids, colormap, 'best_b_hat',
+                                   False, ~nans_b, save=True, fig_path=fig_path)
     gcu.plot_input_weights_neurons(all_b_hat[:, :, best_data_set], inputs_num_lags, cell_ids, colormap,
                                    'best_b_hat_subset', True, neuron_inds_chosen, save=True, fig_path=fig_path)
 
-    nans = np.any(np.isnan(emissions[best_data_set]), axis=0)
-    best_a_no_nans = all_a_hat[~nans, :, best_data_set]
-    nans_mask = np.tile(nans, emissions_num_lags)
-    best_a_no_nans = best_a_no_nans[:, ~nans_mask]
 
     color_lims = np.nanquantile(np.abs(best_a_no_nans).flatten(), 0.99)
     plt.figure()
@@ -209,14 +232,15 @@ num_sim = 120
 
 avg_pred_x_all_data = gcu.impulse_response_func(num_sim, cell_ids, cell_ids_chosen, num_neurons, num_data_sets,
                                                 emissions, inputs, all_a_hat, all_b_hat, emissions_num_lags,
-                                                inputs_num_lags, rerun=run_params['imp_resp_func_rerun'])
+                                                inputs_num_lags, f_name='impulse_response_data_0_init',
+                                                rerun=run_params['imp_resp_func_rerun'])
 # corr plots from matt's code
 window = window = (-60, 120)
 measured_irf = au.get_impulse_response_function(emissions, inputs, sub_pre_stim=True, window=window)[0]
 measured_irf = au.p_norm(measured_irf, axis=0)
 post_pred_irf = au.p_norm(avg_pred_x_all_data[:, neuron_inds_chosen, :], axis=0)
-corr_data, corr_data_subset = gcu.get_correlation(emissions, inputs, cell_ids, cell_ids_chosen, avg_pred_x_all_data,
-                                                  colormap, save=True, fig_path=fig_path)
+# corr_data, corr_data_subset = gcu.get_correlation(emissions, inputs, cell_ids, cell_ids_chosen, avg_pred_x_all_data,
+#                                                   colormap, save=True, fig_path=fig_path)
 data_corr = np.abs(au.nan_corr_data(emissions))
 corr_data_subset = data_corr[:, neuron_inds_chosen][neuron_inds_chosen, :]
 a_hat_avg = np.nanmean(all_a_hat, axis=2)
@@ -227,7 +251,7 @@ am.compare_irf_w_anatomy(cell_ids_chosen, a_hat_norm[np.ix_(neuron_inds_chosen, 
                          corr_data_subset, fig_path)
 
 
-gcu.plot_l2_norms(emissions, inputs, cell_ids, cell_ids_chosen, avg_pred_x_all_data, colormap,
+gcu.plot_l2_norms(emissions, inputs, cell_ids, cell_ids_chosen, avg_pred_x_all_data, colormap, a_hat_avg,
                   save=True, fig_path=fig_path)
 
 # plot on y axis the gc results for a chosen neuron after stimulus of another neuron
@@ -247,11 +271,11 @@ avg_pred_x_all_data_best = gcu.impulse_response_func(num_sim, cell_ids, cell_ids
                                                      np.reshape(all_b_hat[:, :, best_data_set],
                                                                 (num_neurons, num_neurons*inputs_num_lags, 1)),
                                                      emissions_num_lags, inputs_num_lags,
-                                                     f_name='impulse_response_data_best',
+                                                     f_name='impulse_response_data_best_0_init',
                                                      rerun=run_params['best_imp_resp_func_rerun'])
 
 gcu.plot_l2_norms(emissions, inputs, cell_ids, cell_ids_chosen, avg_pred_x_all_data_best,
-                  colormap, save=True, fig_path=fig_path + 'best_')
+                  colormap, all_a_hat[:, :, best_data_set], save=True, fig_path=fig_path + 'best_')
 gcu.plot_imp_resp(emissions, inputs, neuron_inds_chosen, num_neurons, num_data_sets, cell_ids, cell_ids_chosen,
                   neuron_to_stim, avg_pred_x_all_data_best, save=True, fig_path=fig_path + 'best_')
 
