@@ -274,14 +274,14 @@ def parallel_get_post(model, data, init_mean=None, init_cov=None, max_iter=1, co
             inputs = i[1].copy()
 
             ll, posterior, suff_stats = model.lgssm_smoother(emissions, inputs, init_mean, init_cov, memmap_cpu_id)
-            post_pred = model.sample(num_time=emissions.shape[0], inputs_list=[inputs], init_mean=[init_mean], init_cov=[init_cov], add_noise=False)
-            post_pred_noise = model.sample(num_time=emissions.shape[0], inputs_list=[inputs], init_mean=[init_mean], init_cov=[init_cov])
+            model_sampled = model.sample(num_time=emissions.shape[0], inputs_list=[inputs], init_mean=[init_mean], init_cov=[init_cov], add_noise=False)
+            model_sampled_noise = model.sample(num_time=emissions.shape[0], inputs_list=[inputs], init_mean=[init_mean], init_cov=[init_cov])
 
             posterior = posterior[:, :model.dynamics_dim]
-            post_pred = post_pred['latents'][0][:, :model.dynamics_dim]
-            post_pred_noise = post_pred_noise['latents'][0][:, :model.dynamics_dim]
+            model_sampled = model_sampled['latents'][0][:, :model.dynamics_dim]
+            model_sampled_noise = model_sampled_noise['latents'][0][:, :model.dynamics_dim]
 
-            ll_smeans.append((ll, posterior, post_pred, post_pred_noise, init_mean, init_cov))
+            ll_smeans.append((ll, posterior, model_sampled, model_sampled_noise, init_mean, init_cov))
     else:
         ll_smeans = None
 
@@ -302,15 +302,15 @@ def parallel_get_post(model, data, init_mean=None, init_cov=None, max_iter=1, co
         ll = [i[0] for i in ll_smeans]
         ll = np.sum(ll)
         smoothed_means = [i[1] for i in ll_smeans]
-        post_pred = [i[2] for i in ll_smeans]
-        post_pred_noise = [i[3] for i in ll_smeans]
+        model_sampled = [i[2] for i in ll_smeans]
+        model_sampled_noise = [i[3] for i in ll_smeans]
         init_mean = [i[4] for i in ll_smeans]
         init_cov = [i[5] for i in ll_smeans]
 
         inference_test = {'ll': ll,
                           'posterior': smoothed_means,
-                          'post_pred': post_pred,
-                          'post_pred_noise': post_pred_noise,
+                          'model_sampled': model_sampled,
+                          'model_sampled_noise': model_sampled_noise,
                           'init_mean': init_mean,
                           'init_cov': init_cov,
                           'cell_ids': model.cell_ids,
