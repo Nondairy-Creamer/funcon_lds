@@ -393,7 +393,7 @@ def compare_irf_w_anatomy(cell_ids, model_weights, measured_irf, post_pred_irf, 
     # cell_ids = model.cell_ids
     is_synth = '0' in cell_ids
 
-    model_weights = au.ave_fun(au.stack_weights(model.dynamics_weights[:model.dynamics_dim, :], model.dynamics_lags, axis=1), axis=0)
+    # model_weights = au.ave_fun(au.stack_weights(model.dynamics_weights[:model.dynamics_dim, :], model.dynamics_lags, axis=1), axis=0)
 
     # set the diagonal to nan to do stats on everything else
     data_corr[np.eye(data_corr.shape[0], dtype=bool)] = np.nan

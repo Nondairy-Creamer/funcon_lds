@@ -428,11 +428,11 @@ def plot_l2_norms(emissions, inputs, cell_ids, cell_ids_chosen, avg_pred_x_all_d
 
     plot_x = np.arange(len(chosen_neuron_inds))
     measured_stim_responses = au.get_impulse_response_function(emissions, inputs, sub_pre_stim=True, window=window)[0]
-    measured_response_norm = au.p_norm(measured_stim_responses, axis=0)
+    measured_response_norm = au.ave_fun(measured_stim_responses, axis=0)
     measured_response_norm = measured_response_norm[np.ix_(chosen_neuron_inds, chosen_neuron_inds)]
     measured_response_norm[np.eye(measured_response_norm.shape[0], dtype=bool)] = np.nan
 
-    pred_response_norm = au.p_norm(avg_pred_x_all_data, axis=0)
+    pred_response_norm = au.ave_fun(avg_pred_x_all_data, axis=0)
     pred_response_norm_plot = pred_response_norm[chosen_neuron_inds, :]
 
     # set diag = nan
@@ -556,7 +556,7 @@ def plot_imp_resp(emissions, inputs, neuron_inds_chosen, num_neurons, num_data_s
     # list of neuron indices
     chosen_neuron_inds = [cell_ids.index(i) for i in cell_ids_chosen]
     measured_stim_responses = au.get_impulse_response_function(emissions, inputs, sub_pre_stim=True, window=window)[0]
-    # measured_response_norm = au.p_norm(measured_stim_responses, axis=0)
+    # measured_response_norm = au.ave_fun(measured_stim_responses, axis=0)
     # measured_response_norm = measured_response_norm[chosen_neuron_inds, :][:, chosen_neuron_inds]
     # measured_response_norm[np.eye(measured_response_norm.shape[0], dtype=bool)] = 0
     # measured_response_norm = measured_response_norm / np.nanmax(measured_response_norm)
@@ -666,12 +666,12 @@ def get_correlation(emissions, inputs, cell_ids, cell_ids_chosen, avg_pred_x_all
 
     # measured_stim_responses = au.get_impulse_response_function(emissions, inputs, sub_pre_stim=True, window=(0, emissions[0].shape[0]))
     measured_stim_responses = au.get_impulse_response_function(emissions, inputs, sub_pre_stim=True, window=window)
-    measured_response_norm = au.p_norm(measured_stim_responses[0], axis=0)
+    measured_response_norm = au.ave_fun(measured_stim_responses[0], axis=0)
     measured_response_norm = measured_response_norm[chosen_neuron_inds, :][:, chosen_neuron_inds]
     measured_response_norm[np.eye(measured_response_norm.shape[0], dtype=bool)] = 0
     # measured_response_norm = measured_response_norm / np.nanmax(measured_response_norm)
 
-    pred_response_norm = au.p_norm(avg_pred_x_all_data, axis=0)
+    pred_response_norm = au.ave_fun(avg_pred_x_all_data, axis=0)
     pred_response_norm_plot = pred_response_norm[chosen_neuron_inds, :]
 
     # set diag = 0 and normalize
