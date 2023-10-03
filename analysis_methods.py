@@ -410,7 +410,7 @@ def plot_irf_norm(model_weights, measured_irf, model_sampled_irf, data_corr, cel
 
     ax = plt.subplot(2, 2, 2)
     plt.imshow(model_sampled_irf, interpolation='nearest', cmap=colormap)
-    plt.title('post pred response')
+    plt.title('model IRFs')
     plt.xticks(plot_x, cell_ids_chosen)
     plt.yticks(plot_x, cell_ids_chosen)
     for label in ax.get_xticklabels():
@@ -462,7 +462,7 @@ def compare_irf_w_anatomy(model_weights, measured_irf, model_sampled_irf, data_c
     y_val_ci = np.abs(np.stack([model_weights_score_ci, measured_irf_score_ci, model_sampled_irf_score_ci, data_corr_score_ci]).T - y_val)
     plt.bar(plot_x, y_val)
     plt.errorbar(plot_x, y_val, y_val_ci, fmt='.', color='k')
-    plt.xticks(plot_x, ['model weights', 'measured irf', 'post pred', 'data corr'])
+    plt.xticks(plot_x, ['model weights', 'measured irf', 'model irf', 'data corr'])
     plt.xlabel('correlation to connectome')
 
     # plot the weights compare to their reconstructions
@@ -486,14 +486,14 @@ def compare_irf_w_prediction(model_weights, measured_irf, model_sampled_irf, dat
     plt.scatter(measured_irf_chosen.reshape(-1), model_sampled_irf_chosen.reshape(-1))
     xlim = plt.xlim()
     plt.plot(xlim, xlim)
-    plt.title('post pred, ' + str(model_sampled_score))
-    plt.ylabel('post pred irf')
-    plt.xlabel('measured irf')
+    plt.title('model IRFs, ' + str(model_sampled_score))
+    plt.ylabel('model IRFs')
+    plt.xlabel('measured IRFs')
 
     plt.figure()
     plt.scatter(measured_irf_chosen.reshape(-1), data_corr_chosen.reshape(-1))
     plt.ylabel('data correlation')
-    plt.xlabel('measured_irf')
+    plt.xlabel('measured IRFs')
     plt.title('data corr, ' + str(data_corr_score))
 
     data_corr_score, data_corr_score_ci = au.compare_matrix_sets(measured_irf, data_corr)[:2]
@@ -507,24 +507,24 @@ def compare_irf_w_prediction(model_weights, measured_irf, model_sampled_irf, dat
     y_val_ci = np.abs(np.stack([data_corr_score_ci, model_sampled_score_ci, model_weights_score_ci]).T - y_val)
     plt.bar(plot_x, y_val)
     plt.errorbar(plot_x, y_val, yerr=y_val_ci, fmt='.', color='k')
-    plt.xticks(plot_x, ['data correlation', 'model sampled', 'model weights'])
-    plt.ylabel('correlation to impulse responses')
+    plt.xticks(plot_x, ['data correlation', 'model IRFs', 'model weights'])
+    plt.ylabel('correlation to measured IRFs')
 
     # show the scatter plots for the comparison to IRF
     plt.figure()
     plt.subplot(2, 2, 1)
     plt.scatter(measured_irf.reshape(-1), data_corr.reshape(-1), s=2)
     plt.ylabel('data correlation')
-    plt.xlabel('measured impulse response')
+    plt.xlabel('measured IRFs')
     plt.subplot(2, 2, 2)
     plt.scatter(measured_irf.reshape(-1), model_sampled_irf.reshape(-1), s=2)
     xlim = plt.xlim()
     plt.plot(xlim, xlim, color='k')
-    plt.ylabel('model impulse responses')
-    plt.xlabel('measured impulse response')
+    plt.ylabel('model IRFs')
+    plt.xlabel('measured IRFs')
     plt.subplot(2, 2, 3)
     plt.scatter(model_sampled_irf.reshape(-1), data_corr.reshape(-1), s=2)
-    plt.xlabel('model impulse responses')
+    plt.xlabel('model IRFs')
     plt.ylabel('data correlation')
     plt.tight_layout()
 
@@ -575,7 +575,7 @@ def plot_irf_traces(measured_irf, measured_irf_sem, posterior_irf, model_sampled
         plt.plot(plot_x, this_measured_resp, label='measured')
         plt.fill_between(plot_x, this_measured_resp - this_measured_resp_sem, this_measured_resp + this_measured_resp_sem, alpha=0.4)
         plt.plot(plot_x, posterior_response_chosen[:, i], label='posterior')
-        plt.plot(plot_x, model_sampled_response_chosen[:, i], label='posterior predictive')
+        plt.plot(plot_x, model_sampled_response_chosen[:, i], label='model sampled')
         plt.axvline(0, color='k', linestyle='--')
         plt.axhline(0, color='k', linestyle='--')
         plt.ylim(ylim)
