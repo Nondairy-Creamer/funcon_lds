@@ -126,25 +126,28 @@ def compare_matrix_sets(left_side, right_side):
     left_side_col = np.stack([i.reshape(-1) for i in left_side]).T
     right_side_col = np.stack([i.reshape(-1) for i in right_side]).T
 
-    x0 = np.ones(num_left + num_right - 2)
+    if num_left > 1 or num_right > 1:
+        x0 = np.ones(num_left + num_right - 2)
 
-    def obj_fun(x):
-        left_weights = np.concatenate((np.ones(1)[None], x[:num_left-1]), axis=0)
-        right_weights = np.concatenate((np.ones(1)[None], x[num_left-1:]), axis=0)
-        # right_weights = x[num_left-1:]
+        def obj_fun(x):
+            left_weights = np.concatenate((np.ones(1), x[:num_left-1]), axis=0)
+            right_weights = np.concatenate((np.ones(1), x[num_left-1:]), axis=0)
 
-        left_val = left_side_col @ left_weights
-        right_val = right_side_col @ right_weights
+            left_val = left_side_col @ left_weights
+            right_val = right_side_col @ right_weights
 
-        return -nan_corr(left_val, right_val)[0]
+            return -nan_corr(left_val, right_val)[0]
 
-    x_hat = scipy.optimize.minimize(obj_fun, x0).x
+        x_hat = scipy.optimize.minimize(obj_fun, x0).x
 
-    left_weights = np.concatenate((np.ones(1)[None], x_hat[:num_left-1]), axis=0)
-    right_weights = np.concatenate((np.ones(1)[None], x_hat[num_left - 1:]), axis=0)
+        left_weights_hat = np.concatenate((np.ones(1), x_hat[:num_left - 1]), axis=0)
+        right_weights_hat = np.concatenate((np.ones(1), x_hat[num_left - 1:]), axis=0)
+    else:
+        left_weights_hat = np.ones(1)
+        right_weights_hat = np.ones(1)
 
-    left_recon = (left_side_col @ left_weights).reshape(left_side[0].shape)
-    right_recon = (right_side_col @ right_weights).reshape(right_side[0].shape)
+    left_recon = (left_side_col @ left_weights_hat).reshape(left_side[0].shape)
+    right_recon = (right_side_col @ right_weights_hat).reshape(right_side[0].shape)
 
     score, score_ci = nan_corr(left_recon, right_recon)
 
