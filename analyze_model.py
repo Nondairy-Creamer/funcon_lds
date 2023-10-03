@@ -17,7 +17,7 @@ model_folders = [Path(i) for i in run_params['model_folders']]
 # choose the model that has the highest test log likelihood
 model, model_true, data, posterior_dict, posterior_path, data_corr = \
     am.get_best_model(model_folders, run_params['sorting_param'], use_test_data=run_params['use_test_data'],
-                      plot_figs=True, best_model_ind=run_params['best_model_ind'])
+                      plot_figs=False, best_model_ind=run_params['best_model_ind'])
 
 is_synth = '0' in data['cell_ids']
 
@@ -44,13 +44,13 @@ posterior = posterior_dict['posterior']
 # get the impulse response functions (IRF)
 measured_irf, measured_irf_sem, measured_irf_all = au.get_impulse_response_function(emissions, inputs, window=window, sub_pre_stim=sub_pre_stim, return_pre=True)
 posterior_irf = au.get_impulse_response_function(posterior, inputs, window=window, sub_pre_stim=sub_pre_stim, return_pre=True)[0]
-model_sampled_irf = au.get_impulse_response_function(model_sampled, inputs, window=window, sub_pre_stim=sub_pre_stim, return_pre=True)[0]
+model_irf = au.get_impulse_response_function(model_sampled, inputs, window=window, sub_pre_stim=sub_pre_stim, return_pre=True)[0]
 model_weights = au.stack_weights(model.dynamics_weights[:model.dynamics_dim, :], model.dynamics_lags, axis=1)
 model_weights = np.split(model_weights, model_weights.shape[0], axis=0)
 model_weights = [i[0, :, :] for i in model_weights]
 
 measured_irf_ave = au.ave_fun(measured_irf[-window[0]:], axis=0)
-model_sampled_irf_ave = au.ave_fun(model_sampled_irf[-window[0]:], axis=0)
+model_irf_ave = au.ave_fun(model_irf[-window[0]:], axis=0)
 
 # remove IRFs that were measured fewer than run_params['num_stim_cutoff'] times
 num_neurons = len(cell_ids)
@@ -62,20 +62,20 @@ for ni in range(num_neurons):
         num_stim[nj, ni] += num_obs_when_stim
 
 measured_irf_ave[num_stim < run_params['num_stim_cutoff']] = np.nan
-model_sampled_irf_ave[num_stim < run_params['num_stim_cutoff']] = np.nan
+model_irf_ave[num_stim < run_params['num_stim_cutoff']] = np.nan
 data_corr[num_stim < run_params['num_stim_cutoff']] = np.nan
 
 # set diagonals to nan because we won't be analyzing the diagonals
 data_corr[np.eye(data_corr.shape[0], dtype=bool)] = np.nan
 measured_irf_ave[np.eye(measured_irf_ave.shape[0], dtype=bool)] = np.nan
-model_sampled_irf_ave[np.eye(model_sampled_irf_ave.shape[0], dtype=bool)] = np.nan
+model_irf_ave[np.eye(model_irf_ave.shape[0], dtype=bool)] = np.nan
 for i in range(len(model_weights)):
     model_weights[i][np.eye(model_weights[i].shape[0], dtype=bool)] = np.nan
 
 # make sure that all the matricies are nan in the same place so its an apples to apples comparison
-nan_mask = np.isnan(measured_irf_ave) | np.isnan(model_sampled_irf_ave) | np.isnan(data_corr)
+nan_mask = np.isnan(measured_irf_ave) | np.isnan(model_irf_ave) | np.isnan(data_corr)
 measured_irf_ave[nan_mask] = np.nan
-model_sampled_irf_ave[nan_mask] = np.nan
+model_irf_ave[nan_mask] = np.nan
 data_corr[nan_mask] = np.nan
 for i in range(len(model_weights)):
     model_weights[i][nan_mask] = np.nan
@@ -84,20 +84,20 @@ for i in range(len(model_weights)):
 am.plot_model_params(model=model, model_true=model_true, cell_ids_chosen=cell_ids_chosen)
 am.plot_dynamics_eigs(model=model)
 am.plot_posterior(data=data, posterior_dict=posterior_dict, cell_ids_chosen=cell_ids_chosen, sample_rate=model.sample_rate)
-am.plot_irf_norm(model_weights=model_weights, measured_irf=measured_irf_ave, model_sampled_irf=model_sampled_irf_ave,
+am.plot_irf_norm(model_weights=model_weights, measured_irf=measured_irf_ave, model_irf=model_irf_ave,
                  data_corr=data_corr, cell_ids=cell_ids, cell_ids_chosen=cell_ids_chosen)
 
 am.plot_irf_traces(measured_irf=measured_irf, measured_irf_sem=measured_irf_sem, posterior_irf=posterior_irf,
-                   model_sampled_irf=model_sampled_irf, cell_ids=cell_ids, cell_ids_chosen=cell_ids_chosen,
+                   model_irf=model_irf, cell_ids=cell_ids, cell_ids_chosen=cell_ids_chosen,
                    window=window, sample_rate=model.sample_rate, num_plot=5)
 am.compare_irf_w_prediction(model_weights=model_weights, measured_irf=measured_irf_ave,
-                            model_sampled_irf=model_sampled_irf_ave, data_corr=data_corr,
+                            model_irf=model_irf_ave, data_corr=data_corr,
                             cell_ids=cell_ids, cell_ids_chosen=cell_ids_chosen)
 
 # if the data is not synthetic compare with the anatomy
 if not is_synth:
     am.compare_irf_w_anatomy(model_weights=model_weights, measured_irf=measured_irf_ave,
-                             model_sampled_irf=model_sampled_irf_ave, data_corr=data_corr,
+                             model_irf=model_irf_ave, data_corr=data_corr,
                              cell_ids=cell_ids)
 
 posterior_dict = am.plot_missing_neuron(model=model, data=data, posterior_dict=posterior_dict,
