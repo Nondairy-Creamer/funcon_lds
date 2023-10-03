@@ -1,70 +1,7 @@
 import numpy as np
-import analysis_methods as am
-from pathlib import Path
-import pickle
 import warnings
 import wormneuroatlas as wa
-from scipy import stats as ss
-
-
-def get_best_model(model_folders, sorting_param, use_test_data=True, plot_figs=True, best_model_ind=None):
-    model_folders = [Path(i) for i in model_folders]
-    model_list = []
-    model_true_list = []
-    posterior_train_list = []
-    data_train_list = []
-    posterior_test_list = []
-    data_test_list = []
-
-    for m in model_folders:
-        m = 'trained_models' / m
-        # load in the model and the data
-        model_file = open(m / 'models' / 'model_trained.pkl', 'rb')
-        model_list.append(pickle.load(model_file))
-        model_file.close()
-
-        model_true_path = m / 'models' / 'model_true.pkl'
-        if model_true_path.exists():
-            model_true_file = open(m / 'models' / 'model_true.pkl', 'rb')
-            model_true_list.append(pickle.load(model_true_file))
-            model_true_file.close()
-        else:
-            model_true_list.append(None)
-
-        posterior_train_file = open(m / 'posterior_train.pkl', 'rb')
-        posterior_train_list.append(pickle.load(posterior_train_file))
-        posterior_train_file.close()
-
-        data_train_file = open(m / 'data_train.pkl', 'rb')
-        data_train_list.append(pickle.load(data_train_file))
-        data_train_file.close()
-
-        posterior_test_file = open(m / 'posterior_test.pkl', 'rb')
-        posterior_test_list.append(pickle.load(posterior_test_file))
-        posterior_test_file.close()
-
-        data_test_file = open(m / 'data_test.pkl', 'rb')
-        data_test_list.append(pickle.load(data_test_file))
-        data_test_file.close()
-
-    best_model_ind = am.plot_model_comparison(sorting_param, model_list, posterior_train_list,
-                                              data_train_list, posterior_test_list, data_test_list,
-                                              plot_figs=plot_figs, best_model_ind=best_model_ind)
-
-    model = model_list[best_model_ind]
-    model_true = model_true_list[best_model_ind]
-    data_corr = nan_corr_data(data_train_list[best_model_ind]['emissions'])
-
-    if use_test_data:
-        data = data_test_list[best_model_ind]
-        posterior_dict = posterior_test_list[best_model_ind]
-        posterior_path = 'trained_models' / model_folders[best_model_ind] / 'posterior_test.yml'
-    else:
-        data = data_train_list[best_model_ind]
-        posterior_dict = posterior_train_list[best_model_ind]
-        posterior_path = 'trained_models' / model_folders[best_model_ind] / 'posterior_train.yml'
-
-    return model, model_true, data, posterior_dict, posterior_path, data_corr
+import scipy
 
 
 def auto_select_ids(inputs, cell_ids, num_neurons=10):
@@ -176,6 +113,44 @@ def get_anatomical_data(cell_ids):
     return chem_syn_conn, gap_conn, pep_conn
 
 
+def compare_matrix_sets(left_side, right_side):
+    if type(left_side) is not list:
+        left_side = [left_side]
+
+    if type(right_side) is not list:
+        right_side = [right_side]
+
+    # find the best linear combination to make the sum of the matricies on the left side equal to the ones on the right
+    num_left = len(left_side)
+    num_right = len(right_side)
+    left_side_col = np.stack([i.reshape(-1) for i in left_side]).T
+    right_side_col = np.stack([i.reshape(-1) for i in right_side]).T
+
+    x0 = np.ones(num_left + num_right - 2)
+
+    def obj_fun(x):
+        left_weights = np.concatenate((np.ones(1)[None], x[:num_left-1]), axis=0)
+        right_weights = np.concatenate((np.ones(1)[None], x[num_left-1:]), axis=0)
+        # right_weights = x[num_left-1:]
+
+        left_val = left_side_col @ left_weights
+        right_val = right_side_col @ right_weights
+
+        return -nan_corr(left_val, right_val)[0]
+
+    x_hat = scipy.optimize.minimize(obj_fun, x0).x
+
+    left_weights = np.concatenate((np.ones(1)[None], x_hat[:num_left-1]), axis=0)
+    right_weights = np.concatenate((np.ones(1)[None], x_hat[num_left - 1:]), axis=0)
+
+    left_recon = (left_side_col @ left_weights).reshape(left_side[0].shape)
+    right_recon = (right_side_col @ right_weights).reshape(right_side[0].shape)
+
+    score, score_ci = nan_corr(left_recon, right_recon)
+
+    return score, score_ci, left_recon, right_recon
+
+
 def find_stim_events(inputs, window_size=1000):
     max_data_set = 0
     max_ind = 0
@@ -243,7 +218,7 @@ def nan_corr(y_true, y_hat, mean_sub=True):
     # now estimate the confidence intervals for the correlation
     alpha = 0.5
     n = y_true.shape[0]
-    z_a = ss.norm.ppf(1 - alpha / 2)
+    z_a = scipy.stats.norm.ppf(1 - alpha / 2)
     z_r = np.log((1 + corr) / (1 - corr)) / 2
     l = z_r - (z_a / np.sqrt(n - 3))
     u = z_r + (z_a / np.sqrt(n - 3))
