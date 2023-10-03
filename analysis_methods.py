@@ -449,8 +449,7 @@ def compare_irf_w_anatomy(model_weights, measured_irf, model_sampled_irf, data_c
     chem_conn, gap_conn, pep_conn = au.get_anatomical_data(cell_ids)
 
     # compare each of the weights against measured
-    # anatomy_list = [chem_conn, gap_conn, pep_conn]
-    anatomy_list = [gap_conn, pep_conn]
+    anatomy_list = [chem_conn, gap_conn, pep_conn]
     measured_irf_score, measured_irf_score_ci = au.compare_matrix_sets(anatomy_list, measured_irf)[:2]
     model_sampled_irf_score, model_sampled_irf_score_ci = au.compare_matrix_sets(anatomy_list, model_sampled_irf)[:2]
     data_corr_score, data_corr_score_ci = au.compare_matrix_sets(anatomy_list, data_corr)[:2]
