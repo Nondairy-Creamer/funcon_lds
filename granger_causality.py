@@ -11,7 +11,7 @@ import analysis_utilities as au
 # param_name = sys.argv[1]
 #
 # run_params = lu.get_run_params(param_name=f'submission_params/{param_name}')
-run_params = lu.get_run_params('submission_params/gc_DL6_IL45.yml')
+run_params = lu.get_run_params('submission_params/gc_DL4_IL45.yml')
 
 make_avg_med_figs = run_params['make_avg_med_figs']
 make_best_figs = run_params['make_best_figs']
@@ -237,18 +237,18 @@ avg_pred_x_all_data = gcu.impulse_response_func(num_sim, cell_ids, cell_ids_chos
 # corr plots from matt's code
 window = window = (-60, 120)
 measured_irf = au.get_impulse_response_function(emissions, inputs, sub_pre_stim=True, window=window)[0]
-measured_irf = au.p_norm(measured_irf, axis=0)
-post_pred_irf = au.p_norm(avg_pred_x_all_data[:, neuron_inds_chosen, :], axis=0)
+measured_irf = au.ave_fun(measured_irf, axis=0)
+post_pred_irf = au.ave_fun(avg_pred_x_all_data[:, neuron_inds_chosen, :], axis=0)
 # corr_data, corr_data_subset = gcu.get_correlation(emissions, inputs, cell_ids, cell_ids_chosen, avg_pred_x_all_data,
 #                                                   colormap, save=True, fig_path=fig_path)
 data_corr = np.abs(au.nan_corr_data(emissions))
 corr_data_subset = data_corr[:, neuron_inds_chosen][neuron_inds_chosen, :]
 a_hat_avg = np.nanmean(all_a_hat, axis=2)
 a_hat_norm = au.p_norm(au.stack_weights(a_hat_avg, emissions_num_lags, axis=1), axis=0)
-am.compare_irf_w_anatomy(cell_ids_chosen, a_hat_norm[np.ix_(neuron_inds_chosen, neuron_inds_chosen)],
+am.compare_irf_w_prediction(cell_ids, a_hat_norm[np.ix_(neuron_inds_chosen, neuron_inds_chosen)],
                          measured_irf[np.ix_(neuron_inds_chosen, neuron_inds_chosen)],
                          post_pred_irf,
-                         corr_data_subset, fig_path)
+                         corr_data_subset, cell_ids_chosen, fig_path)
 
 
 gcu.plot_l2_norms(emissions, inputs, cell_ids, cell_ids_chosen, avg_pred_x_all_data, colormap, a_hat_avg,

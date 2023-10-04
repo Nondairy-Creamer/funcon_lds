@@ -461,9 +461,9 @@ def compare_irf_w_anatomy(model, measured_irf, model_sampled_irf, data_corr, cel
     plt.show()
 
 
-def compare_irf_w_prediction(model, measured_irf, model_sampled_irf, data_corr, cell_ids_chosen):
-    model_weights = au.ave_fun(au.stack_weights(model.dynamics_weights[:model.dynamics_dim, :], model.dynamics_lags, axis=1), axis=0)
-    cell_ids = model.cell_ids
+def compare_irf_w_prediction(cell_ids, model_weights, measured_irf, model_sampled_irf, data_corr, cell_ids_chosen, fig_path):
+    # model_weights = au.ave_fun(au.stack_weights(model.dynamics_weights[:model.dynamics_dim, :], model.dynamics_lags, axis=1), axis=0)
+    # cell_ids = model.cell_ids
     neuron_inds_chosen = [cell_ids.index(i) for i in cell_ids_chosen]
 
     # set the diagonal to nan to do stats on everything else
@@ -472,9 +472,9 @@ def compare_irf_w_prediction(model, measured_irf, model_sampled_irf, data_corr, 
     model_sampled_irf[np.eye(model_sampled_irf.shape[0], dtype=bool)] = np.nan
     model_weights[np.eye(model_weights.shape[0], dtype=bool)] = np.nan
 
-    measured_irf_chosen = measured_irf[np.ix_(neuron_inds_chosen, neuron_inds_chosen)]
-    model_sampled_irf_chosen = model_sampled_irf[np.ix_(neuron_inds_chosen, neuron_inds_chosen)]
-    data_corr_chosen = data_corr[np.ix_(neuron_inds_chosen, neuron_inds_chosen)]
+    measured_irf_chosen = measured_irf
+    model_sampled_irf_chosen = model_sampled_irf
+    data_corr_chosen = data_corr
 
     # scatter the interactions just between the chosen neurons
     model_sampled_score, model_sampled_score_ci = score_fun(measured_irf_chosen, model_sampled_irf_chosen)

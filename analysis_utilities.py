@@ -1,70 +1,67 @@
 import numpy as np
-import analysis_methods as am
-from pathlib import Path
-import pickle
 import warnings
 import wormneuroatlas as wa
 from scipy import stats as ss
 
 
-def get_best_model(model_folders, sorting_param, use_test_data=True, plot_figs=True, best_model_ind=None):
-    model_folders = [Path(i) for i in model_folders]
-    model_list = []
-    model_true_list = []
-    posterior_train_list = []
-    data_train_list = []
-    posterior_test_list = []
-    data_test_list = []
-
-    for m in model_folders:
-        m = 'trained_models' / m
-        # load in the model and the data
-        model_file = open(m / 'models' / 'model_trained.pkl', 'rb')
-        model_list.append(pickle.load(model_file))
-        model_file.close()
-
-        model_true_path = m / 'models' / 'model_true.pkl'
-        if model_true_path.exists():
-            model_true_file = open(m / 'models' / 'model_true.pkl', 'rb')
-            model_true_list.append(pickle.load(model_true_file))
-            model_true_file.close()
-        else:
-            model_true_list.append(None)
-
-        posterior_train_file = open(m / 'posterior_train.pkl', 'rb')
-        posterior_train_list.append(pickle.load(posterior_train_file))
-        posterior_train_file.close()
-
-        data_train_file = open(m / 'data_train.pkl', 'rb')
-        data_train_list.append(pickle.load(data_train_file))
-        data_train_file.close()
-
-        posterior_test_file = open(m / 'posterior_test.pkl', 'rb')
-        posterior_test_list.append(pickle.load(posterior_test_file))
-        posterior_test_file.close()
-
-        data_test_file = open(m / 'data_test.pkl', 'rb')
-        data_test_list.append(pickle.load(data_test_file))
-        data_test_file.close()
-
-    best_model_ind = am.plot_model_comparison(sorting_param, model_list, posterior_train_list,
-                                              data_train_list, posterior_test_list, data_test_list,
-                                              plot_figs=plot_figs, best_model_ind=best_model_ind)
-
-    model = model_list[best_model_ind]
-    model_true = model_true_list[best_model_ind]
-    data_corr = nan_corr_data(data_train_list[best_model_ind]['emissions'])
-
-    if use_test_data:
-        data = data_test_list[best_model_ind]
-        posterior_dict = posterior_test_list[best_model_ind]
-        posterior_path = 'trained_models' / model_folders[best_model_ind] / 'posterior_test.yml'
-    else:
-        data = data_train_list[best_model_ind]
-        posterior_dict = posterior_train_list[best_model_ind]
-        posterior_path = 'trained_models' / model_folders[best_model_ind] / 'posterior_train.yml'
-
-    return model, model_true, data, posterior_dict, posterior_path, data_corr
+# def get_best_model(model_folders, sorting_param, use_test_data=True, plot_figs=True, best_model_ind=None):
+#     model_folders = [Path(i) for i in model_folders]
+#     model_list = []
+#     model_true_list = []
+#     posterior_train_list = []
+#     data_train_list = []
+#     posterior_test_list = []
+#     data_test_list = []
+#
+#     for m in model_folders:
+#         m = 'trained_models' / m
+#         # load in the model and the data
+#         model_file = open(m / 'models' / 'model_trained.pkl', 'rb')
+#         model_list.append(pickle.load(model_file))
+#         model_file.close()
+#
+#         model_true_path = m / 'models' / 'model_true.pkl'
+#         if model_true_path.exists():
+#             model_true_file = open(m / 'models' / 'model_true.pkl', 'rb')
+#             model_true_list.append(pickle.load(model_true_file))
+#             model_true_file.close()
+#         else:
+#             model_true_list.append(None)
+#
+#         posterior_train_file = open(m / 'posterior_train.pkl', 'rb')
+#         posterior_train_list.append(pickle.load(posterior_train_file))
+#         posterior_train_file.close()
+#
+#         data_train_file = open(m / 'data_train.pkl', 'rb')
+#         data_train_list.append(pickle.load(data_train_file))
+#         data_train_file.close()
+#
+#         posterior_test_file = open(m / 'posterior_test.pkl', 'rb')
+#         posterior_test_list.append(pickle.load(posterior_test_file))
+#         posterior_test_file.close()
+#
+#         data_test_file = open(m / 'data_test.pkl', 'rb')
+#         data_test_list.append(pickle.load(data_test_file))
+#         data_test_file.close()
+#
+#     best_model_ind = am.plot_model_comparison(sorting_param, model_list, posterior_train_list,
+#                                               data_train_list, posterior_test_list, data_test_list,
+#                                               plot_figs=plot_figs, best_model_ind=best_model_ind)
+#
+#     model = model_list[best_model_ind]
+#     model_true = model_true_list[best_model_ind]
+#     data_corr = nan_corr_data(data_train_list[best_model_ind]['emissions'])
+#
+#     if use_test_data:
+#         data = data_test_list[best_model_ind]
+#         posterior_dict = posterior_test_list[best_model_ind]
+#         posterior_path = 'trained_models' / model_folders[best_model_ind] / 'posterior_test.yml'
+#     else:
+#         data = data_train_list[best_model_ind]
+#         posterior_dict = posterior_train_list[best_model_ind]
+#         posterior_path = 'trained_models' / model_folders[best_model_ind] / 'posterior_train.yml'
+#
+#     return model, model_true, data, posterior_dict, posterior_path, data_corr
 
 
 def auto_select_ids(inputs, cell_ids, num_neurons=10):
