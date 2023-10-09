@@ -42,8 +42,8 @@ def main(param_name, folder_name=None, extra_train_steps=None):
             if run_type == 'new':
                 fit_model_command = 'run_inference.' + run_params['fit_file'] + '(\'' + str(param_name) + '\',\'' + str(save_folder) + '\')\"'
             elif run_type == 'post':
-                run_params['slurm']['time'] = '24:00:00'
-                fit_model_command = 'run_inference.infer_posterior(\'' + str(param_name) + '\',\'' + str(save_folder) + '\')\"'
+                fit_model_command = 'run_inference.infer_posterior(\'' + str(param_name) + '\',\'' + str(save_folder) + \
+                                    '\', infer_missing=True)\"'
             elif run_type == 'cont':
                 fit_model_command = 'run_inference.continue_fit(\'' + str(param_name) + '\',\'' + str(save_folder) + \
                                     '\',' + str(extra_train_steps) + ')\"'

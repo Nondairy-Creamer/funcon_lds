@@ -160,7 +160,7 @@ def fit_experimental(param_name, save_folder):
     run_fitting(run_params, model_trained, data_train, data_test, save_folder)
 
 
-def infer_posterior(param_name, data_folder):
+def infer_posterior(param_name, data_folder, infer_missing=False):
     # fit a posterior to test data
     # set up the option to parallelize the model fitting over CPUs
     comm = pkl5.Intracomm(MPI.COMM_WORLD)
@@ -225,9 +225,9 @@ def infer_posterior(param_name, data_folder):
         init_cov_test = None
 
     posterior_train = iu.parallel_get_post(model, data_train, max_iter=100, memmap_cpu_id=memmap_cpu_id, time_lim=300,
-                                           init_mean=init_mean_train, init_cov=init_cov_train)
+                                           init_mean=init_mean_train, init_cov=init_cov_train, infer_missing=infer_missing)
     posterior_test = iu.parallel_get_post(model, data_test, max_iter=100, memmap_cpu_id=memmap_cpu_id, time_lim=300,
-                                          init_mean=init_mean_test, init_cov=init_cov_test)
+                                          init_mean=init_mean_test, init_cov=init_cov_test, infer_missing=infer_missing)
 
     if cpu_id == 0:
         lu.save_run(data_folder, posterior_train=posterior_train, posterior_test=posterior_test)
@@ -335,12 +335,13 @@ def run_fitting(run_params, model, data_train, data_test, save_folder, model_tru
         print('get posterior for the training data')
     posterior_train = iu.parallel_get_post(model, data_train, init_mean=init_mean_train, init_cov=init_cov_train,
                                            max_iter=100, converge_res=1e-2, time_lim=300,
-                                           memmap_cpu_id=memmap_cpu_id)
+                                           memmap_cpu_id=memmap_cpu_id, infer_missing=False)
 
     if cpu_id == 0:
         print('get posterior for the test data')
     posterior_test = iu.parallel_get_post(model, data_test, init_mean=init_mean_test, init_cov=init_cov_test,
-                                          max_iter=100, converge_res=1e-2, time_lim=300, memmap_cpu_id=memmap_cpu_id)
+                                          max_iter=100, converge_res=1e-2, time_lim=300, memmap_cpu_id=memmap_cpu_id,
+                                          infer_missing=False)
 
     if cpu_id == 0:
         lu.save_run(save_folder, model_trained=model, ep=-1, posterior_train=posterior_train,

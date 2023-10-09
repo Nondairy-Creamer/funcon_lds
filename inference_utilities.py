@@ -214,7 +214,7 @@ def fit_em(model, data, init_mean=None, init_cov=None, num_steps=10,
 
 
 def parallel_get_post(model, data, init_mean=None, init_cov=None, max_iter=1, converge_res=1e-2, time_lim=300,
-                      memmap_cpu_id=None):
+                      memmap_cpu_id=None, infer_missing=False):
     comm = pkl5.Intracomm(MPI.COMM_WORLD)
     cpu_id = comm.Get_rank()
     size = comm.Get_size()
@@ -273,7 +273,7 @@ def parallel_get_post(model, data, init_mean=None, init_cov=None, max_iter=1, co
             emissions = i[0].copy()
             inputs = i[1].copy()
 
-            ll, posterior, suff_stats = model.lgssm_smoother(emissions, inputs, init_mean, init_cov, memmap_cpu_id)
+            ll, posterior = model.lgssm_smoother(emissions, inputs, init_mean, init_cov, memmap_cpu_id)[:2]
             model_sampled = model.sample(num_time=emissions.shape[0], inputs_list=[inputs], init_mean=[init_mean], init_cov=[init_cov], add_noise=False)
             model_sampled_noise = model.sample(num_time=emissions.shape[0], inputs_list=[inputs], init_mean=[init_mean], init_cov=[init_cov])
 
@@ -281,7 +281,21 @@ def parallel_get_post(model, data, init_mean=None, init_cov=None, max_iter=1, co
             model_sampled = model_sampled['latents'][0][:, :model.dynamics_dim]
             model_sampled_noise = model_sampled_noise['latents'][0][:, :model.dynamics_dim]
 
-            ll_smeans.append((ll, posterior, model_sampled, model_sampled_noise, init_mean, init_cov))
+            posterior_missing = {}
+            if infer_missing:
+                cell_ids = model.cell_ids
+                for n in emissions.shape[0]:
+                    if np.mean(np.isnan(emissions[:, n])) > 0.5:
+                        posterior_missing[cell_ids[n]] = None
+                    else:
+                        emissions_missing = emissions.copy()
+                        emissions_missing[:, n] = np.nan
+                        ll_missing, posterior = model.lgssm_smoother(emissions_missing, inputs, init_mean, init_cov, memmap_cpu_id)[:2]
+                        posterior_missing[cell_ids[n]] = {'ll': ll_missing,
+                                                          'recon': posterior[:, n],
+                                                          'true': emissions[:, n]}
+
+            ll_smeans.append((ll, posterior, model_sampled, model_sampled_noise, init_mean, init_cov, posterior_missing))
     else:
         ll_smeans = None
 
@@ -306,6 +320,7 @@ def parallel_get_post(model, data, init_mean=None, init_cov=None, max_iter=1, co
         model_sampled_noise = [i[3] for i in ll_smeans]
         init_mean = [i[4] for i in ll_smeans]
         init_cov = [i[5] for i in ll_smeans]
+        posterior_missing = [i[6] for i in ll_smeans]
 
         inference_test = {'ll': ll,
                           'posterior': smoothed_means,
@@ -314,6 +329,7 @@ def parallel_get_post(model, data, init_mean=None, init_cov=None, max_iter=1, co
                           'init_mean': init_mean,
                           'init_cov': init_cov,
                           'cell_ids': model.cell_ids,
+                          'posterior_missing': posterior_missing
                           }
 
         return inference_test
