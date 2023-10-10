@@ -283,8 +283,12 @@ def parallel_get_post(model, data, init_mean=None, init_cov=None, max_iter=1, co
 
             posterior_missing = {}
             if infer_missing:
+                print('inferring missing neurons')
+
                 cell_ids = model.cell_ids
                 for n in emissions.shape[0]:
+                    print('inferring neuron ' + str(n) + '/' + str(emissions.shape[0]))
+
                     if np.mean(np.isnan(emissions[:, n])) > 0.5:
                         posterior_missing[cell_ids[n]] = None
                     else:
