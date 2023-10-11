@@ -2,7 +2,7 @@ import numpy as np
 import pickle
 import inference_utilities as iu
 import warnings
-import scipy.linalg as sl
+import analysis_utilities as au
 
 
 class Lgssm:
@@ -11,15 +11,18 @@ class Lgssm:
         This verison assumes diagonal input weights, diagonal noise covariance, no offsets, and identity emissions
     """
 
-    def __init__(self, dynamics_dim, emissions_dim, input_dim, dynamics_lags=1, dynamics_input_lags=1, cell_ids=None,
-                 param_props=None, verbose=True, epsilon=1e8, ridge_lambda=0):
+    def __init__(self, dynamics_dim, emissions_dim, input_dim,
+                 dynamics_lags=1, dynamics_input_lags=1, emissions_input_lags=1,
+                 cell_ids=None, param_props=None, verbose=True, epsilon=1e8, ridge_lambda=0):
         self.dynamics_lags = dynamics_lags
         self.dynamics_input_lags = dynamics_input_lags
+        self.emissions_input_lags = emissions_input_lags
         self.dynamics_dim = dynamics_dim
         self.emissions_dim = emissions_dim
         self.input_dim = input_dim
         self.dynamics_dim_full = self.dynamics_dim * self.dynamics_lags
-        self.input_dim_full = self.input_dim * self.dynamics_input_lags
+        self.dynamics_input_dim_full = self.input_dim * self.dynamics_input_lags
+        self.emissions_input_dim_full = self.input_dim * self.emissions_input_lags
         self.verbose = verbose
         self.log_likelihood = None
         self.train_time = None
@@ -34,47 +37,39 @@ class Lgssm:
         # define the weights here, but set them to tensor versions of the intial values with _set_to_init()
         self.dynamics_weights = None
         self.dynamics_input_weights = None
-        self.dynamics_offset = None
         self.dynamics_cov = None
 
         self.emissions_weights = None
         self.emissions_input_weights = None
-        self.emissions_offset = None
         self.emissions_cov = None
 
         self.param_props = {'update': {'dynamics_weights': True,
                                        'dynamics_input_weights': True,
-                                       'dynamics_offset': False,
                                        'dynamics_cov': True,
                                        'emissions_weights': True,
                                        'emissions_input_weights': True,
-                                       'emissions_offset': False,
                                        'emissions_cov': True,
                                        },
 
                             'shape': {'dynamics_weights': 'full',
                                       'dynamics_input_weights': 'full',
-                                      'dynamics_offset': 'full',
                                       'dynamics_cov': 'full',
                                       'emissions_weights': 'full',
                                       'emissions_input_weights': 'full',
-                                      'emissions_offset': 'full',
                                       'emissions_cov': 'full',
                                       },
 
                             'mask': {'dynamics_weights': None,
                                      'dynamics_input_weights': None,
-                                     'dynamics_offset': None,
                                      'dynamics_cov': None,
                                      'emissions_weights': None,
                                      'emissions_input_weights': None,
-                                     'emissions_offset': None,
                                      'emissions_cov': None,
                                      },
                             }
 
         if param_props is not None:
-            for k in self.param_props.keys():
+            for k in param_props.keys():
                 self.param_props[k].update(param_props[k])
 
         # initialize dynamics weights
@@ -85,17 +80,41 @@ class Lgssm:
         self.dynamics_weights_init = self.dynamics_weights_init * time_decay[:, None, None]
         self.dynamics_cov_init = np.eye(self.dynamics_dim)
         self.dynamics_input_weights_init = np.zeros((self.dynamics_input_lags, self.dynamics_dim, self.input_dim))
-        self.dynamics_offset_init = np.zeros(self.dynamics_dim)
 
         # initialize emissions weights
         self.emissions_weights_init = np.eye(self.emissions_dim)
-        self.emissions_input_weights_init = np.zeros((self.dynamics_input_lags, self.emissions_dim, self.input_dim))
-        self.emissions_offset_init = np.zeros(self.emissions_dim)
+        self.emissions_input_weights_init = np.zeros((self.emissions_input_lags, self.emissions_dim, self.input_dim))
         self.emissions_cov_init = np.eye(self.emissions_dim)
 
         self._pad_init_for_lags()
         # convert to tensors
         self.set_to_init()
+
+        # set up masks to constrain which parameters can be fit
+        if self.param_props['shape']['dynamics_weights'] == 'anatomical':
+            chem_conn, gap_conn, pep_conn = au.get_anatomical_data(self.cell_ids)
+            combined_mask = (chem_conn + gap_conn + pep_conn + np.eye(self.dynamics_dim)) > 0
+            self.param_props['mask']['dynamics_weights'] = np.tile(combined_mask, (1, self.dynamics_lags))
+
+        elif self.param_props['shape']['dynamics_weights'] == 'synaptic':
+            chem_conn, gap_conn, pep_conn = au.get_anatomical_data(self.cell_ids)
+            combined_mask = (chem_conn + gap_conn + np.eye(self.dynamics_dim)) > 0
+            self.param_props['mask']['dynamics_weights'] = np.tile(combined_mask, (1, self.dynamics_lags))
+
+        elif self.param_props['shape']['dynamics_weights'] == 'full':
+            self.param_props['mask']['dynamics_weights'] = np.ones((self.dynamics_dim, self.dynamics_dim_full)) == 1
+
+        else:
+            raise Exception('dynamics weights mask shape not recognized')
+
+        if self.param_props['shape']['dynamics_input_weights'] == 'diag':
+            self.param_props['mask']['dynamics_input_weights'] = np.tile(np.eye(self.input_dim, dtype=bool), (1, self.dynamics_input_lags))
+
+        elif self.param_props['shape']['dynamics_input_weights'] == 'full':
+            self.param_props['mask']['dynamics_input_weights'] = np.ones((self.dynamics_dim, self.dynamics_input_dim_full)) == 1
+
+        else:
+            raise Exception('dynamics weights mask shape not recognized')
 
     def save(self, path='trained_models/trained_model.pkl'):
         save_file = open(path, 'wb')
@@ -111,8 +130,9 @@ class Lgssm:
         dynamics_tau = self.dynamics_lags / lag_factor
         dynamics_const = (np.exp(lag_factor) - 1) * np.exp(1 / dynamics_tau - lag_factor) / (np.exp(1 / dynamics_tau) - 1)
         dynamics_time_decay = np.exp(-np.arange(self.dynamics_lags) / dynamics_tau) / dynamics_const
-        # self.dynamics_weights_init = rng.standard_normal((self.dynamics_lags, self.dynamics_dim, self.dynamics_dim))
-        self.dynamics_weights_init = np.tile(rng.standard_normal((1, self.dynamics_dim, self.dynamics_dim)), (self.dynamics_lags, 1, 1))
+        self.dynamics_weights_init = rng.standard_normal((1, self.dynamics_dim, self.dynamics_dim))
+        self.dynamics_weights_init = np.tile(self.dynamics_weights_init, (self.dynamics_lags, 1, 1))
+        self.dynamics_weights_init = self.dynamics_weights_init * self.param_props['mask']['dynamics_weights'][:, :self.dynamics_dim]
         eig_vals, eig_vects = np.linalg.eig(self.dynamics_weights_init)
         eig_vals = eig_vals / np.max(np.abs(eig_vals)) * max_eig_allowed
         negative_real_eigs = np.real(eig_vals) < 0
@@ -127,7 +147,6 @@ class Lgssm:
         dynamics_input_const = (np.exp(lag_factor) - 1) * np.exp(1 / dynamics_input_tau - lag_factor) / (np.exp(1 / dynamics_input_tau) - 1)
         dynamics_input_time_decay = np.exp(-np.arange(self.dynamics_input_lags) / dynamics_input_tau) / dynamics_input_const
         if self.param_props['shape']['dynamics_input_weights'] == 'diag':
-            # dynamics_input_weights_init_diag = init_std * rng.standard_normal((self.dynamics_input_lags, self.input_dim))
             dynamics_input_weights_init_diag = input_weights_std * np.tile(np.exp(rng.standard_normal(self.input_dim)), (self.dynamics_input_lags, 1))
             self.dynamics_input_weights_init = np.zeros((self.dynamics_input_lags, self.dynamics_dim, self.input_dim))
             for i in range(self.dynamics_input_lags):
@@ -135,8 +154,6 @@ class Lgssm:
         else:
             self.dynamics_input_weights_init = input_weights_std * rng.standard_normal((self.dynamics_input_lags, self.dynamics_dim, self.input_dim))
         self.dynamics_input_weights_init = self.dynamics_input_weights_init * dynamics_input_time_decay[:, None, None]
-
-        self.dynamics_offset_init = np.zeros(self.dynamics_dim)
 
         if self.param_props['shape']['dynamics_cov'] == 'diag':
             self.dynamics_cov_init = np.diag(np.exp(noise_std * rng.standard_normal(self.dynamics_dim)))
@@ -146,9 +163,19 @@ class Lgssm:
 
         # randomize emissions weights
         self.emissions_weights_init = rng.standard_normal((self.emissions_dim, self.dynamics_dim))
-        self.emissions_input_weights_init = input_weights_std * rng.standard_normal((self.dynamics_input_lags, self.emissions_dim, self.input_dim))
-        self.emissions_input_weights_init = self.emissions_input_weights_init * dynamics_input_time_decay[:, None, None]
-        self.emissions_offset_init = np.zeros(self.emissions_dim)
+
+        # randomize emission input weights but with decaying weights into the past
+        emissions_input_tau = self.emissions_input_lags / lag_factor
+        emissions_input_const = (np.exp(lag_factor) - 1) * np.exp(1 / emissions_input_tau - lag_factor) / (np.exp(1 / emissions_input_tau) - 1)
+        emissions_input_time_decay = np.exp(-np.arange(self.emissions_input_lags) / emissions_input_tau) / emissions_input_const
+        if self.param_props['shape']['emissions_input_weights'] == 'diag':
+            emissions_input_weights_init_diag = input_weights_std * np.tile(np.exp(rng.standard_normal(self.input_dim)), (self.emissions_input_lags, 1))
+            self.emissions_input_weights_init = np.zeros((self.emissions_input_lags, self.emissions_dim, self.input_dim))
+            for i in range(self.emissions_input_lags):
+                self.emissions_input_weights_init[i, :self.input_dim, :] = np.diag(emissions_input_weights_init_diag[i, :])
+        else:
+            self.emissions_input_weights_init = input_weights_std * rng.standard_normal((self.emissions_input_lags, self.emissions_dim, self.input_dim))
+        self.emissions_input_weights_init = self.emissions_input_weights_init * emissions_input_time_decay[:, None, None]
 
         if self.param_props['shape']['emissions_cov'] == 'diag':
             self.emissions_cov_init = np.diag(np.exp(noise_std * rng.standard_normal(self.dynamics_dim)))
@@ -162,32 +189,26 @@ class Lgssm:
     def set_to_init(self):
         self.dynamics_weights = self.dynamics_weights_init.copy()
         self.dynamics_input_weights = self.dynamics_input_weights_init.copy()
-        self.dynamics_offset = self.dynamics_offset_init.copy()
         self.dynamics_cov = self.dynamics_cov_init.copy()
 
         self.emissions_weights = self.emissions_weights_init.copy()
         self.emissions_input_weights = self.emissions_input_weights_init.copy()
-        self.emissions_offset = self.emissions_offset_init.copy()
         self.emissions_cov = self.emissions_cov_init.copy()
 
     def get_params(self):
         params_out = {'init': {'dynamics_weights': self.dynamics_weights_init,
                                'dynamics_input_weights': self.dynamics_input_weights_init,
-                               'dynamics_offset': self.dynamics_offset_init,
                                'dynamics_cov': self.dynamics_cov_init,
                                'emissions_weights': self.emissions_weights_init,
                                'emissions_input_weights': self.emissions_input_weights_init,
-                               'emissions_offset': self.emissions_offset_init,
                                'emissions_cov': self.emissions_cov_init,
                                },
 
                       'trained': {'dynamics_weights': self.dynamics_weights,
                                   'dynamics_input_weights': self.dynamics_input_weights,
-                                  'dynamics_offset': self.dynamics_offset,
                                   'dynamics_cov': self.dynamics_cov,
                                   'emissions_weights': self.emissions_weights,
                                   'emissions_input_weights': self.emissions_input_weights,
-                                  'emissions_offset': self.emissions_offset,
                                   'emissions_cov': self.emissions_cov,
                                   },
                       }
@@ -202,21 +223,12 @@ class Lgssm:
         init_cov_list = []
 
         if init_mean is None:
-            generate_mean = True
-        else:
-            generate_mean = False
+            init_mean = [np.zeros(self.dynamics_dim_full) for i in range(num_data_sets)]
 
         if init_cov is None:
-            generate_cov = True
-        else:
-            generate_cov = False
+            init_cov = [np.eye(self.dynamics_dim_full) for i in range(num_data_sets)]
 
         if inputs_list is None:
-            generate_inputs = True
-        else:
-            generate_inputs = False
-
-        if generate_inputs:
             if input_time_scale != 0:
                 stims_per_data_set = int(num_time / input_time_scale)
                 num_stims = num_data_sets * stims_per_data_set
@@ -230,60 +242,38 @@ class Lgssm:
             else:
                 inputs_list = [rng.standard_normal((num_time, self.input_dim)) for i in range(num_data_sets)]
 
-        if inputs_list[0].shape[1] < self.input_dim_full:
-            inputs_lagged = [self.get_lagged_data(i, self.dynamics_input_lags, add_pad=True) for i in inputs_list]
-        else:
-            inputs_lagged = inputs_list.copy()
+        dynamics_inputs_lagged = [self.get_lagged_data(i, self.dynamics_input_lags, add_pad=True) for i in inputs_list]
+        emissions_inputs_lagged = [self.get_lagged_data(i, self.emissions_input_lags, add_pad=True) for i in inputs_list]
 
         for d in range(num_data_sets):
-            # generate a random initial mean and covariance
-            if generate_mean:
-                init_mean_this = rng.standard_normal(self.dynamics_dim_full)
-            else:
-                init_mean_this = init_mean[d]
-
-            if generate_cov:
-                q0 = np.eye(self.dynamics_dim_full)
-                init_cov_this = self.dynamics_weights @ q0 @ self.dynamics_weights.T + self.dynamics_cov
-
-                for i in range(100):
-                    init_cov_this = self.dynamics_weights @ init_cov_this @ self.dynamics_weights.T + self.dynamics_cov
-
-                init_cov_this = init_cov_this / 100
-                # init_cov_this = rng.standard_normal((self.dynamics_dim_full, self.dynamics_dim_full))
-                # init_cov_this = init_cov_this.T @ init_cov_this
-            else:
-                init_cov_this = init_cov[d]
+            init_mean_this = init_mean[d]
+            init_cov_this = init_cov[d]
 
             latents = np.zeros((num_time, self.dynamics_dim_full))
             emissions = np.zeros((num_time, self.emissions_dim))
-            inputs = inputs_lagged[d]
+            dynamics_inputs = dynamics_inputs_lagged[d]
+            emissions_inputs = emissions_inputs_lagged[d]
 
             # get the initial observations
             dynamics_noise = add_noise * rng.multivariate_normal(np.zeros(self.dynamics_dim_full), self.dynamics_cov, size=num_time)
             emissions_noise = add_noise * rng.multivariate_normal(np.zeros(self.emissions_dim), self.emissions_cov, size=num_time)
-            dynamics_inputs = (self.dynamics_input_weights @ inputs[:, :, None])[:, :, 0]
-            emissions_inputs = (self.emissions_input_weights @ inputs[:, :, None])[:, :, 0]
+            dynamics_inputs = (self.dynamics_input_weights @ dynamics_inputs[:, :, None])[:, :, 0]
+            emissions_inputs = (self.emissions_input_weights @ emissions_inputs[:, :, None])[:, :, 0]
 
-            latent_init = rng.multivariate_normal(init_mean_this, init_cov_this)
-
-            latents[0, :] = latent_init + dynamics_inputs[0, :]
+            latents[0, :] = rng.multivariate_normal(init_mean_this, init_cov_this)
 
             emissions[0, :] = self.emissions_weights @ latents[0, :] + \
                               emissions_inputs[0, :] + \
-                              self.emissions_offset[:] + \
                               emissions_noise[0, :]
 
             # loop through time and generate the latents and emissions
             for t in range(1, num_time):
                 latents[t, :] = (self.dynamics_weights @ latents[t-1, :]) + \
                                  dynamics_inputs[t, :] + \
-                                 self.dynamics_offset + \
                                  dynamics_noise[t, :]
 
                 emissions[t, :] = (self.emissions_weights @ latents[t, :]) + \
                                    emissions_inputs[t, :] + \
-                                   self.emissions_offset + \
                                    emissions_noise[t, :]
 
             latents_list.append(latents[:, :self.dynamics_dim])
@@ -329,14 +319,13 @@ class Lgssm:
         This function can deal with missing data if the data is missing the entire time trace
         """
         num_timesteps = emissions.shape[0]
-
-        if inputs.shape[1] < self.input_dim_full:
-            inputs = self.get_lagged_data(inputs, self.dynamics_input_lags)
-
         ll = 0
 
-        dynamics_inputs = inputs @ self.dynamics_input_weights.T
-        emissions_inputs = inputs @ self.emissions_input_weights.T
+        dynamics_inputs = self.get_lagged_data(inputs, self.dynamics_input_lags)
+        emissions_inputs = self.get_lagged_data(inputs, self.emissions_input_lags)
+
+        dynamics_inputs = dynamics_inputs @ self.dynamics_input_weights.T
+        emissions_inputs = emissions_inputs @ self.emissions_input_weights.T
 
         filtered_means = np.zeros((num_timesteps, self.dynamics_dim_full))
         if memmap_cpu_id is None:
@@ -357,11 +346,11 @@ class Lgssm:
         CtRinv = np.linalg.solve(R, self.emissions_weights).T
         CtRinvC = CtRinv @ self.emissions_weights
 
-        pred_mean = init_mean.copy() + dynamics_inputs[0, :]
+        pred_mean = init_mean.copy()
         pred_cov = init_cov.copy()
 
         yyctr = y - emissions_inputs[0, :]
-        ll_mu = self.emissions_weights @ pred_mean + emissions_inputs[0, :] + self.emissions_offset
+        ll_mu = self.emissions_weights @ pred_mean + emissions_inputs[0, :]
 
         ll_cov = self.emissions_weights @ pred_cov @ self.emissions_weights.T + R
         ll_cov_logdet = np.linalg.slogdet(ll_cov)[1]
@@ -394,12 +383,12 @@ class Lgssm:
             CtRinvC = CtRinv @ self.emissions_weights
 
             # Predict the next state
-            pred_mean = self.dynamics_weights @ filtered_mean + dynamics_inputs[t, :] + self.dynamics_offset
+            pred_mean = self.dynamics_weights @ filtered_mean + dynamics_inputs[t, :]
             pred_cov = self.dynamics_weights @ filtered_cov @ self.dynamics_weights.T + self.dynamics_cov
 
             # Update the log likelihood
             yyctr = y - emissions_inputs[t, :]
-            ll_mu = self.emissions_weights @ pred_mean + emissions_inputs[t, :] + self.emissions_offset
+            ll_mu = self.emissions_weights @ pred_mean + emissions_inputs[t, :]
 
             ll_cov = self.emissions_weights @ pred_cov @ self.emissions_weights.T + R
             ll_cov_logdet = np.linalg.slogdet(ll_cov)[1]
@@ -430,9 +419,8 @@ class Lgssm:
         """
         num_timesteps = emissions.shape[0]
 
-        # TODO: write a more robust check
-        if inputs.shape[1] < self.input_dim_full:
-            inputs = self.get_lagged_data(inputs, self.dynamics_input_lags)
+        dynamics_inputs = self.get_lagged_data(inputs, self.dynamics_input_lags)
+        emissions_inputs = self.get_lagged_data(inputs, self.emissions_input_lags)
 
         if init_mean is None:
             init_mean = self.estimate_init_mean([emissions])[0]
@@ -443,7 +431,8 @@ class Lgssm:
         # first run the kalman forward pass
         ll, filtered_means, filtered_covs = self.lgssm_filter(emissions, inputs, init_mean, init_cov, memmap_cpu_id=memmap_cpu_id)
 
-        dynamics_inputs = inputs @ self.dynamics_input_weights.T
+        dynamics_inputs = dynamics_inputs @ self.dynamics_input_weights.T
+        emissions_inputs = emissions_inputs @ self.emissions_input_weights.T
 
         smoothed_means = filtered_means.copy()
         last_cov = filtered_covs[-1, :, :]
@@ -461,7 +450,7 @@ class Lgssm:
             smoothed_mean_next = smoothed_means[t + 1, :]
 
             # Compute the smoothed mean and covariance
-            pred_mean = self.dynamics_weights @ filtered_mean + dynamics_inputs[t+1, :] + self.dynamics_offset
+            pred_mean = self.dynamics_weights @ filtered_mean + dynamics_inputs[t+1, :]
             pred_cov = self.dynamics_weights @ filtered_cov @ self.dynamics_weights.T + self.dynamics_cov
 
             # This is like the Kalman gain but in reverse
@@ -582,33 +571,20 @@ class Lgssm:
             dynamics_eye_pad = np.eye(self.dynamics_dim * (self.dynamics_lags - 1))
             dynamics_zeros_pad = np.zeros((self.dynamics_dim * (self.dynamics_lags - 1), self.dynamics_dim))
             dynamics_pad = np.concatenate((dynamics_eye_pad, dynamics_zeros_pad), axis=1)
-            dynamics_inputs_zeros_pad = np.zeros((self.dynamics_dim * (self.dynamics_lags - 1), self.input_dim_full))
+            dynamics_inputs_zeros_pad = np.zeros((self.dynamics_dim * (self.dynamics_lags - 1), self.dynamics_input_dim_full))
 
             if self.ridge_lambda is None:
-                ridge_penalty = np.zeros((self.dynamics_dim_full, self.dynamics_dim_full))
+                ridge_penalty = None
             else:
-                ridge_penalty = 10.0**self.ridge_lambda * np.diag(self.dynamics_cov)
+                ridge_penalty = 10.0**self.ridge_lambda * self.dynamics_cov[:self.dynamics_dim, :self.dynamics_dim].diagonal()
 
             if self.param_props['update']['dynamics_weights'] and self.param_props['update']['dynamics_input_weights']:
                 # do a joint update for A and B
                 Mlin = np.concatenate((Mz12, Muz2), axis=0)  # from linear terms
                 Mquad = iu.block(((Mz1, Muz21.T), (Muz21, Mu1)), dims=(1, 0))  # from quadratic terms
 
-                if self.param_props['shape']['dynamics_input_weights'] == 'diag':
-                    if self.param_props['mask']['dynamics_input_weights'] is None:
-                        self.param_props['mask']['dynamics_input_weights'] = np.eye(self.dynamics_dim, self.input_dim)
-
-                    # make the of which parameters to fit
-                    full_block = np.ones((self.dynamics_dim_full, self.dynamics_dim))
-                    diag_block = np.tile(self.param_props['mask']['dynamics_input_weights'].T, (self.dynamics_input_lags, 1))
-                    mask = np.concatenate((full_block, diag_block), axis=0)
-
-                    ABnew = iu.solve_masked(Mquad.T, Mlin[:, :self.dynamics_dim], mask, ridge_penalty=ridge_penalty).T  # new A and B from regression
-                else:
-                    if self.ridge_lambda is None:
-                        ABnew = np.linalg.solve(Mquad.T, Mlin[:, :self.dynamics_dim]).T
-                    else:
-                        ABnew = iu.solve_masked(Mquad.T, Mlin[:, :self.dynamics_dim], ridge_penalty=ridge_penalty).T
+                mask = np.concatenate((self.param_props['mask']['dynamics_weights'], self.param_props['mask']['dynamics_input_weights']), axis=1).T
+                ABnew = iu.solve_masked(Mquad.T, Mlin[:, :self.dynamics_dim], mask, ridge_penalty=ridge_penalty).T  # new A and B from regression
 
                 self.dynamics_weights = ABnew[:, :nz]  # new A
                 self.dynamics_input_weights = ABnew[:, nz:]
@@ -623,27 +599,14 @@ class Lgssm:
                     warnings.warn('Largest eigenvalue of the dynamics matrix is:' + str(max_abs_eig))
 
             elif self.param_props['update']['dynamics_weights']:  # update dynamics matrix A only
-                if self.ridge_lambda is None:
-                    self.dynamics_weights = np.linalg.solve(Mz1.T, (Mz12 - Muz21.T @ self.dynamics_input_weights.T)[:, :self.dynamics_dim]).T  # new A
-                else:
-                    self.dynamics_weights = iu.solve_masked(Mz1.T, (Mz12 - Muz21.T @ self.dynamics_input_weights.T)[:, :self.dynamics_dim], ridge_penalty=ridge_penalty).T  # new A
-
+                mask = self.param_props['mask']['dynamics_weights'].T
+                self.dynamics_weights = iu.solve_masked(Mz1.T, (Mz12 - Muz21.T @ self.dynamics_input_weights.T)[:, :self.dynamics_dim], mask, ridge_penalty=ridge_penalty).T  # new A
                 self.dynamics_weights = np.concatenate((self.dynamics_weights, dynamics_pad), axis=0)  # new A
 
             elif self.param_props['update']['dynamics_input_weights']:  # update input matrix B only
                 # TODO: I think this is broken right now if there are variables that were never stimulated
-
-                if self.param_props['shape']['dynamics_input_weights'] == 'diag':
-                    if self.param_props['mask']['dynamics_input_weights'] is None:
-                        self.param_props['mask']['dynamics_input_weights'] = np.eye(self.dynamics_dim, self.input_dim)
-
-                    # make the mask of which parameters to fit
-                    mask = np.tile(self.param_props['mask']['dynamics_input_weights'].T, (self.dynamics_input_lags, 1))
-
-                    self.dynamics_input_weights = iu.solve_masked(Mu1.T, (Muz2 - Muz21 @ self.dynamics_weights.T)[:, :self.dynamics_dim], mask).T  # new A and B from regression
-                else:
-                    self.dynamics_input_weights = np.linalg.solve(Mu1.T, (Muz2 - Muz21 @ self.dynamics_weights.T)[:, :self.dynamics_dim]).T  # new B
-
+                mask = self.param_props['mask']['dynamics_input_weights'].T
+                self.dynamics_input_weights = iu.solve_masked(Mu1.T, (Muz2 - Muz21 @ self.dynamics_weights.T)[:, :self.dynamics_dim], mask).T  # new A and B from regression
                 self.dynamics_input_weights = np.concatenate((self.dynamics_input_weights, dynamics_inputs_zeros_pad), axis=0)  # new B
 
             # Update noise covariance Q
@@ -695,6 +658,9 @@ class Lgssm:
         ll, smoothed_means, suff_stats = \
             self.lgssm_smoother(emissions, inputs, init_mean, init_cov, memmap_cpu_id=memmap_cpu_id)
 
+        dynamics_inputs = self.get_lagged_data(inputs, self.dynamics_input_lags)
+        emissions_inputs = self.get_lagged_data(inputs, self.emissions_input_lags)
+
         smoothed_covs_sum = suff_stats['smoothed_covs_sum']
         smoothed_crosses_sum = suff_stats['smoothed_crosses_sum']
         first_cov = suff_stats['first_cov']
@@ -712,23 +678,23 @@ class Lgssm:
         Mz12 = smoothed_crosses_sum + smoothed_means[:-1, :].T @ smoothed_means[1:, :]  # E[zz_t@zz_{t+1}'] (above-diag)
 
         # Compute sufficient statistics for inputs x latents
-        Mu1 = inputs[1:, :].T @ inputs[1:, :]  # E[uu@uu'] for 2 to T
-        Muz2 = inputs[1:, :].T @ smoothed_means[1:, :]  # E[uu@zz'] for 2 to T
-        Muz21 = inputs[1:, :].T @ smoothed_means[:-1, :]  # E[uu_t@zz_{t-1} for 2 to T
+        Mu1 = dynamics_inputs[1:, :].T @ dynamics_inputs[1:, :]  # E[uu@uu'] for 2 to T
+        Muz2 = dynamics_inputs[1:, :].T @ smoothed_means[1:, :]  # E[uu@zz'] for 2 to T
+        Muz21 = dynamics_inputs[1:, :].T @ smoothed_means[:-1, :]  # E[uu_t@zz_{t-1} for 2 to T
 
         # =============== Update observation parameters ==============
         # Compute sufficient statistics
         Mz_emis = last_cov + smoothed_means[-1, :, None] * smoothed_means[-1, None, :]  # re-use Mz1 if possible
-        Mu_emis = inputs[0, :, None] * inputs[0, None, :]  # reuse Mu
-        Muz_emis = inputs[0, :, None] * smoothed_means[0, None, :]  # reuse Muz
-        Muy = inputs.T @ y  # E[uu@yy']
+        # Mu_emis = emissions_inputs[0, :, None] * emissions_inputs[0, None, :]  # reuse Mu
+        # Muz_emis = emissions_inputs[0, :, None] * smoothed_means[0, None, :]  # reuse Muz
+        Muy = emissions_inputs.T @ y  # E[uu@yy']
 
         My = y.T @ y + my_correction
         Mzy = smoothed_means.T @ y + mzy_correction
 
         Mz = Mz1 + Mz_emis
-        Mu2 = Mu1 + Mu_emis
-        Muz = Muz2 + Muz_emis
+        Mu2 = emissions_inputs.T @ emissions_inputs
+        Muz = emissions_inputs.T @ smoothed_means
 
         suff_stats = {'Mz1': Mz1,
                       'Mz2': Mz2,
@@ -752,13 +718,12 @@ class Lgssm:
     def _pad_init_for_lags(self):
         self.dynamics_weights_init = self._get_lagged_weights(self.dynamics_weights_init, self.dynamics_lags, fill='eye')
         self.dynamics_input_weights_init = self._get_lagged_weights(self.dynamics_input_weights_init, self.dynamics_lags, fill='zeros')
-        self.dynamics_offset_init = self._pad_zeros(self.dynamics_offset_init, self.dynamics_lags, axis=0)
         dci_block = self.dynamics_cov_init
         self.dynamics_cov_init = np.eye(self.dynamics_dim_full) / self.epsilon
         self.dynamics_cov_init[:self.dynamics_dim, :self.dynamics_dim] = dci_block
 
         self.emissions_weights_init = self._pad_zeros(self.emissions_weights_init, self.dynamics_lags, axis=1)
-        self.emissions_input_weights_init = self._get_lagged_weights(self.emissions_input_weights_init, self.dynamics_lags, fill='zeros')
+        self.emissions_input_weights_init = self._get_lagged_weights(self.emissions_input_weights_init, 1, fill='zeros')
 
     def estimate_init_mean(self, emissions):
         # estimate the initial mean of a data set as the mean over time
@@ -788,15 +753,7 @@ class Lgssm:
         init_cov_list = []
 
         for i in emissions:
-            with warnings.catch_warnings():
-                warnings.simplefilter('ignore', category=RuntimeWarning)
-                emissions_var = np.nanvar(i, axis=0)
-
-            emissions_var[emissions_var == 0] = np.mean(emissions_var[emissions_var != 0])
-            var_mat = np.diag(emissions_var)
-            var_mat = np.eye(i.shape[1])
-            var_block = sl.block_diag(*([var_mat] * self.dynamics_lags))
-            init_cov_list.append(var_block)
+            init_cov_list.append(np.eye(self.dynamics_dim_full))
 
         return init_cov_list
 

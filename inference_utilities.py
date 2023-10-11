@@ -115,15 +115,13 @@ def solve_masked(A, b, mask=None, ridge_penalty=None):
     for i in range(b.shape[1]):
         non_zero_loc = mask[:, i] != 0
 
-        b_i = b[:, i]
-
-        if ridge_penalty is None:
-            A_nonzero = A[:, non_zero_loc]
-        else:
+        if ridge_penalty is not None:
             r_size = ridge_penalty.shape[0]
-            penalty = ridge_penalty[i] * np.eye(r_size)[:, non_zero_loc[:r_size]]
-            A_nonzero = A[:, non_zero_loc]
-            A_nonzero[:r_size, :penalty.shape[1]] += penalty
+            penalty = ridge_penalty[i] * np.eye(r_size)
+            A[:r_size, :r_size] = A[:r_size, :r_size] + penalty
+
+        b_i = b[:, i]
+        A_nonzero = A[:, non_zero_loc]
 
         x_hat[non_zero_loc, i] = np.linalg.lstsq(A_nonzero, b_i, rcond=None)[0]
 
@@ -144,10 +142,6 @@ def fit_em(model, data, init_mean=None, init_cov=None, num_steps=10,
 
         if len(emissions) < size:
             raise Exception('Number of cpus must be <= number of data sets')
-
-        # lag the inputs if the model has lags
-        if inputs[0].shape[1] < model.input_dim_full:
-            inputs = [model.get_lagged_data(i, model.dynamics_input_lags) for i in inputs]
 
         if init_mean is None:
             init_mean = model.estimate_init_mean(emissions)
@@ -177,7 +171,7 @@ def fit_em(model, data, init_mean=None, init_cov=None, num_steps=10,
         if cpu_id == 0:
             # set the initial mean and cov to the first smoothed mean / cov
             for i in range(len(smoothed_means)):
-                init_mean[i] = smoothed_means[i][0, :] - model.dynamics_input_weights @ inputs[i][0, :]
+                init_mean[i] = smoothed_means[i][0, :]
                 init_cov[i] = new_init_covs[i] / 2 + new_init_covs[i].T / 2
 
             log_likelihood_out.append(ll)
@@ -223,9 +217,6 @@ def parallel_get_post(model, data, init_mean=None, init_cov=None, max_iter=1, co
         emissions = data['emissions']
         inputs = data['inputs']
 
-        if inputs[0].shape[1] < model.input_dim_full:
-            inputs = [model.get_lagged_data(i, model.dynamics_input_lags) for i in inputs]
-
         if init_mean is None:
             init_mean = model.estimate_init_mean(emissions)
 
@@ -254,7 +245,7 @@ def parallel_get_post(model, data, init_mean=None, init_cov=None, max_iter=1, co
                 ll, smoothed_means, suff_stats = model.lgssm_smoother(emissions, inputs, init_mean, init_cov,
                                                                       memmap_cpu_id=memmap_cpu_id)
 
-                init_mean_new = smoothed_means[0, :].copy() - model.dynamics_input_weights @ inputs[0, :]
+                init_mean_new = smoothed_means[0, :].copy()
                 init_cov_new = suff_stats['first_cov'].copy()
                 init_cov_new = init_cov_new / 2 + init_cov_new.T / 2
 
