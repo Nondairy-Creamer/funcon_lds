@@ -419,9 +419,6 @@ class Lgssm:
         """
         num_timesteps = emissions.shape[0]
 
-        dynamics_inputs = self.get_lagged_data(inputs, self.dynamics_input_lags)
-        emissions_inputs = self.get_lagged_data(inputs, self.emissions_input_lags)
-
         if init_mean is None:
             init_mean = self.estimate_init_mean([emissions])[0]
 
@@ -431,8 +428,8 @@ class Lgssm:
         # first run the kalman forward pass
         ll, filtered_means, filtered_covs = self.lgssm_filter(emissions, inputs, init_mean, init_cov, memmap_cpu_id=memmap_cpu_id)
 
+        dynamics_inputs = self.get_lagged_data(inputs, self.dynamics_input_lags)
         dynamics_inputs = dynamics_inputs @ self.dynamics_input_weights.T
-        emissions_inputs = emissions_inputs @ self.emissions_input_weights.T
 
         smoothed_means = filtered_means.copy()
         last_cov = filtered_covs[-1, :, :]

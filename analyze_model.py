@@ -5,9 +5,10 @@ import analysis_utilities as au
 import loading_utilities as lu
 from pathlib import Path
 
-# run_params = lu.get_run_params(param_name='analysis_params/ana_test.yml')
+run_params = lu.get_run_params(param_name='analysis_params/ana_test.yml')
 # run_params = lu.get_run_params(param_name='analysis_params/ana_syn_test_analysis.yml')
-run_params = lu.get_run_params(param_name='analysis_params/ana_exp_DL.yml')
+# run_params = lu.get_run_params(param_name='analysis_params/ana_exp_DL.yml')
+# run_params = lu.get_run_params(param_name='analysis_params/ana_exp_DL_fullq.yml')
 # run_params = lu.get_run_params(param_name='analysis_params/ana_syn_ridge_sweep.yml')
 
 window = run_params['window']
@@ -15,9 +16,9 @@ sub_pre_stim = run_params['sub_pre_stim']
 model_folders = [Path(i) for i in run_params['model_folders']]
 
 # choose the model that has the highest test log likelihood
-model, model_true, data, posterior_dict, posterior_path, data_corr = \
+model, model_true, data, posterior_dict, data_path, posterior_path, data_corr = \
     am.get_best_model(model_folders, run_params['sorting_param'], use_test_data=run_params['use_test_data'],
-                      plot_figs=False, best_model_ind=run_params['best_model_ind'])
+                      plot_figs=run_params['plot_model_comparison'], best_model_ind=run_params['best_model_ind'])
 
 is_synth = '0' in data['cell_ids']
 
@@ -35,17 +36,46 @@ else:
         neuron_to_remove = run_params['neuron_to_remove']
         neuron_to_stim = run_params['neuron_to_stim']
 
+cell_ids_chosen = list(np.sort(cell_ids_chosen))
 emissions = data['emissions']
 inputs = data['inputs']
-model_sampled = posterior_dict['post_pred']
+model_sampled = posterior_dict['model_sampled']
 cell_ids = data['cell_ids']
 posterior = posterior_dict['posterior']
 
 # get the impulse response functions (IRF)
-measured_irf, measured_irf_sem, measured_irf_all = au.get_impulse_response_function(emissions, inputs, window=window, sub_pre_stim=sub_pre_stim, return_pre=True)
-posterior_irf = au.get_impulse_response_function(posterior, inputs, window=window, sub_pre_stim=sub_pre_stim, return_pre=True)[0]
-model_irf = au.get_impulse_response_function(model_sampled, inputs, window=window, sub_pre_stim=sub_pre_stim, return_pre=True)[0]
-model_weights = au.stack_weights(model.dynamics_weights[:model.dynamics_dim, :], model.dynamics_lags, axis=1)
+if 'irf' in data.keys():
+    measured_irf = data['irf']['measured_irf']
+    measured_irf_sem = data['irf']['measured_irf_sem']
+    measured_irf_all = data['irf']['measured_irf_all']
+else:
+    measured_irf, measured_irf_sem, measured_irf_all = au.get_impulse_response_function(emissions, inputs, window=window, sub_pre_stim=sub_pre_stim, return_pre=True)
+    data['irf'] = {'measured_irf': measured_irf,
+                   'measured_irf_sem': measured_irf_sem,
+                   'measured_irf_all': measured_irf_all}
+
+    data_file = open(data_path.with_suffix('.pkl'), 'wb')
+    pickle.dump(data, data_file)
+    data_file.close()
+
+if 'irf' in posterior_dict.keys():
+    model_irf = posterior_dict['irf']['model_irf']
+    model_irf_sem = posterior_dict['irf']['model_irf_sem']
+    model_irf_all = posterior_dict['irf']['model_irf_all']
+else:
+    model_irf, model_irf_sem, model_irf_all = au.get_impulse_response_function(model_sampled, inputs, window=window,
+                                                                               sub_pre_stim=sub_pre_stim,
+                                                                               return_pre=True)
+    posterior_dict['irf'] = {'model_irf': model_irf,
+                             'model_irf_sem': model_irf_sem,
+                             'model_irf_all': model_irf_all}
+
+    posterior_file = open(posterior_path.with_suffix('.pkl'), 'wb')
+    pickle.dump(posterior_dict, posterior_file)
+    posterior_file.close()
+
+model_weights = model.dynamics_weights
+model_weights = au.stack_weights(model_weights[:model.dynamics_dim, :], model.dynamics_lags, axis=1)
 model_weights = np.split(model_weights, model_weights.shape[0], axis=0)
 model_weights = [i[0, :, :] for i in model_weights]
 
@@ -80,25 +110,25 @@ data_corr[nan_mask] = np.nan
 for i in range(len(model_weights)):
     model_weights[i][nan_mask] = np.nan
 
-# run analysis methods on the data
+# # run analysis methods on the data
 am.plot_model_params(model=model, model_true=model_true, cell_ids_chosen=cell_ids_chosen)
-am.plot_dynamics_eigs(model=model)
-am.plot_posterior(data=data, posterior_dict=posterior_dict, cell_ids_chosen=cell_ids_chosen, sample_rate=model.sample_rate)
-am.plot_irf_norm(model_weights=model_weights, measured_irf=measured_irf_ave, model_irf=model_irf_ave,
-                 data_corr=data_corr, cell_ids=cell_ids, cell_ids_chosen=cell_ids_chosen)
+# am.plot_dynamics_eigs(model=model)
+# am.plot_posterior(data=data, posterior_dict=posterior_dict, cell_ids_chosen=cell_ids_chosen, sample_rate=model.sample_rate)
+# am.plot_irf_norm(model_weights=model_weights, measured_irf=measured_irf_ave, model_irf=model_irf_ave,
+#                  data_corr=data_corr, cell_ids=cell_ids, cell_ids_chosen=cell_ids_chosen)
 
-am.plot_irf_traces(measured_irf=measured_irf, measured_irf_sem=measured_irf_sem, posterior_irf=posterior_irf,
-                   model_irf=model_irf, cell_ids=cell_ids, cell_ids_chosen=cell_ids_chosen,
-                   window=window, sample_rate=model.sample_rate, num_plot=5)
+# am.plot_irf_traces(measured_irf=measured_irf, measured_irf_sem=measured_irf_sem,
+#                    model_irf=model_irf, cell_ids=cell_ids, cell_ids_chosen=cell_ids_chosen,
+#                    window=window, sample_rate=model.sample_rate, num_plot=5)
 am.compare_irf_w_prediction(model_weights=model_weights, measured_irf=measured_irf_ave,
                             model_irf=model_irf_ave, data_corr=data_corr,
                             cell_ids=cell_ids, cell_ids_chosen=cell_ids_chosen)
 
 # if the data is not synthetic compare with the anatomy
-if not is_synth:
-    am.compare_irf_w_anatomy(model_weights=model_weights, measured_irf=measured_irf_ave,
-                             model_irf=model_irf_ave, data_corr=data_corr,
-                             cell_ids=cell_ids)
+# if not is_synth:
+#     am.compare_irf_w_anatomy(model_weights=model_weights, measured_irf=measured_irf_ave,
+#                              model_irf=model_irf_ave, data_corr=data_corr,
+#                              cell_ids=cell_ids, cell_ids_chosen=cell_ids_chosen)
 
 posterior_dict = am.plot_missing_neuron(model=model, data=data, posterior_dict=posterior_dict,
                                         cell_ids_chosen=cell_ids_chosen, neuron_to_remove=neuron_to_remove,

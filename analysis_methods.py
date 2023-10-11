@@ -50,6 +50,26 @@ def get_best_model(model_folders, sorting_param, use_test_data=True, plot_figs=T
         data_test_list.append(pickle.load(data_test_file))
         data_test_file.close()
 
+        if 'post_pred' in posterior_train_list[-1].keys():
+            posterior_train_list[-1]['model_sampled'] = posterior_train_list[-1]['post_pred'].copy()
+            posterior_train_list[-1]['model_sampled_noise'] = posterior_train_list[-1]['post_pred_noise'].copy()
+            del posterior_train_list[-1]['post_pred']
+            del posterior_train_list[-1]['post_pred_noise']
+
+            posterior_file = open(m / 'posterior_train.pkl', 'wb')
+            pickle.dump(posterior_train_list[-1], posterior_file)
+            posterior_file.close()
+
+        if 'post_pred' in posterior_test_list[-1].keys():
+            posterior_test_list[-1]['model_sampled'] = posterior_test_list[-1]['post_pred'].copy()
+            posterior_test_list[-1]['model_sampled_noise'] = posterior_test_list[-1]['post_pred_noise'].copy()
+            del posterior_test_list[-1]['post_pred']
+            del posterior_test_list[-1]['post_pred_noise']
+
+            posterior_file = open(m / 'posterior_test.pkl', 'wb')
+            pickle.dump(posterior_test_list[-1], posterior_file)
+            posterior_file.close()
+
     best_model_ind = plot_model_comparison(sorting_param, model_list, posterior_train_list,
                                               data_train_list, posterior_test_list, data_test_list,
                                               plot_figs=plot_figs, best_model_ind=best_model_ind)
@@ -61,13 +81,15 @@ def get_best_model(model_folders, sorting_param, use_test_data=True, plot_figs=T
     if use_test_data:
         data = data_test_list[best_model_ind]
         posterior_dict = posterior_test_list[best_model_ind]
+        data_path = 'trained_models' / model_folders[best_model_ind] / 'data_test.yml'
         posterior_path = 'trained_models' / model_folders[best_model_ind] / 'posterior_test.yml'
     else:
         data = data_train_list[best_model_ind]
         posterior_dict = posterior_train_list[best_model_ind]
+        data_path = 'trained_models' / model_folders[best_model_ind] / 'data_train.yml'
         posterior_path = 'trained_models' / model_folders[best_model_ind] / 'posterior_train.yml'
 
-    return model, model_true, data, posterior_dict, posterior_path, data_corr
+    return model, model_true, data, posterior_dict, data_path, posterior_path, data_corr
 
 
 def plot_model_params(model, model_true=None, cell_ids_chosen=None):
@@ -178,7 +200,7 @@ def plot_matrix(param_trained, param_true=None, labels_x=None, labels_y=None, ab
     plt.xlabel('input neurons')
     plt.ylabel('output neurons')
     plt.clim((-abs_max, abs_max))
-    plt.colorbar()
+    # plt.colorbar()
 
     if labels_x is not None:
         plt.xticks(np.arange(param_trained.shape[1]), labels_x)
@@ -229,7 +251,7 @@ def plot_posterior(data, posterior_dict, cell_ids_chosen, sample_rate=0.5, windo
     inputs = data['inputs']
     posterior = posterior_dict['posterior']
     # model_sampled = posterior_dict['model_sampled_noise']
-    model_sampled = posterior_dict['post_pred']
+    model_sampled = posterior_dict['model_sampled']
 
     neuron_inds_chosen = np.array([data['cell_ids'].index(i) for i in cell_ids_chosen])
 
@@ -319,7 +341,8 @@ def plot_missing_neuron(model, data, posterior_dict, cell_ids_chosen, neuron_to_
     cell_ids = data['cell_ids']
     cell_ids_chosen_inds = [cell_ids.index(i) for i in cell_ids_chosen]
     chosen_inputs = [i[:, cell_ids_chosen_inds] for i in data['inputs']]
-    data_ind, time_window = au.find_stim_events(chosen_inputs, window_size=window_size)
+    chosen_emissions = [i[:, cell_ids_chosen_inds] for i in data['emissions']]
+    data_ind, time_window = au.find_stim_events(chosen_inputs, emissions=chosen_emissions, chosen_neuron_ind=cell_ids_chosen.index(neuron_to_remove), window_size=window_size)
 
     # check for data that has already been saved
     if 'posterior_missing' in posterior_dict.keys():
@@ -440,7 +463,9 @@ def plot_irf_norm(model_weights, measured_irf, model_irf, data_corr, cell_ids, c
     plt.show()
 
 
-def compare_irf_w_anatomy(model_weights, measured_irf, model_irf, data_corr, cell_ids):
+def compare_irf_w_anatomy(model_weights, measured_irf, model_irf, data_corr, cell_ids, cell_ids_chosen):
+    chosen_neuron_inds = [cell_ids.index(i) for i in cell_ids_chosen]
+
     model_weights = [np.abs(i) for i in model_weights]
     measured_irf = np.abs(measured_irf)
     model_irf = np.abs(model_irf)
@@ -450,10 +475,76 @@ def compare_irf_w_anatomy(model_weights, measured_irf, model_irf, data_corr, cel
 
     # compare each of the weights against measured
     anatomy_list = [chem_conn, gap_conn, pep_conn]
-    measured_irf_score, measured_irf_score_ci = au.compare_matrix_sets(anatomy_list, measured_irf)[:2]
-    model_irf_score, model_irf_score_ci = au.compare_matrix_sets(anatomy_list, model_irf)[:2]
-    data_corr_score, data_corr_score_ci = au.compare_matrix_sets(anatomy_list, data_corr)[:2]
-    model_weights_score, model_weights_score_ci = au.compare_matrix_sets(anatomy_list, model_weights)[:2]
+    measured_irf_score, measured_irf_score_ci, al_meas_l, al_meas_r = au.compare_matrix_sets(anatomy_list, measured_irf, positive_weights=True)
+    model_irf_score, model_irf_score_ci, al_model_l, al_model_r = au.compare_matrix_sets(anatomy_list, model_irf, positive_weights=True)
+    data_corr_score, data_corr_score_ci, al_corr_l, al_corr_r = au.compare_matrix_sets(anatomy_list, data_corr, positive_weights=True)
+    model_weights_score, model_weights_score_ci, al_weights_l, al_weights_r = au.compare_matrix_sets(anatomy_list, model_weights, positive_weights=True)
+
+    selected_neurons = np.ix_(chosen_neuron_inds, chosen_neuron_inds)
+    anatomy_combined = [al_meas_l[selected_neurons], al_model_l[selected_neurons], al_corr_l[selected_neurons], al_weights_l[selected_neurons]]
+    weights_combined = [al_meas_r[selected_neurons], al_model_r[selected_neurons], al_corr_r[selected_neurons], al_weights_r[selected_neurons]]
+    name = ['measured IRFs', 'model IRFs', 'data corr', 'model weights']
+
+    i = np.ix_(chosen_neuron_inds, chosen_neuron_inds)
+    plot_x = np.arange(len(cell_ids_chosen))
+    plt.figure()
+    ax = plt.subplot(2, 2, 1)
+    plt.title('chemical synapses')
+    plt.imshow(anatomy_list[0][i], cmap=colormap)
+    cmax = np.max(np.abs(anatomy_list[0][i])).astype(float)
+    plt.clim((-cmax, cmax))
+    plt.xticks(plot_x, cell_ids_chosen)
+    plt.yticks(plot_x, cell_ids_chosen)
+    for label in ax.get_xticklabels():
+        label.set_rotation(90)
+
+    ax = plt.subplot(2, 2, 2)
+    plt.title('gap junctions')
+    plt.imshow(anatomy_list[1][i], cmap=colormap)
+    cmax = np.max(np.abs(anatomy_list[1][i]))
+    plt.clim((-cmax, cmax))
+    plt.xticks(plot_x, cell_ids_chosen)
+    plt.yticks(plot_x, cell_ids_chosen)
+    for label in ax.get_xticklabels():
+        label.set_rotation(90)
+
+    ax = plt.subplot(2, 2, 3)
+    plt.title('neuropeptide connectome')
+    plt.imshow(anatomy_list[2][i], cmap=colormap)
+    cmax = np.max(np.abs(anatomy_list[2][i]))
+    plt.clim((-cmax, cmax))
+    plt.tight_layout()
+    plt.xticks(plot_x, cell_ids_chosen)
+    plt.yticks(plot_x, cell_ids_chosen)
+    for label in ax.get_xticklabels():
+        label.set_rotation(90)
+
+    for i in range(len(anatomy_combined)):
+        plot_x = np.arange(len(cell_ids_chosen))
+        plt.figure()
+        ax = plt.subplot(1, 2, 1)
+        plt.imshow(anatomy_combined[i] / np.nanmax(anatomy_combined[i]), cmap=colormap)
+        plt.clim((-1, 1))
+        plt.xlabel('presynaptic')
+        plt.ylabel('postsynaptic')
+        plt.title('anatomy')
+        plt.xticks(plot_x, cell_ids_chosen)
+        plt.yticks(plot_x, cell_ids_chosen)
+        for label in ax.get_xticklabels():
+            label.set_rotation(90)
+
+        ax = plt.subplot(1, 2, 2)
+        plt.imshow(weights_combined[i] / np.nanmax(weights_combined[i]), cmap=colormap)
+        plt.clim((-1, 1))
+        plt.title(name[i])
+        plt.xlabel('presynaptic')
+        plt.ylabel('postsynaptic')
+        plt.xticks(plot_x, cell_ids_chosen)
+        plt.yticks(plot_x, cell_ids_chosen)
+        for label in ax.get_xticklabels():
+            label.set_rotation(90)
+
+        plt.tight_layout()
 
     # make figure comparing the metrics to the connectome
     plt.figure()
@@ -531,7 +622,7 @@ def compare_irf_w_prediction(model_weights, measured_irf, model_irf, data_corr, 
     plt.show()
 
 
-def plot_irf_traces(measured_irf, measured_irf_sem, posterior_irf, model_irf, cell_ids, cell_ids_chosen, window,
+def plot_irf_traces(measured_irf, measured_irf_sem, model_irf, cell_ids, cell_ids_chosen, window,
                     sample_rate=0.5, num_plot=5):
 
     chosen_neuron_inds = [cell_ids.index(i) for i in cell_ids_chosen]
@@ -541,7 +632,6 @@ def plot_irf_traces(measured_irf, measured_irf_sem, posterior_irf, model_irf, ce
     measured_irf = measured_irf[:, chosen_neuron_inds, :][:, :, chosen_neuron_inds]
     measured_irf_sem = measured_irf_sem[:, chosen_neuron_inds, :][:, :, chosen_neuron_inds]
     model_irf = model_irf[:, chosen_neuron_inds, :][:, :, chosen_neuron_inds]
-    posterior_irf = posterior_irf[:, chosen_neuron_inds, :][:, :, chosen_neuron_inds]
 
     # find the 5 highest responses to plot
     measured_stim_responses_l2 = au.ave_fun(model_irf, axis=0)
@@ -555,18 +645,16 @@ def plot_irf_traces(measured_irf, measured_irf_sem, posterior_irf, model_irf, ce
     measured_response_chosen = np.zeros((measured_irf.shape[0], num_plot))
     measured_response_sem_chosen = np.zeros((measured_irf.shape[0], num_plot))
     model_sampled_response_chosen = np.zeros((measured_irf.shape[0], num_plot))
-    posterior_response_chosen = np.zeros((measured_irf.shape[0], num_plot))
 
     plot_label = []
     for pi, p in enumerate(plot_inds):
         measured_response_sem_chosen[:, pi] = measured_irf_sem[:, p[0], p[1]]
         measured_response_chosen[:, pi] = measured_irf[:, p[0], p[1]]
         model_sampled_response_chosen[:, pi] = model_irf[:, p[0], p[1]]
-        posterior_response_chosen[:, pi] = posterior_irf[:, p[0], p[1]]
         plot_label.append((cell_ids_chosen[p[0]], cell_ids_chosen[p[1]]))
 
-    ylim = (np.nanpercentile([measured_response_chosen - measured_response_sem_chosen, model_sampled_response_chosen, posterior_response_chosen], 1),
-            np.nanpercentile([measured_response_chosen + measured_response_sem_chosen, model_sampled_response_chosen, posterior_response_chosen], 99))
+    ylim = (np.nanpercentile([measured_response_chosen - measured_response_sem_chosen, model_sampled_response_chosen], 1),
+            np.nanpercentile([measured_response_chosen + measured_response_sem_chosen, model_sampled_response_chosen], 99))
 
     for i in range(measured_response_chosen.shape[1]):
         plt.figure()
@@ -574,7 +662,6 @@ def plot_irf_traces(measured_irf, measured_irf_sem, posterior_irf, model_irf, ce
         this_measured_resp_sem = measured_response_sem_chosen[:, i]
         plt.plot(plot_x, this_measured_resp, label='measured')
         plt.fill_between(plot_x, this_measured_resp - this_measured_resp_sem, this_measured_resp + this_measured_resp_sem, alpha=0.4)
-        plt.plot(plot_x, posterior_response_chosen[:, i], label='posterior')
         plt.plot(plot_x, model_sampled_response_chosen[:, i], label='model sampled')
         plt.axvline(0, color='k', linestyle='--')
         plt.axhline(0, color='k', linestyle='--')
@@ -625,9 +712,9 @@ def plot_model_comparison(sorting_param, model_list, posterior_train_list, data_
     test_ll = [i['ll'] for i in posterior_test_list]
 
     # normalize likelihood by number of measurements
-    ll_over_train = [ll_over_train[i] / num_non_nan_train[i] for i in range(len(ll_over_train))]
-    train_ll = [train_ll[i] / num_non_nan_train[i] for i in range(len(train_ll))]
-    test_ll = [test_ll[i] / num_non_nan_test[i] for i in range(len(test_ll))]
+    # ll_over_train = [ll_over_train[i] / num_non_nan_train[i] for i in range(len(ll_over_train))]
+    # train_ll = [train_ll[i] / num_non_nan_train[i] for i in range(len(train_ll))]
+    # test_ll = [test_ll[i] / num_non_nan_test[i] for i in range(len(test_ll))]
 
     if best_model_ind is None:
         best_model_ind = np.argmax(test_ll)

@@ -20,7 +20,7 @@ def p_norm(data, power=1, axis=None):
 
 
 def ave_fun(data, axis=None):
-    return np.sum(data, axis=axis)
+    return np.nanmean(data, axis=axis)
 
 
 def nan_convolve(data, filter, mode='valid'):
@@ -133,14 +133,14 @@ def get_anatomical_data(cell_ids):
     atlas_ids[atlas_ids.index('AWCON')] = 'AWCR'
     atlas_ids[atlas_ids.index('AWCOFF')] = 'AWCL'
     atlas_inds = [atlas_ids.index(i) for i in cell_ids]
-    chem_syn_conn = anatomical_connectome_full[np.ix_(atlas_inds, atlas_inds)]
+    chem_conn = chemical_connectome_full[np.ix_(atlas_inds, atlas_inds)]
     gap_conn = gap_junction_connectome_full[np.ix_(atlas_inds, atlas_inds)]
     pep_conn = peptide_connectome_full[np.ix_(atlas_inds, atlas_inds)]
 
-    return chem_syn_conn, gap_conn, pep_conn
+    return chem_conn, gap_conn, pep_conn
 
 
-def compare_matrix_sets(left_side, right_side):
+def compare_matrix_sets(left_side, right_side, positive_weights=False):
     if type(left_side) is not list:
         left_side = [left_side]
 
@@ -153,35 +153,62 @@ def compare_matrix_sets(left_side, right_side):
     left_side_col = np.stack([i.reshape(-1) for i in left_side]).T
     right_side_col = np.stack([i.reshape(-1) for i in right_side]).T
 
-    if num_left > 1 or num_right > 1:
-        x0 = np.ones(num_left + num_right - 2)
+    # if num_left > 1 or num_right > 1:
+    x0 = np.zeros(num_left + num_right - 1) + (not positive_weights)
 
-        def obj_fun(x):
-            left_weights = np.concatenate((np.ones(1), x[:num_left-1]), axis=0)
-            right_weights = np.concatenate((np.ones(1), x[num_left-1:]), axis=0)
+    def obj_fun(x):
+        if positive_weights:
+            x = np.exp(x)
+        left_weights = np.concatenate((np.ones(1), x[:num_left-1]), axis=0)
+        right_weights = x[num_left-1:]
 
-            left_val = left_side_col @ left_weights
-            right_val = right_side_col @ right_weights
+        left_val = left_side_col @ left_weights
+        right_val = right_side_col @ right_weights
 
-            return -nan_corr(left_val, right_val)[0]
+        # return -nan_corr(left_val, right_val)[0]
+        return -nan_r2(left_val, right_val)
 
-        x_hat = scipy.optimize.minimize(obj_fun, x0).x
+    x_hat = scipy.optimize.minimize(obj_fun, x0).x
 
-        left_weights_hat = np.concatenate((np.ones(1), x_hat[:num_left - 1]), axis=0)
-        right_weights_hat = np.concatenate((np.ones(1), x_hat[num_left - 1:]), axis=0)
-    else:
-        left_weights_hat = np.ones(1)
-        right_weights_hat = np.ones(1)
+    if positive_weights:
+        x_hat = np.exp(x_hat)
+
+    left_weights_hat = np.concatenate((np.ones(1), x_hat[:num_left - 1]), axis=0)
+    right_weights_hat = x_hat[num_left - 1:]
+    # else:
+    #     left_weights_hat = np.ones(1)
+    #     right_weights_hat = np.ones(1)
 
     left_recon = (left_side_col @ left_weights_hat).reshape(left_side[0].shape)
     right_recon = (right_side_col @ right_weights_hat).reshape(right_side[0].shape)
 
-    score, score_ci = nan_corr(left_recon, right_recon)
+    score = nan_r2(left_recon, right_recon)
+    if score < 0:
+        score = 0
+    score_ci = (score, score)
+
+    from matplotlib import pyplot as plt
+
+    plt.figure()
+    plt.scatter(left_recon.reshape(-1), right_recon.reshape(-1))
+    xlim = plt.xlim()
+    plt.plot([xlim[0], xlim[1]], [xlim[0], xlim[1]], color='k')
+    plt.show()
 
     return score, score_ci, left_recon, right_recon
 
 
-def find_stim_events(inputs, window_size=1000):
+def balanced_accuracy(y_true, y_hat):
+    # number of correct hits out of total correct
+    true_positives = y_true == 1
+    tpr = np.nanmean(y_hat[true_positives] == 1)
+    true_negatives = y_true == 0
+    tnr = np.nanmean(y_hat[true_negatives] == 0)
+
+    return (tpr + tnr) / 2
+
+
+def find_stim_events(inputs, emissions=None, chosen_neuron_ind=None, window_size=1000):
     max_data_set = 0
     max_ind = 0
     max_val = 0
@@ -200,6 +227,11 @@ def find_stim_events(inputs, window_size=1000):
 
         # sum the filtered inputs over neurons
         total_stim = inputs_filtered.sum(1)
+
+        if chosen_neuron_ind is not None:
+            recording_has_neuron = np.mean(np.isnan(emissions[ii][:, chosen_neuron_ind]), axis=0) < 0.3
+            total_stim = total_stim * recording_has_neuron
+
         this_max_val = np.max(total_stim)
         this_max_ind = np.argmax(total_stim)
 
@@ -225,7 +257,9 @@ def nan_r2(y_true, y_hat):
     ss_res = np.sum((y_true - y_hat) ** 2)
     ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)
 
-    return 1 - ss_res / ss_tot
+    r2 = 1 - ss_res / ss_tot
+
+    return r2
 
 
 def nan_corr(y_true, y_hat, mean_sub=True):
