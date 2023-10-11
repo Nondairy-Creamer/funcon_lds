@@ -92,12 +92,12 @@ class Lgssm:
 
         # set up masks to constrain which parameters can be fit
         if self.param_props['shape']['dynamics_weights'] == 'anatomical':
-            chem_conn, gap_conn, pep_conn = au.get_anatomical_data(self.cell_ids)
+            chem_conn, gap_conn, pep_conn = au.load_anatomical_data(self.cell_ids)
             combined_mask = (chem_conn + gap_conn + pep_conn + np.eye(self.dynamics_dim)) > 0
             self.param_props['mask']['dynamics_weights'] = np.tile(combined_mask, (1, self.dynamics_lags))
 
         elif self.param_props['shape']['dynamics_weights'] == 'synaptic':
-            chem_conn, gap_conn, pep_conn = au.get_anatomical_data(self.cell_ids)
+            chem_conn, gap_conn, pep_conn = au.load_anatomical_data(self.cell_ids)
             combined_mask = (chem_conn + gap_conn + np.eye(self.dynamics_dim)) > 0
             self.param_props['mask']['dynamics_weights'] = np.tile(combined_mask, (1, self.dynamics_lags))
 

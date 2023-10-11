@@ -2,6 +2,7 @@ import numpy as np
 import warnings
 import wormneuroatlas as wa
 import scipy
+import pickle
 
 
 def auto_select_ids(inputs, cell_ids, num_neurons=10):
@@ -96,13 +97,39 @@ def get_impulse_response_function(data, inputs, window=(-60, 120), sub_pre_stim=
     return ave_responses, ave_responses_sem, responses
 
 
+def load_anatomical_data(cell_ids):
+    # load in anatomical data
+    chem_file = open('anatomical_data/chemical.pkl', 'rb')
+    chemical_connectome_full = pickle.load(chem_file)
+    chem_file.close()
+
+    gap_file = open('anatomical_data/gap.pkl', 'rb')
+    gap_junction_connectome_full = pickle.load(gap_file)
+    gap_file.close()
+
+    peptide_file = open('anatomical_data/peptide.pkl', 'rb')
+    peptide_connectome_full = pickle.load(peptide_file)
+    peptide_file.close()
+
+    ids_file = open('anatomical_data/cell_ids.pkl', 'rb')
+    atlas_ids = pickle.load(ids_file)
+    ids_file.close()
+
+    atlas_inds = [atlas_ids.index(i) for i in cell_ids]
+    chem_syn_conn = chemical_connectome_full[np.ix_(atlas_inds, atlas_inds)]
+    gap_conn = gap_junction_connectome_full[np.ix_(atlas_inds, atlas_inds)]
+    pep_conn = peptide_connectome_full[np.ix_(atlas_inds, atlas_inds)]
+
+    return chem_syn_conn, gap_conn, pep_conn
+
+
 def get_anatomical_data(cell_ids):
     # load in anatomical data
     watlas = wa.NeuroAtlas()
     atlas_ids = list(watlas.neuron_ids)
-    anatomical_connectome_full = watlas.get_anatomical_connectome(signed=False)
-    peptide_connectome_full = watlas.get_peptidergic_connectome()
+    anatomical_connectome_full = watlas.get_chemical_synapses()
     gap_junction_connectome_full = watlas.get_gap_junctions()
+    peptide_connectome_full = watlas.get_peptidergic_connectome()
     atlas_ids[atlas_ids.index('AWCON')] = 'AWCR'
     atlas_ids[atlas_ids.index('AWCOFF')] = 'AWCL'
     atlas_inds = [atlas_ids.index(i) for i in cell_ids]

@@ -446,7 +446,7 @@ def compare_irf_w_anatomy(model_weights, measured_irf, model_irf, data_corr, cel
     model_irf = np.abs(model_irf)
     data_corr = np.abs(data_corr)
 
-    chem_conn, gap_conn, pep_conn = au.get_anatomical_data(cell_ids)
+    chem_conn, gap_conn, pep_conn = au.load_anatomical_data(cell_ids)
 
     # compare each of the weights against measured
     anatomy_list = [chem_conn, gap_conn, pep_conn]
