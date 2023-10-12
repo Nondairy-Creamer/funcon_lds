@@ -568,7 +568,7 @@ class Lgssm:
             if self.ridge_lambda is None:
                 ridge_penalty = None
             else:
-                ridge_penalty = 10.0**self.ridge_lambda * self.dynamics_cov[:self.dynamics_dim, :self.dynamics_dim].diagonal()
+                ridge_penalty = 10.0**self.ridge_lambda * self.dynamics_cov.diagonal()
 
             if self.param_props['update']['dynamics_weights'] and self.param_props['update']['dynamics_input_weights']:
                 # do a joint update for A and B
