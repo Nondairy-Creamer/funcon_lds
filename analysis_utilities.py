@@ -97,30 +97,36 @@ def get_impulse_response_function(data, inputs, window=(-60, 120), sub_pre_stim=
     return ave_responses, ave_responses_sem, responses
 
 
-def load_anatomical_data(cell_ids):
+def load_anatomical_data(cell_ids=None):
     # load in anatomical data
     chem_file = open('anatomical_data/chemical.pkl', 'rb')
-    chemical_connectome_full = pickle.load(chem_file)
+    chemical_synapse_connectome = pickle.load(chem_file)
     chem_file.close()
 
     gap_file = open('anatomical_data/gap.pkl', 'rb')
-    gap_junction_connectome_full = pickle.load(gap_file)
+    gap_junction_connectome = pickle.load(gap_file)
     gap_file.close()
 
     peptide_file = open('anatomical_data/peptide.pkl', 'rb')
-    peptide_connectome_full = pickle.load(peptide_file)
+    peptide_connectome = pickle.load(peptide_file)
     peptide_file.close()
 
     ids_file = open('anatomical_data/cell_ids.pkl', 'rb')
     atlas_ids = pickle.load(ids_file)
     ids_file.close()
 
-    atlas_inds = [atlas_ids.index(i) for i in cell_ids]
-    chem_syn_conn = chemical_connectome_full[np.ix_(atlas_inds, atlas_inds)]
-    gap_conn = gap_junction_connectome_full[np.ix_(atlas_inds, atlas_inds)]
-    pep_conn = peptide_connectome_full[np.ix_(atlas_inds, atlas_inds)]
+    if cell_ids is not None:
+        if '0' in cell_ids:
+            # if the data is synthetic just choose the first n neurons for testing
+            atlas_inds = np.arange(len(cell_ids))
+        else:
+            atlas_inds = [atlas_ids.index(i) for i in cell_ids]
 
-    return chem_syn_conn, gap_conn, pep_conn
+        chemical_synapse_connectome = chemical_synapse_connectome[np.ix_(atlas_inds, atlas_inds)]
+        gap_junction_connectome = gap_junction_connectome[np.ix_(atlas_inds, atlas_inds)]
+        peptide_connectome = peptide_connectome[np.ix_(atlas_inds, atlas_inds)]
+
+    return chemical_synapse_connectome, gap_junction_connectome, peptide_connectome
 
 
 def get_anatomical_data(cell_ids):

@@ -130,17 +130,12 @@ class Lgssm:
         dynamics_tau = self.dynamics_lags / lag_factor
         dynamics_const = (np.exp(lag_factor) - 1) * np.exp(1 / dynamics_tau - lag_factor) / (np.exp(1 / dynamics_tau) - 1)
         dynamics_time_decay = np.exp(-np.arange(self.dynamics_lags) / dynamics_tau) / dynamics_const
-        self.dynamics_weights_init = rng.standard_normal((1, self.dynamics_dim, self.dynamics_dim))
-        self.dynamics_weights_init = np.tile(self.dynamics_weights_init, (self.dynamics_lags, 1, 1))
+        self.dynamics_weights_init = rng.standard_normal((self.dynamics_dim, self.dynamics_dim))
+        self.dynamics_weights_init[np.eye(self.dynamics_dim, dtype=bool)] = max_eig_allowed
+        self.dynamics_weights_init = np.tile(self.dynamics_weights_init[None, :, :], (self.dynamics_lags, 1, 1))
         self.dynamics_weights_init = self.dynamics_weights_init * self.param_props['mask']['dynamics_weights'][:, :self.dynamics_dim]
         eig_vals, eig_vects = np.linalg.eig(self.dynamics_weights_init)
-        eig_vals = eig_vals / np.max(np.abs(eig_vals)) * max_eig_allowed
-        negative_real_eigs = np.real(eig_vals) < 0
-        eig_vals[negative_real_eigs] = -eig_vals[negative_real_eigs]
-        eig_vals_mat = np.zeros((self.dynamics_lags, self.dynamics_dim, self.dynamics_dim), dtype=np.cdouble)
-        for i in range(self.dynamics_lags):
-            eig_vals_mat[i, :, :] = np.diag(eig_vals[i, :])
-        self.dynamics_weights_init = np.real(eig_vects @ np.transpose(np.linalg.solve(np.transpose(eig_vects, (0, 2, 1)), eig_vals_mat), (0, 2, 1)))
+        self.dynamics_weights_init = self.dynamics_weights_init / np.max(np.abs(eig_vals)) * max_eig_allowed
         self.dynamics_weights_init = self.dynamics_weights_init * dynamics_time_decay[:, None, None]
 
         dynamics_input_tau = self.dynamics_input_lags / lag_factor

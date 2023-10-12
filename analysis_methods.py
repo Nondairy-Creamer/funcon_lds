@@ -731,7 +731,7 @@ def plot_model_comparison(sorting_param, model_list, posterior_train_list, data_
             plt.plot(i)
             plt.title(sorting_param + ': ' + str(sorting_list[ii]))
             plt.xlabel('Iterations of EM')
-            plt.ylabel('mean log likelihood')
+            plt.ylabel('log likelihood')
 
         if sorting_list[0] == -np.inf:
             sorting_list[0] = 2 * sorting_list[1] - sorting_list[2]
@@ -739,7 +739,7 @@ def plot_model_comparison(sorting_param, model_list, posterior_train_list, data_
         plt.subplot(1, 2, 1)
         plt.plot(sorting_list, train_ll, label='train', marker='o')
         plt.xlabel(sorting_param)
-        plt.ylabel('mean log likelihood')
+        plt.ylabel('log likelihood')
         plt.grid()
         plt.subplot(1, 2, 2)
         plt.plot(sorting_list, test_ll, label='test', marker='o')
