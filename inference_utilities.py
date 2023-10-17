@@ -277,17 +277,17 @@ def parallel_get_post(model, data, init_mean=None, init_cov=None, max_iter=1, co
                 print('inferring missing neurons')
 
                 cell_ids = model.cell_ids
-                for n in emissions.shape[0]:
-                    print('inferring neuron ' + str(n) + '/' + str(emissions.shape[0]))
+                for n in range(emissions.shape[1]):
+                    print('inferring neuron ' + str(n + 1) + '/' + str(emissions.shape[1]))
 
                     if np.mean(np.isnan(emissions[:, n])) > 0.5:
                         posterior_missing[cell_ids[n]] = None
                     else:
                         emissions_missing = emissions.copy()
                         emissions_missing[:, n] = np.nan
-                        ll_missing, posterior = model.lgssm_smoother(emissions_missing, inputs, init_mean, init_cov, memmap_cpu_id)[:2]
+                        ll_missing, posterior_recon = model.lgssm_smoother(emissions_missing, inputs, init_mean, init_cov, memmap_cpu_id)[:2]
                         posterior_missing[cell_ids[n]] = {'ll': ll_missing,
-                                                          'recon': posterior[:, n],
+                                                          'recon': posterior_recon[:, n],
                                                           'true': emissions[:, n]}
 
             ll_smeans.append((ll, posterior, model_sampled, model_sampled_noise, init_mean, init_cov, posterior_missing))

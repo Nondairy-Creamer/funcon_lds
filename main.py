@@ -74,7 +74,7 @@ def main(param_name, folder_name=None, extra_train_steps=None):
             method(param_name, save_folder)
         elif run_type == 'post':
             method = getattr(run_inference, 'infer_posterior')
-            method(param_name, save_folder)
+            method(param_name, save_folder, infer_missing=True)
         elif run_type == 'cont':
             method = getattr(run_inference, 'continue_fit')
             method(param_name, save_folder, extra_train_steps=extra_train_steps)
