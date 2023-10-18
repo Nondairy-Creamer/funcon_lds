@@ -105,7 +105,10 @@ def load_and_preprocess_data(data_path, num_data_sets=None, force_preprocess=Fal
         preprocess_path = i.parent / preprocess_filename
 
         if not force_preprocess and preprocess_path.exists():
-            preprocessed_data = np.load(str(preprocess_path), allow_pickle=True)
+            data_file = open(preprocess_path, 'rb')
+            preprocessed_data = pickle.load(data_file)
+            data_file.close()
+
             this_emissions = preprocessed_data['emissions']
             this_inputs = preprocessed_data['inputs']
             this_cell_ids = preprocessed_data['cell_ids']
