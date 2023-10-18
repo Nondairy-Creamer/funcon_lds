@@ -272,25 +272,23 @@ def parallel_get_post(model, data, init_mean=None, init_cov=None, max_iter=1, co
             model_sampled = model_sampled['latents'][0][:, :model.dynamics_dim]
             model_sampled_noise = model_sampled_noise['latents'][0][:, :model.dynamics_dim]
 
-            posterior_missing = {}
+            posterior_missing = None
+            ll_missing = []
             if infer_missing:
                 print('inferring missing neurons')
 
-                cell_ids = model.cell_ids
+                posterior_missing = np.zeros_like(emissions)
                 for n in range(emissions.shape[1]):
                     print('inferring neuron ' + str(n + 1) + '/' + str(emissions.shape[1]))
 
-                    if np.mean(np.isnan(emissions[:, n])) > 0.5:
-                        posterior_missing[cell_ids[n]] = None
-                    else:
-                        emissions_missing = emissions.copy()
-                        emissions_missing[:, n] = np.nan
-                        ll_missing, posterior_recon = model.lgssm_smoother(emissions_missing, inputs, init_mean, init_cov, memmap_cpu_id)[:2]
-                        posterior_missing[cell_ids[n]] = {'ll': ll_missing,
-                                                          'recon': posterior_recon[:, n],
-                                                          'true': emissions[:, n]}
+                    emissions_missing = emissions.copy()
+                    emissions_missing[:, n] = np.nan
+                    ll_missing_this, posterior_recon = model.lgssm_smoother(emissions_missing, inputs, init_mean, init_cov, memmap_cpu_id)[:2]
 
-            ll_smeans.append((ll, posterior, model_sampled, model_sampled_noise, init_mean, init_cov, posterior_missing))
+                    ll_missing.append(ll_missing_this)
+                    posterior_missing[:, n] = posterior_recon[:, n]
+
+            ll_smeans.append((ll, posterior, model_sampled, model_sampled_noise, init_mean, init_cov, posterior_missing, ll_missing))
     else:
         ll_smeans = None
 
@@ -316,6 +314,7 @@ def parallel_get_post(model, data, init_mean=None, init_cov=None, max_iter=1, co
         init_mean = [i[4] for i in ll_smeans]
         init_cov = [i[5] for i in ll_smeans]
         posterior_missing = [i[6] for i in ll_smeans]
+        ll_missing = [i[7] for i in ll_smeans]
 
         inference_test = {'ll': ll,
                           'posterior': smoothed_means,
@@ -324,7 +323,8 @@ def parallel_get_post(model, data, init_mean=None, init_cov=None, max_iter=1, co
                           'init_mean': init_mean,
                           'init_cov': init_cov,
                           'cell_ids': model.cell_ids,
-                          'posterior_missing': posterior_missing
+                          'posterior_missing': posterior_missing,
+                          'll_missing': ll_missing,
                           }
 
         return inference_test
