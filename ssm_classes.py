@@ -79,7 +79,11 @@ class Lgssm:
         self.dynamics_weights_init = 0.9 * np.tile(np.eye(self.dynamics_dim), (self.dynamics_lags, 1, 1))
         self.dynamics_weights_init = self.dynamics_weights_init * time_decay[:, None, None]
         self.dynamics_cov_init = np.eye(self.dynamics_dim)
-        self.dynamics_input_weights_init = np.zeros((self.dynamics_input_lags, self.dynamics_dim, self.input_dim))
+
+        if self.param_props['shape']['dynamics_input_weights'] == 'diag':
+            self.dynamics_input_weights_init = np.tile(np.eye(self.dynamics_dim, self.input_dim), (self.dynamics_input_lags, 1, 1))
+        else:
+            self.dynamics_input_weights_init = np.zeros((self.dynamics_input_lags, self.dynamics_dim, self.input_dim,))
 
         # initialize emissions weights
         self.emissions_weights_init = np.eye(self.emissions_dim)
