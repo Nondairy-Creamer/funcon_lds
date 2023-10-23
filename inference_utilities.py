@@ -289,7 +289,7 @@ def parallel_get_post(model, data, init_mean=None, init_cov=None, max_iter=1, co
                         ll_missing.append(ll_missing_this)
                         posterior_missing[:, n] = posterior_recon[:, n]
                     else:
-                        ll_missing.append(ll)
+                        ll_missing.append(ll.copy())
                         posterior_missing[:, n] = posterior[:, n]
 
             ll_smeans.append((ll, posterior, model_sampled, model_sampled_noise, init_mean, init_cov, posterior_missing, ll_missing))

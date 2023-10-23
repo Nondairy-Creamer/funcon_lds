@@ -7,9 +7,10 @@ from pathlib import Path
 
 # run_params = lu.get_run_params(param_name='analysis_params/ana_test.yml')
 # run_params = lu.get_run_params(param_name='analysis_params/ana_syn_test_analysis.yml')
-# run_params = lu.get_run_params(param_name='analysis_params/ana_exp_DL.yml')
+run_params = lu.get_run_params(param_name='analysis_params/ana_exp_DL.yml')
+# run_params = lu.get_run_params(param_name='analysis_params/ana_exp_DL_old.yml')
 # run_params = lu.get_run_params(param_name='analysis_params/ana_exp_DL_fullq.yml')
-run_params = lu.get_run_params(param_name='analysis_params/ana_syn_ridge_sweep.yml')
+# run_params = lu.get_run_params(param_name='analysis_params/ana_syn_ridge_sweep.yml')
 
 window = run_params['window']
 sub_pre_stim = run_params['sub_pre_stim']
@@ -44,35 +45,10 @@ cell_ids = data['cell_ids']
 posterior = posterior_dict['posterior']
 
 # get the impulse response functions (IRF)
-if 'irf' in data.keys():
-    measured_irf = data['irf']['measured_irf']
-    measured_irf_sem = data['irf']['measured_irf_sem']
-    measured_irf_all = data['irf']['measured_irf_all']
-else:
-    measured_irf, measured_irf_sem, measured_irf_all = au.get_impulse_response_function(emissions, inputs, window=window, sub_pre_stim=sub_pre_stim, return_pre=True)
-    data['irf'] = {'measured_irf': measured_irf,
-                   'measured_irf_sem': measured_irf_sem,
-                   'measured_irf_all': measured_irf_all}
-
-    data_file = open(data_path.with_suffix('.pkl'), 'wb')
-    pickle.dump(data, data_file)
-    data_file.close()
-
-if 'irf' in posterior_dict.keys():
-    model_irf = posterior_dict['irf']['model_irf']
-    model_irf_sem = posterior_dict['irf']['model_irf_sem']
-    model_irf_all = posterior_dict['irf']['model_irf_all']
-else:
-    model_irf, model_irf_sem, model_irf_all = au.get_impulse_response_function(model_sampled, inputs, window=window,
-                                                                               sub_pre_stim=sub_pre_stim,
-                                                                               return_pre=True)
-    posterior_dict['irf'] = {'model_irf': model_irf,
-                             'model_irf_sem': model_irf_sem,
-                             'model_irf_all': model_irf_all}
-
-    posterior_file = open(posterior_path.with_suffix('.pkl'), 'wb')
-    pickle.dump(posterior_dict, posterior_file)
-    posterior_file.close()
+measured_irf, measured_irf_sem, measured_irf_all = au.get_impulse_response_function(emissions, inputs, window=window, sub_pre_stim=sub_pre_stim, return_pre=True)
+model_irf, model_irf_sem, model_irf_all = au.get_impulse_response_function(model_sampled, inputs, window=window,
+                                                                           sub_pre_stim=sub_pre_stim,
+                                                                           return_pre=True)
 
 model_weights = model.dynamics_weights
 model_weights = au.stack_weights(model_weights[:model.dynamics_dim, :], model.dynamics_lags, axis=1)
@@ -110,16 +86,16 @@ data_corr[nan_mask] = np.nan
 for i in range(len(model_weights)):
     model_weights[i][nan_mask] = np.nan
 
-# # run analysis methods on the data
-am.plot_model_params(model=model, model_true=model_true, cell_ids_chosen=cell_ids_chosen)
-am.plot_dynamics_eigs(model=model)
-am.plot_posterior(data=data, posterior_dict=posterior_dict, cell_ids_chosen=cell_ids_chosen, sample_rate=model.sample_rate)
-am.plot_irf_norm(model_weights=model_weights, measured_irf=measured_irf_ave, model_irf=model_irf_ave,
-                 data_corr=data_corr, cell_ids=cell_ids, cell_ids_chosen=cell_ids_chosen)
+# run analysis methods on the data
+# am.plot_model_params(model=model, model_true=model_true, cell_ids_chosen=cell_ids_chosen)
+# am.plot_dynamics_eigs(model=model)
+# am.plot_posterior(data=data, posterior_dict=posterior_dict, cell_ids_chosen=cell_ids_chosen, sample_rate=model.sample_rate)
+# am.plot_irf_norm(model_weights=model_weights, measured_irf=measured_irf_ave, model_irf=model_irf_ave,
+#                  data_corr=data_corr, cell_ids=cell_ids, cell_ids_chosen=cell_ids_chosen)
 
-am.plot_irf_traces(measured_irf=measured_irf, measured_irf_sem=measured_irf_sem,
-                   model_irf=model_irf, cell_ids=cell_ids, cell_ids_chosen=cell_ids_chosen,
-                   window=window, sample_rate=model.sample_rate, num_plot=5)
+# am.plot_irf_traces(measured_irf=measured_irf, measured_irf_sem=measured_irf_sem,
+#                    model_irf=model_irf, cell_ids=cell_ids, cell_ids_chosen=cell_ids_chosen,
+#                    window=window, sample_rate=model.sample_rate, num_plot=5)
 am.compare_irf_w_prediction(model_weights=model_weights, measured_irf=measured_irf_ave,
                             model_irf=model_irf_ave, data_corr=data_corr,
                             cell_ids=cell_ids, cell_ids_chosen=cell_ids_chosen)
@@ -130,13 +106,7 @@ if not is_synth:
                              model_irf=model_irf_ave, data_corr=data_corr,
                              cell_ids=cell_ids, cell_ids_chosen=cell_ids_chosen)
 
-posterior_dict = am.plot_missing_neuron(model=model, data=data, posterior_dict=posterior_dict,
-                                        cell_ids_chosen=cell_ids_chosen, neuron_to_remove=neuron_to_remove,
-                                        force_calc=run_params['force_calc_missing_posterior'])
-
-# save the posterior with the neuron that was missing
-posterior_file = open(posterior_path.with_suffix('.pkl'), 'wb')
-pickle.dump(posterior_dict, posterior_file)
-posterior_file.close()
+if 'posterior_missing' in posterior_dict.keys():
+    am.plot_missing_neuron(data=data, posterior_dict=posterior_dict, sample_rate=model.sample_rate)
 
 a=1

@@ -133,7 +133,7 @@ def get_anatomical_data(cell_ids):
     # load in anatomical data
     watlas = wa.NeuroAtlas()
     atlas_ids = list(watlas.neuron_ids)
-    anatomical_connectome_full = watlas.get_chemical_synapses()
+    chemical_connectome_full = watlas.get_chemical_synapses()
     gap_junction_connectome_full = watlas.get_gap_junctions()
     peptide_connectome_full = watlas.get_peptidergic_connectome()
     atlas_ids[atlas_ids.index('AWCON')] = 'AWCR'
@@ -181,25 +181,11 @@ def compare_matrix_sets(left_side, right_side, positive_weights=False):
 
     left_weights_hat = np.concatenate((np.ones(1), x_hat[:num_left - 1]), axis=0)
     right_weights_hat = x_hat[num_left - 1:]
-    # else:
-    #     left_weights_hat = np.ones(1)
-    #     right_weights_hat = np.ones(1)
 
     left_recon = (left_side_col @ left_weights_hat).reshape(left_side[0].shape)
     right_recon = (right_side_col @ right_weights_hat).reshape(right_side[0].shape)
 
-    score = nan_r2(left_recon, right_recon)
-    if score < 0:
-        score = 0
-    score_ci = (score, score)
-
-    from matplotlib import pyplot as plt
-
-    plt.figure()
-    plt.scatter(left_recon.reshape(-1), right_recon.reshape(-1))
-    xlim = plt.xlim()
-    plt.plot([xlim[0], xlim[1]], [xlim[0], xlim[1]], color='k')
-    plt.show()
+    score, score_ci = nan_corr(left_recon, right_recon)
 
     return score, score_ci, left_recon, right_recon
 

@@ -38,56 +38,44 @@ def get_best_model(model_folders, sorting_param, use_test_data=True, plot_figs=T
         posterior_train_list.append(pickle.load(posterior_train_file))
         posterior_train_file.close()
 
-        data_train_file = open(m / 'data_train.pkl', 'rb')
-        data_train_list.append(pickle.load(data_train_file))
-        data_train_file.close()
-
         posterior_test_file = open(m / 'posterior_test.pkl', 'rb')
         posterior_test_list.append(pickle.load(posterior_test_file))
         posterior_test_file.close()
 
-        data_test_file = open(m / 'data_test.pkl', 'rb')
-        data_test_list.append(pickle.load(data_test_file))
-        data_test_file.close()
+    best_model_ind = plot_model_comparison(sorting_param, model_list, posterior_train_list, posterior_test_list,
+                                           plot_figs=plot_figs, best_model_ind=best_model_ind)
 
-        if 'post_pred' in posterior_train_list[-1].keys():
-            posterior_train_list[-1]['model_sampled'] = posterior_train_list[-1]['post_pred'].copy()
-            posterior_train_list[-1]['model_sampled_noise'] = posterior_train_list[-1]['post_pred_noise'].copy()
-            del posterior_train_list[-1]['post_pred']
-            del posterior_train_list[-1]['post_pred_noise']
+    data_file = open('trained_models' / model_folders[best_model_ind] / 'data_train.pkl', 'rb')
+    data_train = pickle.load(data_file)
+    data_file.close()
 
-            posterior_file = open(m / 'posterior_train.pkl', 'wb')
-            pickle.dump(posterior_train_list[-1], posterior_file)
-            posterior_file.close()
+    if 'data_corr' in data_train.keys():
+        data_corr = data_train['data_corr']
+    else:
+        data_corr = au.nan_corr_data(data_train['emissions'])
+        data_train['data_corr'] = data_corr
 
-        if 'post_pred' in posterior_test_list[-1].keys():
-            posterior_test_list[-1]['model_sampled'] = posterior_test_list[-1]['post_pred'].copy()
-            posterior_test_list[-1]['model_sampled_noise'] = posterior_test_list[-1]['post_pred_noise'].copy()
-            del posterior_test_list[-1]['post_pred']
-            del posterior_test_list[-1]['post_pred_noise']
-
-            posterior_file = open(m / 'posterior_test.pkl', 'wb')
-            pickle.dump(posterior_test_list[-1], posterior_file)
-            posterior_file.close()
-
-    best_model_ind = plot_model_comparison(sorting_param, model_list, posterior_train_list,
-                                              data_train_list, posterior_test_list, data_test_list,
-                                              plot_figs=plot_figs, best_model_ind=best_model_ind)
-
-    model = model_list[best_model_ind]
-    model_true = model_true_list[best_model_ind]
-    data_corr = au.nan_corr_data(data_train_list[best_model_ind]['emissions'])
+        data_file = open('trained_models' / model_folders[best_model_ind] / 'data_train.pkl', 'wb')
+        pickle.dump(data_train, data_file)
+        data_file.close()
 
     if use_test_data:
-        data = data_test_list[best_model_ind]
+        data_file = open('trained_models' / model_folders[best_model_ind] / 'data_test.pkl', 'rb')
+        data = pickle.load(data_file)
+        data_file.close()
+
         posterior_dict = posterior_test_list[best_model_ind]
         data_path = 'trained_models' / model_folders[best_model_ind] / 'data_test.yml'
         posterior_path = 'trained_models' / model_folders[best_model_ind] / 'posterior_test.yml'
     else:
-        data = data_train_list[best_model_ind]
+        data = data_train
+
         posterior_dict = posterior_train_list[best_model_ind]
         data_path = 'trained_models' / model_folders[best_model_ind] / 'data_train.yml'
         posterior_path = 'trained_models' / model_folders[best_model_ind] / 'posterior_train.yml'
+
+    model = model_list[best_model_ind]
+    model_true = model_true_list[best_model_ind]
 
     return model, model_true, data, posterior_dict, data_path, posterior_path, data_corr
 
@@ -337,67 +325,56 @@ def plot_posterior(data, posterior_dict, cell_ids_chosen, sample_rate=0.5, windo
     plt.show()
 
 
-def plot_missing_neuron(model, data, posterior_dict, cell_ids_chosen, neuron_to_remove, window_size=1000, force_calc=False):
+def plot_missing_neuron(data, posterior_dict, sample_rate=0.5):
     cell_ids = data['cell_ids']
-    cell_ids_chosen_inds = [cell_ids.index(i) for i in cell_ids_chosen]
-    chosen_inputs = [i[:, cell_ids_chosen_inds] for i in data['inputs']]
-    chosen_emissions = [i[:, cell_ids_chosen_inds] for i in data['emissions']]
-    data_ind, time_window = au.find_stim_events(chosen_inputs, emissions=chosen_emissions, chosen_neuron_ind=cell_ids_chosen.index(neuron_to_remove), window_size=window_size)
+    posterior_missing = posterior_dict['posterior_missing']
+    emissions = data['emissions']
 
-    # check for data that has already been saved
-    if 'posterior_missing' in posterior_dict.keys():
-        if neuron_to_remove not in posterior_dict['posterior_missing']:
-            force_calc = True
-        else:
-            if data_ind != posterior_dict['posterior_missing'][neuron_to_remove]['data_ind'] or \
-                    time_window != posterior_dict['posterior_missing'][neuron_to_remove]['time_window']:
-                force_calc = True
-    else:
-        posterior_dict['posterior_missing'] = {}
-        force_calc = True
+    # calculate the correlation of the missing to measured neurons
+    missing_corr = np.zeros((len(emissions), emissions[0].shape[1]))
+    for ei, pi in zip(range(len(emissions)), range(len(posterior_missing))):
+        for n in range(emissions[ei].shape[1]):
+            if np.any(~np.isnan(emissions[ei][:, n])):
+                missing_corr[ei, n] = au.nan_corr(emissions[ei][:, n], posterior_missing[ei][:, n])[0]
+            else:
+                missing_corr[ei, n] = np.nan
 
-    init_mean = posterior_dict['init_mean'][data_ind]
-    init_cov = posterior_dict['init_cov'][data_ind]
-    sample_rate = model.sample_rate
-    missing_neuron_ind = cell_ids.index(neuron_to_remove)
-    emissions = data['emissions'][data_ind]
-    inputs = data['inputs'][data_ind]
+    ave_missing_corr = np.nanmean(missing_corr, axis=0)
 
-    if force_calc:
-        emissions_missing = emissions.copy()
-        emissions_missing[:, missing_neuron_ind] = np.nan
-        posterior_missing = model.lgssm_smoother(emissions_missing, inputs, init_mean, init_cov)[1]
-        posterior_missing = (posterior_missing @ model.emissions_weights.T)
-        posterior_missing = posterior_missing[time_window[0]:time_window[1], missing_neuron_ind]
-    else:
-        posterior_missing = posterior_dict['posterior_missing'][neuron_to_remove]['posterior']
-
-    emissions = emissions[time_window[0]:time_window[1], missing_neuron_ind]
-    inputs = inputs[time_window[0]:time_window[1], :]
-    stim_time, stim_inds = np.where(inputs == 1)
-    stim_names = [cell_ids[i] for i in stim_inds]
-    recon_score, recon_score_ci = score_fun(emissions, posterior_missing)
-
-    plot_x = np.arange(emissions.shape[0]) * sample_rate
     plt.figure()
-    plt.plot(plot_x, emissions, label='measured')
-    plt.plot(plot_x, posterior_missing, label='posterior, ' + neuron_to_remove + ' unmeasured')
-    ylim = plt.ylim()
-    for si, s in enumerate(stim_time):
-        plt.axvline(plot_x[s], color=[0.5, 0.5, 0.5])
-        plt.text(plot_x[s], ylim[1], stim_names[si], rotation=45)
+    plt.hist(ave_missing_corr)
+    plt.xlabel('average correlation')
+    plt.ylabel('count')
+
+    corr_sort_inds = np.argsort(-ave_missing_corr)
+    best_neuron_ind = corr_sort_inds[0]
+    median_neuron_ind = corr_sort_inds[int(np.sum(~np.isnan(ave_missing_corr)) / 2)]
+    best_neuron_no_nan = missing_corr[:, best_neuron_ind]
+    best_data_ind = np.argsort(-best_neuron_no_nan)[0]
+
+    median_neuron_no_nan = missing_corr[:, median_neuron_ind]
+    median_data_ind = np.argsort(-median_neuron_no_nan)[0]
+
+    plot_x = np.arange(emissions[best_data_ind].shape[0]) * sample_rate
+    plt.figure()
+    plt.subplot(2, 1, 1)
+    plt.title('best held out neuron: ' + cell_ids[best_neuron_ind])
+    plt.plot(plot_x, emissions[best_data_ind][:, best_neuron_ind], label='data')
+    plt.plot(plot_x, posterior_missing[best_data_ind][:, best_neuron_ind], label='posterior')
     plt.xlabel('time (s)')
-    plt.ylabel(neuron_to_remove + ' activity, correlation = ' + str(recon_score))
-    plt.legend()
+    plt.ylabel('neural activity')
+
+    plot_x = np.arange(emissions[median_data_ind].shape[0]) * sample_rate
+    plt.subplot(2, 1, 2)
+    plt.title('median held out neuron: ' + cell_ids[median_neuron_ind])
+    plt.plot(plot_x, emissions[median_data_ind][:, median_neuron_ind], label='data')
+    plt.plot(plot_x, posterior_missing[median_data_ind][:, median_neuron_ind], label='posterior')
+    plt.xlabel('time (s)')
+    plt.ylabel('neural activity')
+
+    plt.tight_layout()
+
     plt.show()
-
-    posterior_dict['posterior_missing'][neuron_to_remove] = {'posterior': posterior_missing,
-                                                             'emissions': emissions,
-                                                             'data_ind': data_ind,
-                                                             'time_window': time_window,
-                                                             }
-
-    return posterior_dict
 
 
 def plot_irf_norm(model_weights, measured_irf, model_irf, data_corr, cell_ids, cell_ids_chosen):
@@ -560,6 +537,8 @@ def compare_irf_w_anatomy(model_weights, measured_irf, model_irf, data_corr, cel
 
     plt.show()
 
+    return
+
 
 def compare_irf_w_prediction(model_weights, measured_irf, model_irf, data_corr, cell_ids, cell_ids_chosen):
     neuron_inds_chosen = [cell_ids.index(i) for i in cell_ids_chosen]
@@ -698,10 +677,8 @@ def plot_dynamics_eigs(model):
     plt.show()
 
 
-def plot_model_comparison(sorting_param, model_list, posterior_train_list, data_train_list, posterior_test_list,
-                          data_test_list, plot_figs=True, best_model_ind=None):
-    num_non_nan_train = [np.sum([np.sum(~np.isnan(j)) for j in i['emissions']]) for i in data_train_list]
-    num_non_nan_test = [np.sum([np.sum(~np.isnan(j)) for j in i['emissions']]) for i in data_test_list]
+def plot_model_comparison(sorting_param, model_list, posterior_train_list, posterior_test_list,
+                          plot_figs=True, best_model_ind=None):
 
     sorting_list = [getattr(i, sorting_param) for i in model_list]
     for i in range(len(sorting_list)):
@@ -710,11 +687,6 @@ def plot_model_comparison(sorting_param, model_list, posterior_train_list, data_
     ll_over_train = [getattr(i, 'log_likelihood') for i in model_list]
     train_ll = [i['ll'] for i in posterior_train_list]
     test_ll = [i['ll'] for i in posterior_test_list]
-
-    # normalize likelihood by number of measurements
-    # ll_over_train = [ll_over_train[i] / num_non_nan_train[i] for i in range(len(ll_over_train))]
-    # train_ll = [train_ll[i] / num_non_nan_train[i] for i in range(len(train_ll))]
-    # test_ll = [test_ll[i] / num_non_nan_test[i] for i in range(len(test_ll))]
 
     if best_model_ind is None:
         best_model_ind = np.argmax(test_ll)
