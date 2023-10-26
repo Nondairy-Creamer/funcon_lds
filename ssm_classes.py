@@ -301,6 +301,8 @@ class Lgssm:
 
         for d in range(num_data_sets):
             emissions_list[d][nan_mask[d]] = np.nan
+            if d > 0:
+                emissions_list[d][:, 0] = np.nan
 
         data_dict = {'latents': latents_list,
                      'inputs': inputs_list,

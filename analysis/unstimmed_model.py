@@ -5,46 +5,48 @@ import analysis_utilities as au
 import loading_utilities as lu
 from pathlib import Path
 
-run_params = lu.get_run_params(param_name='analysis_params/ana_test.yml')
-# run_params = lu.get_run_params(param_name='analysis_params/ana_syn_test_analysis.yml')
-# run_params = lu.get_run_params(param_name='analysis_params/ana_exp_DL.yml')
-# run_params = lu.get_run_params(param_name='analysis_params/ana_exp_DL_old.yml')
-# run_params = lu.get_run_params(param_name='analysis_params/ana_exp_DL_fullq.yml')
-# run_params = lu.get_run_params(param_name='analysis_params/ana_syn_ridge_sweep.yml')
+cell_ids_chosen = ['AVER', 'AVJL', 'AVJR', 'M3R', 'RMDVL', 'RMDVR', 'RMEL', 'RMER', 'URXL', 'AVDR']
+window = (-60, 120)
+sub_pre_stim = True
 
-window = run_params['window']
-sub_pre_stim = run_params['sub_pre_stim']
-model_folders = [Path(i) for i in run_params['model_folders']]
+full_model_path = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/exp_DL4_IL45_N80_R0/20231012_134557')
+full_model_file = open(full_model_path / 'models' / 'model_trained.pkl', 'rb')
+full_model = pickle.load(full_model_file)
+full_model_file.close()
 
-# choose the model that has the highest test log likelihood
-model, model_true, data, posterior_dict, data_path, posterior_path, data_corr = \
-    am.get_best_model(model_folders, run_params['sorting_param'], use_test_data=run_params['use_test_data'],
-                      plot_figs=run_params['plot_model_comparison'], best_model_ind=run_params['best_model_ind'])
+full_data_file = open(full_model_path / 'data_train.pkl')
+full_data = pickle.load(full_data_file)
+full_data_file.close()
 
-is_synth = '0' in data['cell_ids']
+unstimulated_model_path = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/exp_DL4_IL45_N80_R0_nostim/20231025_193355')
+unstim_model_file = open(unstimulated_model_path / 'models' / 'model_trained.pkl', 'rb')
+unstim_model = pickle.load(unstim_model_file)
+unstim_model_file.close()
+
+unstim_data_file = open(unstimulated_model_path / 'data_train.pkl')
+unstim_data = pickle.load(unstim_data_file)
+unstim_data_file.close()
 
 # choose which cells to focus on
-if run_params['auto_select_ids']:
-    cell_ids_chosen = au.auto_select_ids(data['inputs'], data['cell_ids'], num_neurons=run_params['num_select_ids'])
-else:
-    # check if the data is synthetic
-    if is_synth:
-        cell_ids_chosen = [str(i) for i in np.arange(run_params['num_select_ids'])]
-    else:
-        cell_ids_chosen = run_params['cell_ids_chosen']
+if cell_ids_chosen is None:
+    cell_ids_chosen = au.auto_select_ids(full_data['inputs'], full_data['cell_ids'], num_neurons=10)
 
 cell_ids_chosen = list(np.sort(cell_ids_chosen))
-emissions = data['emissions']
-inputs = data['inputs']
+emissions = full_data['emissions']
+inputs = full_data['inputs']
+cell_ids = full_data['cell_ids']
+
+# update the unstimulated model to use the input weights from the full model
+unstim_model_inds = np.array([cell_ids.index(i) for i in unstim_model.cell_ids])
+input_inds = np.tile(unstim_model_inds, (1, unstim_model.dynamics_input_lags))
+unstim_model.dynamics_input_weights = full_model.dynamics_input_weights[:full_model.dynamics_dim, :][np.ix_(unstim_model_inds, input_inds)]
+
 model_sampled = posterior_dict['model_sampled']
-cell_ids = data['cell_ids']
 posterior = posterior_dict['posterior']
 
 # get the impulse response functions (IRF)
 measured_irf, measured_irf_sem, measured_irf_all = au.get_impulse_response_function(emissions, inputs, window=window, sub_pre_stim=sub_pre_stim, return_pre=True)
-model_irf, model_irf_sem, model_irf_all = au.get_impulse_response_function(model_sampled, inputs, window=window,
-                                                                           sub_pre_stim=sub_pre_stim,
-                                                                           return_pre=True)
+model_irf, model_irf_sem, model_irf_all = au.get_impulse_response_function(model_sampled, inputs, window=window, sub_pre_stim=sub_pre_stim, return_pre=True)
 
 model_weights = model.dynamics_weights
 model_weights = au.stack_weights(model_weights[:model.dynamics_dim, :], model.dynamics_lags, axis=1)
@@ -53,6 +55,44 @@ model_weights = [i[0, :, :] for i in model_weights]
 
 measured_irf_ave = au.ave_fun(measured_irf[-window[0]:], axis=0)
 model_irf_ave = au.ave_fun(model_irf[-window[0]:], axis=0)
+
+
+
+
+a=1
+
+#
+# preprocess_filename = 'funcon_preprocessed_data.pkl'
+# data_path = Path('/home/mcreamer/Documents/data_sets/labeled_panneuronal/immobilized/')
+# unstim_em = []
+# unstim_in = []
+# unstim_ids = []
+#
+# for i in sorted(data_path.rglob('calcium_to_multicolor_alignment.mat'))[::-1]:
+#     # check if a processed version exists
+#     preprocess_path = i.parent / preprocess_filename
+#
+#     if preprocess_path.exists():
+#         data_file = open(preprocess_path, 'rb')
+#         preprocessed_data = pickle.load(data_file)
+#         data_file.close()
+#
+#         this_emissions = preprocessed_data['emissions']
+#         this_inputs = preprocessed_data['inputs']
+#         this_cell_ids = preprocessed_data['cell_ids']
+#
+#         unstim_em.append(this_emissions)
+#         unstim_in.append(this_inputs)
+#         unstim_ids.append(this_cell_ids)
+#
+# unstim_em, unstim_in, unstim_ids = \
+#     lu.align_data_cell_ids(unstim_em, unstim_in, unstim_ids, cell_ids_unique=cell_ids)
+#
+# unstim_corr = au.nan_corr_data(unstim_em)
+# data_corr = unstim_corr
+
+
+
 
 # remove IRFs that were measured fewer than run_params['num_stim_cutoff'] times
 num_neurons = len(cell_ids)

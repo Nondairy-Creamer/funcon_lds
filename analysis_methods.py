@@ -15,9 +15,7 @@ def get_best_model(model_folders, sorting_param, use_test_data=True, plot_figs=T
     model_list = []
     model_true_list = []
     posterior_train_list = []
-    data_train_list = []
     posterior_test_list = []
-    data_test_list = []
 
     for m in model_folders:
         m = 'trained_models' / m
@@ -171,6 +169,8 @@ def plot_model_params(model, model_true=None, cell_ids_chosen=None):
 
     plot_matrix(R, R_true, labels_x=cell_ids_chosen, labels_y=cell_ids_chosen, title='R')
 
+    return
+
 
 def plot_matrix(param_trained, param_true=None, labels_x=None, labels_y=None, abs_max=None, title=''):
     # plot a specific model parameter, usually called by plot_model_params
@@ -232,6 +232,8 @@ def plot_matrix(param_trained, param_true=None, labels_x=None, labels_y=None, ab
 
     plt.tight_layout()
     plt.show()
+
+    return
 
 
 def plot_posterior(data, posterior_dict, cell_ids_chosen, sample_rate=0.5, window_size=1000):
@@ -324,6 +326,8 @@ def plot_posterior(data, posterior_dict, cell_ids_chosen, sample_rate=0.5, windo
 
     plt.show()
 
+    return
+
 
 def plot_missing_neuron(data, posterior_dict, sample_rate=0.5):
     cell_ids = data['cell_ids']
@@ -375,6 +379,8 @@ def plot_missing_neuron(data, posterior_dict, sample_rate=0.5):
     plt.tight_layout()
 
     plt.show()
+
+    return
 
 
 def plot_irf_norm(model_weights, measured_irf, model_irf, data_corr, cell_ids, cell_ids_chosen):
@@ -438,6 +444,8 @@ def plot_irf_norm(model_weights, measured_irf, model_irf, data_corr, cell_ids, c
     plt.tight_layout()
 
     plt.show()
+
+    return
 
 
 def compare_irf_w_anatomy(model_weights, measured_irf, model_irf, data_corr, cell_ids, cell_ids_chosen):
@@ -600,6 +608,8 @@ def compare_irf_w_prediction(model_weights, measured_irf, model_irf, data_corr, 
 
     plt.show()
 
+    return
+
 
 def plot_irf_traces(measured_irf, measured_irf_sem, model_irf, cell_ids, cell_ids_chosen, window,
                     sample_rate=0.5, num_plot=5):
@@ -653,6 +663,8 @@ def plot_irf_traces(measured_irf, measured_irf_sem, model_irf, cell_ids, cell_id
 
     plt.show()
 
+    return
+
 
 def plot_dynamics_eigs(model):
     A = model.dynamics_weights
@@ -675,6 +687,8 @@ def plot_dynamics_eigs(model):
     ax.set_aspect('equal', 'box')
 
     plt.show()
+
+    return
 
 
 def plot_model_comparison(sorting_param, model_list, posterior_train_list, posterior_test_list,
@@ -722,4 +736,35 @@ def plot_model_comparison(sorting_param, model_list, posterior_train_list, poste
         plt.show()
 
     return best_model_ind
+
+
+def unmeasured_neuron(posterior, posterior_ids, emissions, emissions_ids, missing_neuron):
+    rmdvr_index_missing = posterior_ids.index(missing_neuron)
+    estimated_rmdvr = [i[:, rmdvr_index_missing] for i in posterior]
+
+    rmdvr_index_true = emissions_ids.index(missing_neuron)
+    true_rmdvr = [i[:, rmdvr_index_true] for i in emissions]
+
+    # measure similarities between estimated and true RMDVR activity
+    score = np.nanmean([au.nan_corr(i, j)[0] for i, j in zip(true_rmdvr, estimated_rmdvr)])
+
+    null = []
+    # make a null distribution
+    for n in range(len(emissions_ids)):
+        if n != rmdvr_index_true:
+            random_neuron = [i[:, n] for i in emissions]
+            score_for_random_neuron = [au.nan_corr(i, j)[0] for i, j in zip(random_neuron, estimated_rmdvr)]
+            null.append(np.nanmean(score_for_random_neuron))
+
+    p_value = np.mean(score < null)
+
+    plt.figure()
+    plt.hist(null, label='Estimation of RMDVR vs random neuron')
+    plt.axvline(score, label='Estimation of ' + missing_neuron + ' vs true', color='k', linestyle='--')
+    plt.xlabel('average correlation')
+    plt.ylabel('# of neurons')
+    plt.title('Estimation of ' + missing_neuron + 'when its activity is not measured\n p=' + str(p_value))
+    plt.legend()
+
+    plt.show()
 

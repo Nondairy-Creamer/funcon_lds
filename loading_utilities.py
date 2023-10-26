@@ -9,6 +9,7 @@ import time
 import analysis_utilities as au
 import warnings
 import os
+import scipy.io as sio
 
 # utilities for loading and saving the data
 
@@ -152,6 +153,56 @@ def load_and_preprocess_data(data_path, num_data_sets=None, force_preprocess=Fal
         inputs_train.append(this_inputs)
         cell_ids_train.append(this_cell_ids)
 
+    # find all files in the folder that have calcium_to_multicolor_alignment.mat
+    for i in sorted(data_path.rglob('calcium_to_multicolor_alignment.mat'))[::-1]:
+        path_name.append(i.parts[-2])
+
+        # check if a processed version exists
+        preprocess_path = i.parent / preprocess_filename
+
+        if not force_preprocess and preprocess_path.exists():
+            data_file = open(preprocess_path, 'rb')
+            preprocessed_data = pickle.load(data_file)
+            data_file.close()
+
+            this_emissions = preprocessed_data['emissions']
+            this_inputs = preprocessed_data['inputs']
+            this_cell_ids = preprocessed_data['cell_ids']
+
+        else:
+            c2m_align = sio.loadmat(str(i.parent / 'calcium_to_multicolor_alignment.mat'))
+            this_emissions = c2m_align['calcium_data'][0, 0]['gRaw'].T
+            this_inputs = np.zeros_like(this_emissions)
+            this_cell_ids = []
+
+            for j in c2m_align['labels'][0, 0]['tracked_human_labels']:
+                if len(j[0]) > 0:
+                    this_cell_ids.append(str(j[0][0]))
+                else:
+                    this_cell_ids.append('')
+
+            start = time.time()
+            this_emissions, this_inputs = preprocess_data(this_emissions, this_inputs, start_index=start_index,
+                                                          correct_photobleach=correct_photobleach,
+                                                          filter_size=filter_size)
+
+            if interpolate_nans:
+                full_nan_loc = np.all(np.isnan(this_emissions), axis=0)
+                interp_emissions = tp.interpolate_over_nans(this_emissions[:, ~full_nan_loc])[0]
+                this_emissions[:, ~full_nan_loc] = interp_emissions
+
+            preprocessed_file = open(preprocess_path, 'wb')
+            pickle.dump({'emissions': this_emissions, 'inputs': this_inputs, 'cell_ids': this_cell_ids},
+                        preprocessed_file)
+            preprocessed_file.close()
+
+            print('Data set', i.parent, 'preprocessed')
+            print('Took', time.time() - start, 's')
+
+        emissions_train.append(this_emissions)
+        inputs_train.append(this_inputs)
+        cell_ids_train.append(this_cell_ids)
+
     emissions_test = []
     inputs_test = []
     cell_ids_test = []
@@ -237,8 +288,8 @@ def save_run(save_folder, model_trained=None, model_true=None, ep=None, **vars_t
 def align_data_cell_ids(emissions, inputs, cell_ids, cell_ids_unique=None):
     if cell_ids_unique is None:
         cell_ids_unique = list(np.unique(np.concatenate(cell_ids)))
-        if cell_ids_unique[0] == '':
-            cell_ids_unique = cell_ids_unique[1:]
+        if '' in cell_ids_unique:
+            cell_ids_unique.pop(cell_ids_unique.index(''))
 
     num_neurons = len(cell_ids_unique)
 

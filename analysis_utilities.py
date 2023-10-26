@@ -9,10 +9,8 @@ def auto_select_ids(inputs, cell_ids, num_neurons=10):
     num_stim = np.sum(np.stack([np.sum(i, axis=0) for i in inputs]), axis=0)
     top_stims = np.argsort(num_stim)[-num_neurons:]
     cell_ids_chosen = [cell_ids[i] for i in top_stims]
-    neuron_to_remove = cell_ids_chosen[-1]
-    neuron_to_stim = neuron_to_remove
 
-    return cell_ids_chosen, neuron_to_remove, neuron_to_stim
+    return cell_ids_chosen
 
 
 def p_norm(data, power=1, axis=None):
@@ -227,7 +225,7 @@ def find_stim_events(inputs, emissions=None, chosen_neuron_ind=None, window_size
         this_max_val = np.max(total_stim)
         this_max_ind = np.argmax(total_stim)
 
-        if this_max_val > max_val:
+        if (ii == 0) or (this_max_val > max_val):
             max_val = this_max_val
             max_ind = this_max_ind
             max_data_set = ii
