@@ -115,7 +115,8 @@ def fit_experimental(param_name, save_folder):
                                         interpolate_nans=run_params['interpolate_nans'],
                                         held_out_data=run_params['held_out_data'],
                                         neuron_freq=run_params['neuron_freq'],
-                                        filter_size=run_params['filter_size'])
+                                        filter_size=run_params['filter_size'],
+                                        hold_out=run_params['hold_out'])
 
         # initialize the model and set model weights
         num_neurons = data_train['emissions'][0].shape[1]

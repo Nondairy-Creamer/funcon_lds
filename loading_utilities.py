@@ -1,5 +1,6 @@
 import numpy as np
 import itertools as it
+import scipy.signal as ssig
 import scipy.special as ss
 from pathlib import Path
 import yaml
@@ -89,7 +90,8 @@ def preprocess_data(emissions, inputs, start_index=0, correct_photobleach=False,
 
 
 def load_and_preprocess_data(data_path, num_data_sets=None, force_preprocess=False, start_index=0, filter_size=2,
-                             correct_photobleach=False, interpolate_nans=True, neuron_freq=0.0, held_out_data=[]):
+                             correct_photobleach=False, interpolate_nans=True, neuron_freq=0.0, held_out_data=[],
+                             hold_out='worm'):
     data_path = Path(data_path)
 
     preprocess_filename = 'funcon_preprocessed_data.pkl'
@@ -175,6 +177,12 @@ def load_and_preprocess_data(data_path, num_data_sets=None, force_preprocess=Fal
             this_inputs = np.zeros_like(this_emissions)
             this_cell_ids = []
 
+            # downsample from 6hz to 2hz
+            filter_shape = np.ones((3, 1)) / 3
+            this_emissions = ssig.convolve2d(this_emissions, filter_shape, mode='same')
+            this_emissions = this_emissions[::3, :]
+            this_inputs = this_inputs[::3, :]
+
             for j in c2m_align['labels'][0, 0]['tracked_human_labels']:
                 if len(j[0]) > 0:
                     this_cell_ids.append(str(j[0][0]))
@@ -207,23 +215,60 @@ def load_and_preprocess_data(data_path, num_data_sets=None, force_preprocess=Fal
     inputs_test = []
     cell_ids_test = []
 
-    for i in reversed(range(len(emissions_train))):
-        # skip any data that is being held out
-        if path_name[i] in held_out_data:
-            emissions_test.append(emissions_train.pop(i))
-            inputs_test.append(inputs_train.pop(i))
-            cell_ids_test.append(cell_ids_train.pop(i))
+    if hold_out == 'worm':
+        for i in reversed(range(len(emissions_train))):
+            # skip any data that is being held out
+            if path_name[i] in held_out_data:
+                emissions_test.append(emissions_train.pop(i))
+                inputs_test.append(inputs_train.pop(i))
+                cell_ids_test.append(cell_ids_train.pop(i))
 
-    emissions_test += emissions_train[num_data_sets:]
-    inputs_test += inputs_train[num_data_sets:]
-    cell_ids_test += cell_ids_train[num_data_sets:]
-    emissions_test = emissions_test[:num_data_sets]
-    inputs_test = inputs_test[:num_data_sets]
-    cell_ids_test = cell_ids_test[:num_data_sets]
+        emissions_test += emissions_train[num_data_sets:]
+        inputs_test += inputs_train[num_data_sets:]
+        cell_ids_test += cell_ids_train[num_data_sets:]
 
-    emissions_train = emissions_train[:num_data_sets]
-    inputs_train = inputs_train[:num_data_sets]
-    cell_ids_train = cell_ids_train[:num_data_sets]
+        emissions_test = emissions_test[:num_data_sets]
+        inputs_test = inputs_test[:num_data_sets]
+        cell_ids_test = cell_ids_test[:num_data_sets]
+
+        emissions_train = emissions_train[:num_data_sets]
+        inputs_train = inputs_train[:num_data_sets]
+        cell_ids_train = cell_ids_train[:num_data_sets]
+
+    elif hold_out == 'middle':
+        frac = 0.3
+
+        for i in range(num_data_sets):
+            num_time = emissions_train[i].shape[0]
+            test_inds = np.arange((1 - frac) * num_time / 2, (1 + frac) * num_time / 2, dtype=int)
+            emissions_test.append(emissions_train[i][test_inds, :])
+            inputs_test.append(inputs_train[i][test_inds, :])
+            cell_ids_test.append(cell_ids_train[i])
+
+            emissions_train[i][test_inds, :] = np.nan
+            inputs_train[i][test_inds, :] = 0
+
+        emissions_train = emissions_train[:num_data_sets]
+        inputs_train = inputs_train[:num_data_sets]
+
+    elif hold_out == 'end':
+        frac = 0.3
+
+        for i in range(num_data_sets):
+            num_time = emissions_train[i].shape[0]
+            start_ind = int(frac * num_time)
+            emissions_test.append(emissions_train[i][start_ind:, :])
+            inputs_test.append(inputs_train[i][start_ind:, :])
+            cell_ids_test.append(cell_ids_train[i])
+
+            emissions_train[i] = emissions_train[i][:start_ind, :]
+            inputs_train[i] = inputs_train[i][:start_ind, :]
+
+        emissions_train = emissions_train[:num_data_sets]
+        inputs_train = inputs_train[:num_data_sets]
+
+    else:
+        raise Exception('Hold out style is not recognized')
 
     print('Size of data set:', len(emissions_train))
 
