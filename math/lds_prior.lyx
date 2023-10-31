@@ -1,0 +1,375 @@
+#LyX 2.3 created this file. For more info see http://www.lyx.org/
+\lyxformat 544
+\begin_document
+\begin_header
+\save_transient_properties true
+\origin unavailable
+\textclass article
+\use_default_options true
+\maintain_unincluded_children false
+\language english
+\language_package default
+\inputencoding auto
+\fontencoding global
+\font_roman "default" "default"
+\font_sans "default" "default"
+\font_typewriter "default" "default"
+\font_math "auto" "auto"
+\font_default_family default
+\use_non_tex_fonts false
+\font_sc false
+\font_osf false
+\font_sf_scale 100 100
+\font_tt_scale 100 100
+\use_microtype false
+\use_dash_ligatures true
+\graphics default
+\default_output_format default
+\output_sync 0
+\bibtex_command default
+\index_command default
+\paperfontsize default
+\spacing single
+\use_hyperref false
+\papersize default
+\use_geometry true
+\use_package amsmath 1
+\use_package amssymb 1
+\use_package cancel 1
+\use_package esint 1
+\use_package mathdots 1
+\use_package mathtools 1
+\use_package mhchem 1
+\use_package stackrel 1
+\use_package stmaryrd 1
+\use_package undertilde 1
+\cite_engine basic
+\cite_engine_type default
+\biblio_style plain
+\use_bibtopic false
+\use_indices false
+\paperorientation portrait
+\suppress_date false
+\justification true
+\use_refstyle 1
+\use_minted 0
+\index Index
+\shortcut idx
+\color #008000
+\end_index
+\leftmargin 2cm
+\topmargin 2cm
+\rightmargin 2cm
+\bottommargin 2cm
+\secnumdepth 3
+\tocdepth 3
+\paragraph_separation indent
+\paragraph_indentation default
+\is_math_indent 0
+\math_numbering_side default
+\quotes_style english
+\dynamic_quotes 0
+\papercolumns 1
+\papersides 1
+\paperpagestyle default
+\tracking_changes false
+\output_changes false
+\html_math_output 0
+\html_css_as_file 0
+\html_be_strict false
+\end_header
+
+\begin_body
+
+\begin_layout Subparagraph*
+Trace derivatives
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\frac{\partial}{\partial X}\text{Tr}\left[AXB\right]=A^{\intercal}B^{\intercal}$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\frac{\partial}{\partial X}\text{Tr}\left[AX^{\intercal}B\right]=BA$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\frac{\partial}{\partial X}\text{Tr}\left[X^{\intercal}AX\right]=(A+A^{\intercal})X$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\frac{\partial}{\partial X}\text{Tr}\left[AXBX^{\intercal}C\right]=\frac{\partial}{\partial X}\text{Tr}\left[AXD\right]+\frac{\partial}{\partial X}\text{Tr}\left[EX^{\intercal}C\right]=A^{\intercal}D^{\intercal}+EC$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $D=BX^{\intercal}C$
+\end_inset
+
+ and 
+\begin_inset Formula $E=AXB$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\frac{\partial}{\partial X}\text{Tr}\left[AXBX^{\intercal}C\right]=A^{\intercal}C^{\intercal}XB^{\intercal}+AXBC$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+If 
+\begin_inset Formula $C$
+\end_inset
+
+ is the identity and 
+\begin_inset Formula $A$
+\end_inset
+
+ and 
+\begin_inset Formula $B$
+\end_inset
+
+ are symmetric
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\frac{\partial}{\partial X}\text{Tr}\left[A_{\text{sym}}XB_{\text{sym}}X^{\intercal}\right]=2AXB$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Complete data log likelihood
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $L_{CD}=$
+\end_inset
+
+
+\begin_inset Formula $-\frac{1}{2}\text{Tr}\left[Q^{-1}\left(M_{(2,T)}+AM_{(1,T-1)}A^{\intercal}+BU_{(2,T)}B^{\intercal}-2AM_{\Delta}-2B\tilde{U}_{(2,T)}+2B\tilde{U}_{\Delta}A^{\intercal}\right)\right]-\frac{1}{2}\text{Tr}\left[A\frac{1}{\sigma_{A}^{2}}IA^{\intercal}\right]$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $L_{CD}=$
+\end_inset
+
+
+\begin_inset Formula $-\frac{1}{2}\text{Tr}\left[Q^{-1}M_{(2,T)}\right]-\frac{1}{2}\text{Tr}\left[Q^{-1}AM_{(1,T-1)}A^{\intercal}\right]-\frac{1}{2}\text{Tr}\left[Q^{-1}BU_{(2,T)}B^{\intercal}\right]+\text{Tr}\left[Q^{-1}AM_{\Delta}\right]+\text{Tr}\left[Q^{-1}B\tilde{U}_{(2,T)}\right]-\text{Tr}\left[Q^{-1}B\tilde{U}_{\Delta}A^{\intercal}\right]-\frac{1}{2}\frac{1}{\sigma_{A}^{2}}\text{Tr}\left[AA^{\intercal}\right]$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Derivatives
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\frac{\partial L_{CD}}{\partial A}=-Q^{-1}AM_{(1,T-1)}+Q^{-1}M_{\Delta}^{\intercal}-Q^{-1}B\tilde{U}_{\Delta}-\frac{1}{\sigma_{A}^{2}}A$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\frac{\partial L_{CD}}{\partial B}=-Q^{-1}BU_{(2,T)}+Q^{-1}\tilde{U}_{(2,T)}^{\intercal}-Q^{-1}A\tilde{U}_{\Delta}^{\intercal}$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Set to 0
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $0=-Q^{-1}AM_{(1,T-1)}+Q^{-1}M_{\Delta}^{\intercal}-Q^{-1}B\tilde{U}_{\Delta}-\frac{1}{\sigma_{A}^{2}}A$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $0=-Q^{-1}BU_{(2,T)}+Q^{-1}\tilde{U}_{(2,T)}^{\intercal}-Q^{-1}A\tilde{U}_{\Delta}^{\intercal}$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Multiply by 
+\begin_inset Formula $Q$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $0=-AM_{(1,T-1)}+M_{\Delta}^{\intercal}-B\tilde{U}_{\Delta}-\frac{1}{\sigma_{A}^{2}}QA$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $0=-BU_{(2,T)}+\tilde{U}_{(2,T)}^{\intercal}-A\tilde{U}_{\Delta}^{\intercal}$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Bring the terms without 
+\begin_inset Formula $A$
+\end_inset
+
+ and 
+\begin_inset Formula $B$
+\end_inset
+
+ to the left side and multiply by 
+\begin_inset Formula $-1$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $M_{\Delta}^{\intercal}=AM_{(1,T-1)}+B\tilde{U}_{\Delta}+\frac{1}{\sigma_{A}^{2}}QA$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\tilde{U}_{(2,T)}^{\intercal}=+A\tilde{U}_{\Delta}^{\intercal}+BU_{(2,T)}$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\left[\begin{array}{cc}
+M_{\Delta}^{\intercal} & \tilde{U}_{(2,T)}^{\intercal}\end{array}\right]=\left[\begin{array}{cc}
+A & B\end{array}\right]\left[\begin{array}{cc}
+M_{(1,T-1)} & \tilde{U}_{\Delta}^{\intercal}\\
+\tilde{U}_{\Delta} & U_{(2,T)}
+\end{array}\right]+\left[\begin{array}{cc}
+\frac{1}{\sigma_{A}^{2}}QA & 0\end{array}\right]$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\left[\begin{array}{c}
+M_{\Delta}\\
+\tilde{U}_{(2,T)}
+\end{array}\right]=\left[\begin{array}{cc}
+M_{(1,T-1)}^{\intercal} & \tilde{U}_{\Delta}\\
+\tilde{U}_{\Delta}^{\intercal} & U_{(2,T)}^{\intercal}
+\end{array}\right]\left[\begin{array}{c}
+A^{\intercal}\\
+B^{\intercal}
+\end{array}\right]+\left[\begin{array}{c}
+\frac{1}{\sigma_{A}^{2}}A^{\intercal}Q\\
+0
+\end{array}\right]$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Assume Q is diagonal
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\left[\begin{array}{c}
+M_{\Delta}\\
+\tilde{U}_{(2,T)}
+\end{array}\right]_{[:,j]}=\left[\begin{array}{cc}
+M_{(1,T-1)}^{\intercal} & \tilde{U}_{\Delta}\\
+\tilde{U}_{\Delta}^{\intercal} & U_{(2,T)}^{\intercal}
+\end{array}\right]\left[\begin{array}{c}
+A^{\intercal}\\
+B^{\intercal}
+\end{array}\right]_{[:,j]}+\left[\begin{array}{c}
+\frac{1}{\sigma_{A}^{2}}Q_{jj}A^{\intercal}\\
+0
+\end{array}\right]_{[:,j]}$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\left[\begin{array}{c}
+M_{\Delta}\\
+\tilde{U}_{(2,T)}
+\end{array}\right]_{[:,j]}=\left[\begin{array}{cc}
+M_{(1,T-1)}^{\intercal}+\frac{1}{\sigma_{A}^{2}}Q_{jj}I & \tilde{U}_{\Delta}\\
+\tilde{U}_{\Delta}^{\intercal} & U_{(2,T)}^{\intercal}
+\end{array}\right]\left[\begin{array}{c}
+A^{\intercal}\\
+B^{\intercal}
+\end{array}\right]_{[:,j]}$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\left[\begin{array}{c}
+A^{\intercal}\\
+B^{\intercal}
+\end{array}\right]_{[:,j]}=\left[\begin{array}{cc}
+M_{(1,T-1)}^{\intercal}+\frac{1}{\sigma_{A}^{2}}Q_{jj}I & \tilde{U}_{\Delta}\\
+\tilde{U}_{\Delta}^{\intercal} & U_{(2,T)}^{\intercal}
+\end{array}\right]^{-1}\left[\begin{array}{c}
+M_{\Delta}\\
+\tilde{U}_{(2,T)}
+\end{array}\right]_{[:,j]}$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+We actually implement the transposed version in the code
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\left[\begin{array}{cc}
+A & B\end{array}\right]_{[:,j]}=\left[\begin{array}{cc}
+M_{\Delta}^{\intercal} & \tilde{U}_{(2,T)}^{\intercal}\end{array}\right]_{[:,j]}\left[\begin{array}{cc}
+M_{(1,T-1)}+\frac{1}{\sigma_{A}^{2}}Q_{jj}I & \tilde{U}_{\Delta}^{\intercal}\\
+\tilde{U}_{\Delta} & U_{(2,T)}
+\end{array}\right]^{-1}$
+\end_inset
+
+
+\end_layout
+
+\end_body
+\end_document

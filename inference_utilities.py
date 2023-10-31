@@ -120,8 +120,8 @@ def solve_masked(A, b, mask=None, ridge_penalty=None):
             penalty = ridge_penalty[i] * np.eye(r_size)
             A[:r_size, :r_size] = A[:r_size, :r_size] + penalty
 
-        b_i = b[:, i]
-        A_nonzero = A[:, non_zero_loc]
+        b_i = b[non_zero_loc, i]
+        A_nonzero = A[np.ix_(non_zero_loc, non_zero_loc)]
 
         x_hat[non_zero_loc, i] = np.linalg.lstsq(A_nonzero, b_i, rcond=None)[0]
 
