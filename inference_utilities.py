@@ -123,7 +123,7 @@ def solve_masked(A, b, mask=None, ridge_penalty=None):
         b_i = b[non_zero_loc, i]
         A_nonzero = A[np.ix_(non_zero_loc, non_zero_loc)]
 
-        x_hat[non_zero_loc, i] = np.linalg.lstsq(A_nonzero, b_i, rcond=None)[0]
+        x_hat[non_zero_loc, i] = np.linalg.solve(A_nonzero, b_i)
 
     return x_hat
 
