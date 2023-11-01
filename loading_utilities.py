@@ -207,6 +207,16 @@ def load_and_preprocess_data(data_path, num_data_sets=None, force_preprocess=Fal
             print('Data set', i.parent, 'preprocessed')
             print('Took', time.time() - start, 's')
 
+        # get rid of non neural cells
+        bad_cells = ['AMSOL', 'AMSOR']
+
+        for b in bad_cells:
+            if b in this_cell_ids:
+                del_index = this_cell_ids.index(b)
+                np.delete(this_emissions, del_index, 1)
+                np.delete(this_inputs, del_index, 1)
+                this_cell_ids.pop(del_index)
+
         emissions_train.append(this_emissions)
         inputs_train.append(this_inputs)
         cell_ids_train.append(this_cell_ids)
