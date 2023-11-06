@@ -681,8 +681,9 @@ def plot_dynamics_eigs(model):
     plt.xlabel('real components')
     plt.ylabel('imaginary components')
     plt.title('eigenvalues of the dynamics matrix')
-    plt.xlim((-1, 1))
-    plt.ylim((-1, 1))
+    lims = np.max((np.abs(plt.xlim()), np.abs(plt.ylim())))
+    plt.xlim((-lims, lims))
+    plt.ylim((-lims, lims))
     ax = plt.gca()
     ax.set_aspect('equal', 'box')
 

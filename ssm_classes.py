@@ -8,7 +8,6 @@ import analysis_utilities as au
 class Lgssm:
     """Run a Kalman filter to produce the marginal likelihood and filtered state estimates.
         adapted from Dynamax.
-        This verison assumes diagonal input weights, diagonal noise covariance, no offsets, and identity emissions
     """
 
     def __init__(self, dynamics_dim, emissions_dim, input_dim,
@@ -34,7 +33,7 @@ class Lgssm:
         else:
             self.cell_ids = cell_ids
 
-        # define the weights here, but set them to tensor versions of the intial values with _set_to_init()
+        # define the weights here, but set them to tensor versions of the initial values with _set_to_init()
         self.dynamics_weights = None
         self.dynamics_input_weights = None
         self.dynamics_cov = None

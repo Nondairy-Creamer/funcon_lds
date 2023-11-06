@@ -132,6 +132,17 @@ def fit_experimental(param_name, save_folder):
         model_trained.emissions_weights = np.eye(model_trained.emissions_dim, model_trained.dynamics_dim_full)
         model_trained.emissions_input_weights = np.zeros(model_trained.emissions_input_weights.shape)
 
+        if 'permute_mask' in run_params:
+            if run_params['permute_mask']:
+                rng = np.random.default_rng(run_params['random_seed'])
+
+                old_mask = model_trained.param_props['mask']['dynamics_weights']
+                new_inds_row = rng.permutation(model_trained.dynamics_dim)
+                new_inds_col = [i * model_trained.dynamics_dim + new_inds_row for i in range(model_trained.dynamics_lags)]
+                new_inds_col = np.concatenate(new_inds_col)
+                new_mask = old_mask[np.ix_(new_inds_row, new_inds_col)]
+                model_trained.param_props['mask']['dynamics_weights'] = new_mask
+
         lu.save_run(save_folder, model_trained=model_trained, ep=0, data_train=data_train, data_test=data_test, params=run_params)
 
     else:
