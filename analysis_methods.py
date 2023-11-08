@@ -248,6 +248,7 @@ def plot_posterior(data, posterior_dict, cell_ids_chosen, sample_rate=0.5, windo
     # get all the inputs but with only the chosen neurons
     inputs_truncated = [i[:, neuron_inds_chosen] for i in inputs]
     data_ind_chosen, time_window = au.find_stim_events(inputs_truncated, window_size=window_size)
+    data_ind_chosen += 2
 
     emissions_chosen = emissions[data_ind_chosen][time_window[0]:time_window[1], neuron_inds_chosen]
     inputs_chosen = inputs[data_ind_chosen][time_window[0]:time_window[1], neuron_inds_chosen]
@@ -383,22 +384,22 @@ def plot_missing_neuron(data, posterior_dict, sample_rate=0.5):
     return
 
 
-def plot_irf_norm(model_weights, measured_irf, model_irf, data_corr, cell_ids, cell_ids_chosen):
+def plot_irm(model_weights, measured_irm, model_irm, data_corr, cell_ids, cell_ids_chosen):
     chosen_neuron_inds = [cell_ids.index(i) for i in cell_ids_chosen]
 
-    # get the combination of weights that looks most like the measured irf
-    model_weights_norm = au.compare_matrix_sets(measured_irf, model_weights)[3]
+    # get the combination of weights that looks most like the measured irm
+    model_weights_norm = au.compare_matrix_sets(measured_irm, model_weights)[3]
 
     # sub sample the matricies down to the selected neurons
     data_corr = data_corr[np.ix_(chosen_neuron_inds, chosen_neuron_inds)]
-    measured_irf = measured_irf[np.ix_(chosen_neuron_inds, chosen_neuron_inds)]
-    model_irf = model_irf[np.ix_(chosen_neuron_inds, chosen_neuron_inds)]
+    measured_irm = measured_irm[np.ix_(chosen_neuron_inds, chosen_neuron_inds)]
+    model_irm = model_irm[np.ix_(chosen_neuron_inds, chosen_neuron_inds)]
     model_weights_norm = model_weights_norm[np.ix_(chosen_neuron_inds, chosen_neuron_inds)]
 
     # normalize the data for convenience in plotting
     data_corr = data_corr / np.nanmax(data_corr)
-    measured_irf = measured_irf / np.nanmax(measured_irf)
-    model_irf = model_irf / np.nanmax(model_irf)
+    measured_irm = measured_irm / np.nanmax(measured_irm)
+    model_irm = model_irm / np.nanmax(model_irm)
     model_weights_norm = model_weights_norm / np.nanmax(model_weights_norm)
 
     # plot the average impulse responses of the chosen neurons
@@ -406,7 +407,7 @@ def plot_irf_norm(model_weights, measured_irf, model_irf, data_corr, cell_ids, c
     plot_x = np.arange(len(chosen_neuron_inds))
 
     ax = plt.subplot(2, 2, 1)
-    plt.imshow(measured_irf, interpolation='nearest', cmap=colormap)
+    plt.imshow(measured_irm, interpolation='nearest', cmap=colormap)
     plt.title('measured response')
     plt.xticks(plot_x, cell_ids_chosen)
     plt.yticks(plot_x, cell_ids_chosen)
@@ -415,8 +416,8 @@ def plot_irf_norm(model_weights, measured_irf, model_irf, data_corr, cell_ids, c
     plt.clim((-1, 1))
 
     ax = plt.subplot(2, 2, 2)
-    plt.imshow(model_irf, interpolation='nearest', cmap=colormap)
-    plt.title('model IRFs')
+    plt.imshow(model_irm, interpolation='nearest', cmap=colormap)
+    plt.title('model IRMs')
     plt.xticks(plot_x, cell_ids_chosen)
     plt.yticks(plot_x, cell_ids_chosen)
     for label in ax.get_xticklabels():
@@ -448,27 +449,27 @@ def plot_irf_norm(model_weights, measured_irf, model_irf, data_corr, cell_ids, c
     return
 
 
-def compare_irf_w_anatomy(model_weights, measured_irf, model_irf, data_corr, cell_ids, cell_ids_chosen):
+def compare_irm_w_anatomy(model_weights, measured_irm, model_irm, data_corr, cell_ids, cell_ids_chosen):
     chosen_neuron_inds = [cell_ids.index(i) for i in cell_ids_chosen]
 
     model_weights = [np.abs(i) for i in model_weights]
-    measured_irf = np.abs(measured_irf)
-    model_irf = np.abs(model_irf)
+    measured_irm = np.abs(measured_irm)
+    model_irm = np.abs(model_irm)
     data_corr = np.abs(data_corr)
 
     chem_conn, gap_conn, pep_conn = au.load_anatomical_data(cell_ids)
 
     # compare each of the weights against measured
     anatomy_list = [chem_conn, gap_conn, pep_conn]
-    measured_irf_score, measured_irf_score_ci, al_meas_l, al_meas_r = au.compare_matrix_sets(anatomy_list, measured_irf, positive_weights=True)
-    model_irf_score, model_irf_score_ci, al_model_l, al_model_r = au.compare_matrix_sets(anatomy_list, model_irf, positive_weights=True)
+    measured_irm_score, measured_irm_score_ci, al_meas_l, al_meas_r = au.compare_matrix_sets(anatomy_list, measured_irm, positive_weights=True)
+    model_irm_score, model_irm_score_ci, al_model_l, al_model_r = au.compare_matrix_sets(anatomy_list, model_irm, positive_weights=True)
     data_corr_score, data_corr_score_ci, al_corr_l, al_corr_r = au.compare_matrix_sets(anatomy_list, data_corr, positive_weights=True)
     model_weights_score, model_weights_score_ci, al_weights_l, al_weights_r = au.compare_matrix_sets(anatomy_list, model_weights, positive_weights=True)
 
     selected_neurons = np.ix_(chosen_neuron_inds, chosen_neuron_inds)
     anatomy_combined = [al_meas_l[selected_neurons], al_model_l[selected_neurons], al_corr_l[selected_neurons], al_weights_l[selected_neurons]]
     weights_combined = [al_meas_r[selected_neurons], al_model_r[selected_neurons], al_corr_r[selected_neurons], al_weights_r[selected_neurons]]
-    name = ['measured IRFs', 'model IRFs', 'data corr', 'model weights']
+    name = ['measured IRMs', 'model IRMs', 'data corr', 'model weights']
 
     i = np.ix_(chosen_neuron_inds, chosen_neuron_inds)
     plot_x = np.arange(len(cell_ids_chosen))
@@ -534,11 +535,11 @@ def compare_irf_w_anatomy(model_weights, measured_irf, model_irf, data_corr, cel
     # make figure comparing the metrics to the connectome
     plt.figure()
     plot_x = np.arange(4)
-    y_val = np.array([model_weights_score, measured_irf_score, model_irf_score, data_corr_score])
-    y_val_ci = np.abs(np.stack([model_weights_score_ci, measured_irf_score_ci, model_irf_score_ci, data_corr_score_ci]).T - y_val)
+    y_val = np.array([model_weights_score, measured_irm_score, model_irm_score, data_corr_score])
+    y_val_ci = np.abs(np.stack([model_weights_score_ci, measured_irm_score_ci, model_irm_score_ci, data_corr_score_ci]).T - y_val)
     plt.bar(plot_x, y_val)
     plt.errorbar(plot_x, y_val, y_val_ci, fmt='.', color='k')
-    plt.xticks(plot_x, ['model weights', 'measured irf', 'model irf', 'data corr'])
+    plt.xticks(plot_x, ['model weights', 'measured IRM', 'model IRM', 'data corr'])
     plt.xlabel('correlation to connectome')
 
     # plot the weights compare to their reconstructions
@@ -548,71 +549,74 @@ def compare_irf_w_anatomy(model_weights, measured_irf, model_irf, data_corr, cel
     return
 
 
-def compare_irf_w_prediction(model_weights, measured_irf, model_irf, data_corr, cell_ids, cell_ids_chosen):
+def compare_measured_and_model_irm(model_weights, measured_irm, model_irm, data_corr, cell_ids, cell_ids_chosen):
     neuron_inds_chosen = [cell_ids.index(i) for i in cell_ids_chosen]
 
     # grab the avereage impulse values that you want to plot
-    measured_irf_chosen = measured_irf[np.ix_(neuron_inds_chosen, neuron_inds_chosen)]
-    model_irf_chosen = model_irf[np.ix_(neuron_inds_chosen, neuron_inds_chosen)]
+    measured_irm_chosen = measured_irm[np.ix_(neuron_inds_chosen, neuron_inds_chosen)]
+    model_irm_chosen = model_irm[np.ix_(neuron_inds_chosen, neuron_inds_chosen)]
     data_corr_chosen = data_corr[np.ix_(neuron_inds_chosen, neuron_inds_chosen)]
 
     # scatter the interactions just between the chosen neurons
-    model_sampled_score, model_sampled_score_ci = score_fun(measured_irf_chosen, model_irf_chosen)
-    data_corr_score, data_corr_score_ci = score_fun(measured_irf_chosen, data_corr_chosen)
+    model_sampled_score, model_sampled_score_ci = score_fun(measured_irm_chosen, model_irm_chosen)
+    data_corr_score, data_corr_score_ci = score_fun(measured_irm_chosen, data_corr_chosen)
 
     plt.figure()
-    plt.scatter(measured_irf_chosen.reshape(-1), model_irf_chosen.reshape(-1))
+    plt.scatter(measured_irm_chosen.reshape(-1), model_irm_chosen.reshape(-1))
     xlim = plt.xlim()
     plt.plot(xlim, xlim)
-    plt.title('model IRFs, ' + str(model_sampled_score))
-    plt.ylabel('model IRFs')
-    plt.xlabel('measured IRFs')
+    plt.title('model IRMs, ' + str(model_sampled_score))
+    plt.ylabel('model IRMs')
+    plt.xlabel('measured IRMs')
 
     plt.figure()
-    plt.scatter(measured_irf_chosen.reshape(-1), data_corr_chosen.reshape(-1))
+    plt.scatter(measured_irm_chosen.reshape(-1), data_corr_chosen.reshape(-1))
     plt.ylabel('data correlation')
-    plt.xlabel('measured IRFs')
+    plt.xlabel('measured IRMs')
     plt.title('data corr, ' + str(data_corr_score))
 
-    data_corr_score, data_corr_score_ci = au.compare_matrix_sets(measured_irf, data_corr)[:2]
-    model_sampled_score, model_sampled_score_ci = au.compare_matrix_sets(measured_irf, model_irf)[:2]
-    model_weights_score, model_weights_score_ci = au.compare_matrix_sets(measured_irf, model_weights)[:2]
+    data_corr_score, data_corr_score_ci = au.compare_matrix_sets(measured_irm, data_corr)[:2]
+    model_sampled_score, model_sampled_score_ci = au.compare_matrix_sets(measured_irm, model_irm)[:2]
+    model_weights_score, model_weights_score_ci = au.compare_matrix_sets(measured_irm, model_weights)[:2]
 
-    # compare the metrics to the measured IRF
+    # compare the metrics to the measured IRM
     plt.figure()
     plot_x = np.arange(3)
     y_val = np.array([data_corr_score, model_sampled_score, model_weights_score])
     y_val_ci = np.abs(np.stack([data_corr_score_ci, model_sampled_score_ci, model_weights_score_ci]).T - y_val)
     plt.bar(plot_x, y_val)
     plt.errorbar(plot_x, y_val, yerr=y_val_ci, fmt='.', color='k')
-    plt.xticks(plot_x, ['data correlation', 'model IRFs', 'model weights'])
-    plt.ylabel('correlation to measured IRFs')
+    plt.xticks(plot_x, ['data correlation', 'model IRMs', 'model weights'])
+    plt.ylabel('correlation to measured IRMs')
 
-    # show the scatter plots for the comparison to IRF
+    # show the scatter plots for the comparison to IRM
     plt.figure()
     plt.subplot(2, 2, 1)
-    plt.scatter(measured_irf.reshape(-1), data_corr.reshape(-1), s=2)
+    plt.scatter(measured_irm.reshape(-1), data_corr.reshape(-1), s=2)
     plt.ylabel('data correlation')
-    plt.xlabel('measured IRFs')
+    plt.xlabel('measured IRMs')
     plt.subplot(2, 2, 2)
-    plt.scatter(measured_irf.reshape(-1), model_irf.reshape(-1), s=2)
+    plt.scatter(measured_irm.reshape(-1), model_irm.reshape(-1), s=2)
     xlim = plt.xlim()
     plt.plot(xlim, xlim, color='k')
-    plt.ylabel('model IRFs')
-    plt.xlabel('measured IRFs')
+    plt.ylabel('model IRMs')
+    plt.xlabel('measured IRMs')
     plt.subplot(2, 2, 3)
-    plt.scatter(model_irf.reshape(-1), data_corr.reshape(-1), s=2)
-    plt.xlabel('model IRFs')
+    plt.scatter(model_irm.reshape(-1), data_corr.reshape(-1), s=2)
+    plt.xlabel('model IRMs')
     plt.ylabel('data correlation')
     plt.tight_layout()
 
     plt.show()
 
-    return
+    irm_scores = {'data_corr': [data_corr_score, data_corr_score_ci],
+                  'model_sampled': [model_sampled_score, model_sampled_score_ci],
+                  'model_weights': [model_weights_score, model_weights_score_ci]}
+    return irm_scores
 
 
-def plot_irf_traces(measured_irf, measured_irf_sem, model_irf, cell_ids, cell_ids_chosen, window,
-                    sample_rate=0.5, num_plot=5):
+def plot_irf(measured_irf, measured_irf_sem, model_irf, cell_ids, cell_ids_chosen, window,
+             sample_rate=0.5, num_plot=5):
 
     chosen_neuron_inds = [cell_ids.index(i) for i in cell_ids_chosen]
     plot_x = np.arange(window[0], window[1]) * sample_rate
@@ -695,7 +699,12 @@ def plot_dynamics_eigs(model):
 def plot_model_comparison(sorting_param, model_list, posterior_train_list, posterior_test_list,
                           plot_figs=True, best_model_ind=None):
 
-    sorting_list = [getattr(i, sorting_param) for i in model_list]
+    if sorting_param is not None:
+        sorting_list = [getattr(i, sorting_param) for i in model_list]
+    else:
+        sorting_list = list(np.arange(len(model_list)))
+        sorting_param = 'input order'
+
     for i in range(len(sorting_list)):
         if sorting_list[i] is None:
             sorting_list[i] = -np.inf
