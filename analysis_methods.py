@@ -248,7 +248,6 @@ def plot_posterior(data, posterior_dict, cell_ids_chosen, sample_rate=0.5, windo
     # get all the inputs but with only the chosen neurons
     inputs_truncated = [i[:, neuron_inds_chosen] for i in inputs]
     data_ind_chosen, time_window = au.find_stim_events(inputs_truncated, window_size=window_size)
-    data_ind_chosen += 2
 
     emissions_chosen = emissions[data_ind_chosen][time_window[0]:time_window[1], neuron_inds_chosen]
     inputs_chosen = inputs[data_ind_chosen][time_window[0]:time_window[1], neuron_inds_chosen]
@@ -452,15 +451,26 @@ def plot_irm(model_weights, measured_irm, model_irm, data_corr, cell_ids, cell_i
 def compare_irm_w_anatomy(model_weights, measured_irm, model_irm, data_corr, cell_ids, cell_ids_chosen):
     chosen_neuron_inds = [cell_ids.index(i) for i in cell_ids_chosen]
 
-    model_weights = [np.abs(i) for i in model_weights]
-    measured_irm = np.abs(measured_irm)
-    model_irm = np.abs(model_irm)
-    data_corr = np.abs(data_corr)
+    nan_loc = np.isnan(measured_irm)
+
+    std_fact = 2
+    model_epsilon = np.nanstd(model_weights) / std_fact
+    model_weights = [(np.abs(i) > model_epsilon).astype(float) for i in model_weights]
+    for i in range(len(model_weights)):
+        model_weights[i][nan_loc] = np.nan
+
+    measured_irm = (np.abs(measured_irm) > (np.nanstd(measured_irm) / std_fact)).astype(float)
+    measured_irm[nan_loc] = np.nan
+    model_irm = (np.abs(model_irm) > (np.nanstd(model_irm) / std_fact)).astype(float)
+    model_irm[nan_loc] = np.nan
+    data_corr = (np.abs(data_corr) > (np.nanstd(data_corr) / std_fact)).astype(float)
+    data_corr[nan_loc] = np.nan
 
     chem_conn, gap_conn, pep_conn = au.load_anatomical_data(cell_ids)
 
     # compare each of the weights against measured
-    anatomy_list = [chem_conn, gap_conn, pep_conn]
+    anatomy_list = [(chem_conn > 0).astype(float), (gap_conn > 0).astype(float), (pep_conn > 0).astype(float)]
+    anatomy_list = [(chem_conn + gap_conn) > 0]
     measured_irm_score, measured_irm_score_ci, al_meas_l, al_meas_r = au.compare_matrix_sets(anatomy_list, measured_irm, positive_weights=True)
     model_irm_score, model_irm_score_ci, al_model_l, al_model_r = au.compare_matrix_sets(anatomy_list, model_irm, positive_weights=True)
     data_corr_score, data_corr_score_ci, al_corr_l, al_corr_r = au.compare_matrix_sets(anatomy_list, data_corr, positive_weights=True)
@@ -472,38 +482,38 @@ def compare_irm_w_anatomy(model_weights, measured_irm, model_irm, data_corr, cel
     name = ['measured IRMs', 'model IRMs', 'data corr', 'model weights']
 
     i = np.ix_(chosen_neuron_inds, chosen_neuron_inds)
-    plot_x = np.arange(len(cell_ids_chosen))
-    plt.figure()
-    ax = plt.subplot(2, 2, 1)
-    plt.title('chemical synapses')
-    plt.imshow(anatomy_list[0][i], cmap=colormap)
-    cmax = np.max(np.abs(anatomy_list[0][i])).astype(float)
-    plt.clim((-cmax, cmax))
-    plt.xticks(plot_x, cell_ids_chosen)
-    plt.yticks(plot_x, cell_ids_chosen)
-    for label in ax.get_xticklabels():
-        label.set_rotation(90)
-
-    ax = plt.subplot(2, 2, 2)
-    plt.title('gap junctions')
-    plt.imshow(anatomy_list[1][i], cmap=colormap)
-    cmax = np.max(np.abs(anatomy_list[1][i]))
-    plt.clim((-cmax, cmax))
-    plt.xticks(plot_x, cell_ids_chosen)
-    plt.yticks(plot_x, cell_ids_chosen)
-    for label in ax.get_xticklabels():
-        label.set_rotation(90)
-
-    ax = plt.subplot(2, 2, 3)
-    plt.title('neuropeptide connectome')
-    plt.imshow(anatomy_list[2][i], cmap=colormap)
-    cmax = np.max(np.abs(anatomy_list[2][i]))
-    plt.clim((-cmax, cmax))
-    plt.tight_layout()
-    plt.xticks(plot_x, cell_ids_chosen)
-    plt.yticks(plot_x, cell_ids_chosen)
-    for label in ax.get_xticklabels():
-        label.set_rotation(90)
+    # plot_x = np.arange(len(cell_ids_chosen))
+    # plt.figure()
+    # ax = plt.subplot(2, 2, 1)
+    # plt.title('chemical synapses')
+    # plt.imshow(anatomy_list[0][i], cmap=colormap)
+    # cmax = np.max(np.abs(anatomy_list[0][i])).astype(float)
+    # plt.clim((-cmax, cmax))
+    # plt.xticks(plot_x, cell_ids_chosen)
+    # plt.yticks(plot_x, cell_ids_chosen)
+    # for label in ax.get_xticklabels():
+    #     label.set_rotation(90)
+    #
+    # ax = plt.subplot(2, 2, 2)
+    # plt.title('gap junctions')
+    # plt.imshow(anatomy_list[1][i], cmap=colormap)
+    # cmax = np.max(np.abs(anatomy_list[1][i]))
+    # plt.clim((-cmax, cmax))
+    # plt.xticks(plot_x, cell_ids_chosen)
+    # plt.yticks(plot_x, cell_ids_chosen)
+    # for label in ax.get_xticklabels():
+    #     label.set_rotation(90)
+    #
+    # ax = plt.subplot(2, 2, 3)
+    # plt.title('neuropeptide connectome')
+    # plt.imshow(anatomy_list[2][i], cmap=colormap)
+    # cmax = np.max(np.abs(anatomy_list[2][i]))
+    # plt.clim((-cmax, cmax))
+    # plt.tight_layout()
+    # plt.xticks(plot_x, cell_ids_chosen)
+    # plt.yticks(plot_x, cell_ids_chosen)
+    # for label in ax.get_xticklabels():
+    #     label.set_rotation(90)
 
     for i in range(len(anatomy_combined)):
         plot_x = np.arange(len(cell_ids_chosen))
@@ -534,13 +544,13 @@ def compare_irm_w_anatomy(model_weights, measured_irm, model_irm, data_corr, cel
 
     # make figure comparing the metrics to the connectome
     plt.figure()
-    plot_x = np.arange(4)
-    y_val = np.array([model_weights_score, measured_irm_score, model_irm_score, data_corr_score])
-    y_val_ci = np.abs(np.stack([model_weights_score_ci, measured_irm_score_ci, model_irm_score_ci, data_corr_score_ci]).T - y_val)
+    plot_x = np.arange(3)
+    y_val = np.array([data_corr_score, measured_irm_score, model_weights_score])
+    y_val_ci = np.abs(np.stack([data_corr_score_ci, measured_irm_score_ci, model_weights_score_ci]).T - y_val)
     plt.bar(plot_x, y_val)
     plt.errorbar(plot_x, y_val, y_val_ci, fmt='.', color='k')
-    plt.xticks(plot_x, ['model weights', 'measured IRM', 'model IRM', 'data corr'])
-    plt.xlabel('correlation to connectome')
+    plt.xticks(plot_x, ['data corr', 'measured IRM', 'model weights'])
+    plt.ylabel('similarity to connectome')
 
     # plot the weights compare to their reconstructions
 
@@ -573,7 +583,7 @@ def compare_measured_and_model_irm(model_weights, measured_irm, model_irm, data_
     plt.scatter(measured_irm_chosen.reshape(-1), data_corr_chosen.reshape(-1))
     plt.ylabel('data correlation')
     plt.xlabel('measured IRMs')
-    plt.title('data corr, ' + str(data_corr_score))
+    plt.title('data correlation, ' + str(data_corr_score))
 
     data_corr_score, data_corr_score_ci = au.compare_matrix_sets(measured_irm, data_corr)[:2]
     model_sampled_score, model_sampled_score_ci = au.compare_matrix_sets(measured_irm, model_irm)[:2]
@@ -587,7 +597,7 @@ def compare_measured_and_model_irm(model_weights, measured_irm, model_irm, data_
     plt.bar(plot_x, y_val)
     plt.errorbar(plot_x, y_val, yerr=y_val_ci, fmt='.', color='k')
     plt.xticks(plot_x, ['data correlation', 'model IRMs', 'model weights'])
-    plt.ylabel('correlation to measured IRMs')
+    plt.ylabel('similarity to measured IRMs')
 
     # show the scatter plots for the comparison to IRM
     plt.figure()

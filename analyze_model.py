@@ -82,26 +82,25 @@ data_corr[nan_mask] = np.nan
 for i in range(len(model_weights)):
     model_weights[i][nan_mask] = np.nan
 
-# run analysis methods on the data
+# # run analysis methods on the data
 am.plot_model_params(model=model, model_true=model_true, cell_ids_chosen=cell_ids_chosen)
-am.plot_dynamics_eigs(model=model)
-am.plot_posterior(data=data, posterior_dict=posterior_dict, cell_ids_chosen=cell_ids_chosen, sample_rate=model.sample_rate)
-am.plot_irf_norm(model_weights=model_weights, measured_irf=measured_irf_ave, model_irf=model_irf_ave,
-                 data_corr=data_corr, cell_ids=cell_ids, cell_ids_chosen=cell_ids_chosen)
-
-am.plot_irf_traces(measured_irf=measured_irf, measured_irf_sem=measured_irf_sem,
-                   model_irf=model_irf, cell_ids=cell_ids, cell_ids_chosen=cell_ids_chosen,
-                   window=window, sample_rate=model.sample_rate, num_plot=10)
-am.compare_irf_w_prediction(model_weights=model_weights, measured_irf=measured_irf_ave,
-                            model_irf=model_irf_ave, data_corr=data_corr,
-                            cell_ids=cell_ids, cell_ids_chosen=cell_ids_chosen)
+# am.plot_dynamics_eigs(model=model)
+# am.plot_posterior(data=data, posterior_dict=posterior_dict, cell_ids_chosen=cell_ids_chosen, sample_rate=model.sample_rate)
+am.plot_irf(measured_irf=measured_irf, measured_irf_sem=measured_irf_sem,
+            model_irf=model_irf, cell_ids=cell_ids, cell_ids_chosen=cell_ids_chosen,
+            window=window, sample_rate=model.sample_rate, num_plot=10)
+am.plot_irm(model_weights=model_weights, measured_irm=measured_irf_ave, model_irm=model_irf_ave,
+            data_corr=data_corr, cell_ids=cell_ids, cell_ids_chosen=cell_ids_chosen)
+am.compare_measured_and_model_irm(model_weights=model_weights, measured_irm=measured_irf_ave,
+                                  model_irm=model_irf_ave, data_corr=data_corr,
+                                  cell_ids=cell_ids, cell_ids_chosen=cell_ids_chosen)
 # if the data is not synthetic compare with the anatomy
-if not is_synth:
-    am.compare_irf_w_anatomy(model_weights=model_weights, measured_irf=measured_irf_ave,
-                             model_irf=model_irf_ave, data_corr=data_corr,
-                             cell_ids=cell_ids, cell_ids_chosen=cell_ids_chosen)
+# if not is_synth:
+#     am.compare_irm_w_anatomy(model_weights=model_weights, measured_irm=measured_irf_ave,
+#                              model_irm=model_irf_ave, data_corr=data_corr,
+#                              cell_ids=cell_ids, cell_ids_chosen=cell_ids_chosen)
 
-if 'posterior_missing' in posterior_dict.keys():
-    am.plot_missing_neuron(data=data, posterior_dict=posterior_dict, sample_rate=model.sample_rate)
+# if 'posterior_missing' in posterior_dict.keys():
+#     am.plot_missing_neuron(data=data, posterior_dict=posterior_dict, sample_rate=model.sample_rate)
 
 a=1

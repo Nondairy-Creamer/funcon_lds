@@ -209,7 +209,10 @@ plt.bar(plot_x, y_val)
 plt.errorbar(plot_x, y_val, yerr=y_val_ci, fmt='.', color='k')
 plt.xticks(plot_x, ['stim data corr', 'stim model IRMs', 'stim model weights', 'unstim data corr', 'unstim model IRMs'])
 plt.ylabel('correlation to measured IRMs')
-
+ax = plt.gca()
+for label in ax.get_xticklabels():
+    label.set_rotation(45)
+plt.tight_layout()
 plt.show()
 
 # if the data is not synthetic compare with the anatomy

@@ -169,8 +169,8 @@ def compare_matrix_sets(left_side, right_side, positive_weights=False):
         left_val = left_side_col @ left_weights
         right_val = right_side_col @ right_weights
 
-        # return -nan_corr(left_val, right_val)[0]
-        return -nan_r2(left_val, right_val)
+        return -nan_corr(left_val, right_val)[0]
+        # return -nan_r2(left_val, right_val)
 
     x_hat = scipy.optimize.minimize(obj_fun, x0).x
 
