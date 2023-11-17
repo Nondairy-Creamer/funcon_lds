@@ -204,7 +204,7 @@ stim_scores = am.compare_measured_and_model_irm(model_weights=model_stim_weights
 plt.figure()
 plot_x = np.arange(5)
 y_val = np.array([stim_scores['data_corr'][0], stim_scores['model_sampled'][0], stim_scores['model_weights'][0], unstim_scores['data_corr'][0], unstim_scores['model_sampled'][0]])
-y_val_ci = np.abs(np.stack([stim_scores['data_corr'][1], stim_scores['model_sampled'][1], stim_scores['model_weights'][1], unstim_scores['data_corr'][1], unstim_scores['model_sampled'][1]]).T - y_val)
+y_val_ci = np.stack([stim_scores['data_corr'][1], stim_scores['model_sampled'][1], stim_scores['model_weights'][1], unstim_scores['data_corr'][1], unstim_scores['model_sampled'][1]]).T
 plt.bar(plot_x, y_val)
 plt.errorbar(plot_x, y_val, yerr=y_val_ci, fmt='.', color='k')
 plt.xticks(plot_x, ['stim data corr', 'stim model IRMs', 'stim model weights', 'unstim data corr', 'unstim model IRMs'])

@@ -546,7 +546,7 @@ def compare_irm_w_anatomy(model_weights, measured_irm, model_irm, data_corr, cel
     plt.figure()
     plot_x = np.arange(3)
     y_val = np.array([data_corr_score, measured_irm_score, model_weights_score])
-    y_val_ci = np.abs(np.stack([data_corr_score_ci, measured_irm_score_ci, model_weights_score_ci]).T - y_val)
+    y_val_ci = np.stack([data_corr_score_ci, measured_irm_score_ci, model_weights_score_ci]).T
     plt.bar(plot_x, y_val)
     plt.errorbar(plot_x, y_val, y_val_ci, fmt='.', color='k')
     plt.xticks(plot_x, ['data corr', 'measured IRM', 'model weights'])
@@ -593,7 +593,7 @@ def compare_measured_and_model_irm(model_weights, measured_irm, model_irm, data_
     plt.figure()
     plot_x = np.arange(3)
     y_val = np.array([data_corr_score, model_sampled_score, model_weights_score])
-    y_val_ci = np.abs(np.stack([data_corr_score_ci, model_sampled_score_ci, model_weights_score_ci]).T - y_val)
+    y_val_ci = np.stack([data_corr_score_ci, model_sampled_score_ci, model_weights_score_ci]).T
     plt.bar(plot_x, y_val)
     plt.errorbar(plot_x, y_val, yerr=y_val_ci, fmt='.', color='k')
     plt.xticks(plot_x, ['data correlation', 'model IRMs', 'model weights'])

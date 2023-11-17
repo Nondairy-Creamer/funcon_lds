@@ -1,30 +1,41 @@
 from pathlib import Path
 from matplotlib import pyplot as plt
+import pickle
 import analysis_utilities as au
 import numpy as np
 import pickle
 
+# Testing the adjusted frac explainable variance
+# m = 100
+# n = 50
+#
+# rng = np.random.default_rng(0)
+# true_mean = rng.standard_normal(m)
+# noise_std = 1/10
+# nan_mask = rng.uniform(size=(m, n)) < 0.2
+#
+# measured = true_mean[:, None] + noise_std * rng.standard_normal((m, n))
+# measured[nan_mask] = np.nan
+# model = true_mean[:, None] + noise_std * rng.standard_normal((m, n))
+# model[nan_mask] = np.nan
+#
+# c = au.frac_explainable_var(measured, model)
+
 
 def get_irms(data_in):
-    irfs, irfs_sem, irfs_all = au.get_impulse_response_function(data_in, inputs_test, window=window,
-                                            sub_pre_stim=sub_pre_stim, return_pre=True)
+    irms = np.zeros((data_in[0].shape[1]**2, len(data_in)))
 
-    irms = np.nanmean(irfs[-window[0]:], axis=0)
-    irms[np.eye(irms.shape[0], dtype=bool)] = np.nan
+    for i in range(len(data_in)):
+        irf_out = au.get_impulse_response_function([data_in[i]], [inputs_test[i]], window=window,
+                                                   sub_pre_stim=sub_pre_stim, return_pre=True)[0]
 
-    num_neurons = irfs.shape[1]
-    num_stim = np.zeros((num_neurons, num_neurons))
-    for ni in range(num_neurons):
-        for nj in range(num_neurons):
-            resp_to_stim = irfs_all[ni][:, -window[0]:, nj]
-            num_obs_when_stim = np.sum(np.mean(~np.isnan(resp_to_stim), axis=1) >= 0.5)
-            num_stim[nj, ni] += num_obs_when_stim
+        irm_out = np.nanmean(irf_out[-window[0]:], axis=0)
+        irm_out[np.eye(irm_out.shape[0], dtype=bool)] = np.nan
 
-    irms[num_stim < required_num_stim] = np.nan
+        irms[:, i] = irm_out.reshape(-1)
 
     return irms
 
-required_num_stim = 5
 force_calc = False
 sub_pre_stim = True
 window = [-60, 120]
@@ -86,20 +97,12 @@ model_sampled_dense = post_dense['model_sampled']
 model_irm_dense = get_irms(model_sampled_dense)
 
 # dense random
-if force_calc:
-    model_sampled_dense_rand = []
-    for i in inputs_test:
-        model_sampled_dense_rand.append(model_dense_rand.sample(num_time=i.shape[0], inputs_list=[i], add_noise=False)['emissions'][0])
-
-    dense_sampled_file = open(path_dense_rand / 'sampled_dense_rand.pkl', 'wb')
-    pickle.dump(model_sampled_dense_rand, dense_sampled_file)
-    dense_sampled_file.close()
-else:
-    dense_sampled_file = open(path_dense_rand / 'sampled_dense_rand.pkl', 'rb')
-    model_sampled_dense_rand = pickle.load(dense_sampled_file)
-    dense_sampled_file.close()
-
-model_irm_dense_rand = get_irms(model_sampled_dense_rand)
+# model_sampled_dense_rand = []
+# for i in inputs_test:
+#     model_sampled_dense_rand.append(model_dense_rand.sample(num_time=i.shape[0], inputs_list=[i], add_noise=False)['emissions'][0])
+#
+# model_irm_dense_rand = get_irms(model_sampled_dense_rand)
+model_irm_dense_rand = model_irm_dense.copy()
 
 # sparse
 model_sampled_sparse = post_sparse['model_sampled']
@@ -111,11 +114,11 @@ if force_calc:
     for i in inputs_test:
         model_sampled_sparse_rand.append(model_sparse_rand.sample(num_time=i.shape[0], inputs_list=[i], add_noise=False)['emissions'][0])
 
-    sparse_sampled_file = open(path_sparse_rand / 'sampled_sparse_rand.pkl', 'wb')
+    sparse_sampled_file = open('/home/mcreamer/Documents/python/funcon_lds/analysis/sampled_sparse.pkl', 'wb')
     pickle.dump(model_sampled_sparse_rand, sparse_sampled_file)
     sparse_sampled_file.close()
 else:
-    sparse_sampled_file = open(path_sparse_rand / 'sampled_sparse_rand.pkl', 'rb')
+    sparse_sampled_file = open('/home/mcreamer/Documents/python/funcon_lds/analysis/sampled_sparse.pkl', 'rb')
     model_sampled_sparse_rand = pickle.load(sparse_sampled_file)
     sparse_sampled_file.close()
 
@@ -126,23 +129,30 @@ emissions_test = data_test['emissions']
 data_irm_test = get_irms(emissions_test)
 
 # process the IRMs
-nan_mask = np.isnan(model_irm_dense) | np.isnan(model_irm_dense_rand) | \
-           np.isnan(model_irm_sparse) | np.isnan(model_irm_sparse_rand) | \
-           np.isnan(data_irm_test)
+required_num_stim = 5
+non_nan_mask = (np.sum(~np.isnan(model_irm_dense), axis=1) >= required_num_stim) & (np.sum(~np.isnan(model_irm_dense_rand), axis=1) >= required_num_stim) & \
+               (np.sum(~np.isnan(model_irm_sparse), axis=1) >= required_num_stim) & (np.sum(~np.isnan(model_irm_sparse_rand), axis=1) >= required_num_stim) & \
+               (np.sum(~np.isnan(data_irm_test), axis=1) >= required_num_stim)
 
-model_irm_dense[nan_mask] = np.nan
-model_irm_dense_rand[nan_mask] = np.nan
-model_irm_sparse[nan_mask] = np.nan
-model_irm_sparse_rand[nan_mask] = np.nan
-data_irm_test[nan_mask] = np.nan
+# model_irm_dense[nan_mask, :] = np.nan
+# model_irm_dense_rand[nan_mask, :] = np.nan
+# model_irm_sparse[nan_mask, :] = np.nan
+# model_irm_sparse_rand[nan_mask, :] = np.nan
+# data_irm_test[nan_mask, :] = np.nan
+
+model_irm_dense = model_irm_dense[non_nan_mask, :]
+model_irm_dense_rand = model_irm_dense_rand[non_nan_mask, :]
+model_irm_sparse = model_irm_sparse[non_nan_mask, :]
+model_irm_sparse_rand = model_irm_sparse_rand[non_nan_mask, :]
+data_irm_test = data_irm_test[non_nan_mask, :]
 
 dense_to_sparse = au.nan_corr(model_irm_dense, model_irm_sparse)[0]
 sparse_to_sparse_rand = au.nan_corr(model_irm_sparse, model_irm_sparse_rand)[0]
 
-dense_to_measured, dense_to_measured_ci = au.nan_corr(data_irm_test, model_irm_dense)
-dense_rand_to_measured, dense_rand_to_measured_ci = au.nan_corr(data_irm_test, model_irm_dense_rand)
-sparse_to_measured, sparse_to_measured_ci = au.nan_corr(data_irm_test, model_irm_sparse)
-sparse_rand_to_measured, sparse_rand_to_measured_ci = au.nan_corr(data_irm_test, model_irm_sparse_rand)
+dense_to_measured = au.frac_explainable_var(data_irm_test, model_irm_dense)
+dense_rand_to_measured = au.frac_explainable_var(data_irm_test, model_irm_dense_rand)
+sparse_to_measured = au.frac_explainable_var(data_irm_test, model_irm_sparse)
+sparse_rand_to_measured = au.frac_explainable_var(data_irm_test, model_irm_sparse_rand)
 
 # plotting
 plt.figure()
@@ -156,12 +166,8 @@ plt.tight_layout()
 
 plt.figure()
 plot_x = np.arange(4)
-y_val = np.array([dense_rand_to_measured, dense_to_measured, sparse_to_measured, sparse_rand_to_measured])
-y_val_ci = np.stack([dense_rand_to_measured_ci, dense_to_measured_ci, sparse_to_measured_ci, sparse_rand_to_measured_ci]).T
-plt.bar(plot_x, y_val)
-plt.errorbar(plot_x, y_val, y_val_ci, fmt='none', color='k')
-plt.xticks(plot_x, labels=['scrambled cell labels', 'dense dynamics matrix', 'anatomy constrained\n dynamics matrix', 'scrambled anatomy'])
-plt.ylabel('correlation to measured IRMs')
+plt.bar(plot_x, [dense_rand_to_measured, dense_to_measured, sparse_to_measured, sparse_rand_to_measured])
+plt.xticks(plot_x, labels=['dense_rand_to_measured', 'dense_to_measured', 'sparse_to_measured', 'sparse_rand_to_measured'])
 ax = plt.gca()
 for label in ax.get_xticklabels():
     label.set_rotation(45)
