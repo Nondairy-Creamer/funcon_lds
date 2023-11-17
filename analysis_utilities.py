@@ -46,7 +46,7 @@ def stack_weights(weights, num_split, axis=-1):
     return np.stack(np.split(weights, num_split, axis=axis))
 
 
-def get_impulse_response_function(data, inputs, window=(-60, 120), sub_pre_stim=False, return_pre=True):
+def get_impulse_response_function(data, inputs, window=(-60, 120), sub_pre_stim=True, return_pre=True):
     num_neurons = data[0].shape[1]
 
     responses = []
@@ -90,6 +90,51 @@ def get_impulse_response_function(data, inputs, window=(-60, 120), sub_pre_stim=
     ave_responses_sem = [np.nanstd(j, axis=0, ddof=1) / np.sqrt(np.sum(~np.isnan(j), axis=0)) for j in responses]
     ave_responses_sem = np.stack(ave_responses_sem)
     ave_responses_sem = np.transpose(ave_responses_sem, axes=(1, 2, 0))
+
+    return ave_responses, ave_responses_sem, responses
+
+
+def get_impulse_response_magnitude(data, inputs, window=(-60, 120), sub_pre_stim=True):
+    num_neurons = data[0].shape[1]
+
+    responses = []
+    for n in range(num_neurons):
+        responses.append([])
+
+    for e, i in zip(data, inputs):
+        num_time = e.shape[0]
+        stim_events = np.where(i == 1)
+
+        for time, target in zip(stim_events[0], stim_events[1]):
+            if window[0] + time >= 0 and window[1] + time < num_time:
+                this_clip = e[window[0]+time:window[1]+time, :]
+
+                if sub_pre_stim:
+                    if window[0] < 0:
+                        baseline = np.nanmean(this_clip[:-window[0], :], axis=0)
+                        this_clip = this_clip - baseline
+
+                if window[0] < 0:
+                    this_clip = this_clip[-window[0]:, :]
+
+                responses[target].append(np.nanmean(this_clip, axis=0))
+
+    for ri, r in enumerate(responses):
+        if len(r) > 0:
+            responses[ri] = np.stack(r)
+        else:
+            responses[ri] = np.zeros((0, num_neurons))
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', category=RuntimeWarning)
+        ave_responses = [np.nanmean(j, axis=0) for j in responses]
+
+    ave_responses = np.stack(ave_responses)
+    ave_responses = ave_responses.T
+
+    ave_responses_sem = [np.nanstd(j, axis=0, ddof=1) / np.sqrt(np.sum(~np.isnan(j), axis=0)) for j in responses]
+    ave_responses_sem = np.stack(ave_responses_sem)
+    ave_responses_sem = ave_responses_sem.T
 
     return ave_responses, ave_responses_sem, responses
 
@@ -282,20 +327,28 @@ def nan_corr(y_true, y_hat, mean_sub=True):
     return corr, ci
 
 
-def frac_explainable_var(y_true_mat, y_hat_mat):
-    m = y_true_mat.shape[0]
-    y_true = np.nanmean(y_true_mat, axis=1)
+def frac_explainable_var(y_true, y_hat, y_true_std_trials):
+    y_true = y_true.reshape(-1)
+    y_hat = y_hat.reshape(-1)
+    y_true_std_trials = y_true_std_trials.reshape(-1)
+
+    non_nan = ~np.isnan(y_true_std_trials)
+
+    y_true = y_true[non_nan]
+    y_hat = y_hat[non_nan]
+    y_true_std_trials = y_true_std_trials[non_nan]
+
+    m = y_true.shape[0]
     y_true = y_true - np.mean(y_true)
-    y_hat = np.nanmean(y_hat_mat, axis=1)
     y_hat = y_hat - np.mean(y_hat)
 
-    n = np.sum(~np.isnan(y_true_mat), axis=1)
-    y_true_var_trials = np.nanvar(y_true_mat, ddof=1, axis=1)
+    y_true_var_trials = y_true_std_trials**2
+    y_true_var_trials_mean = np.mean(y_true_var_trials)
 
     numerator = np.dot(y_true, y_hat)**2
     denominator = np.sum(y_true**2) * np.sum(y_hat**2)
-    numerator_correction = np.sum(y_true_var_trials / n * y_hat**2)
-    denominator_correction = (m - 1) * np.sum(y_true_var_trials / n * y_hat**2)
+    numerator_correction = y_true_var_trials_mean * np.sum(y_hat**2)
+    denominator_correction = (m - 1) * y_true_var_trials_mean * np.sum(y_hat**2)
 
     r_er_square = (numerator - numerator_correction) / (denominator - denominator_correction)
 
