@@ -71,7 +71,6 @@ def get_impulse_response_function(data, inputs, window=(-60, 120), sub_pre_stim=
                         this_clip = this_clip[-window[0]:, :]
 
                 responses[target].append(this_clip)
-                a=1
 
     for ri, r in enumerate(responses):
         if len(r) > 0:
@@ -278,9 +277,29 @@ def nan_corr(y_true, y_hat, mean_sub=True):
     u = z_r + (z_a / np.sqrt(n - 3))
     ci_l = (np.exp(2 * l) - 1) / (np.exp(2 * l) + 1)
     ci_u = (np.exp(2 * u) - 1) / (np.exp(2 * u) + 1)
-    ci = (ci_l, ci_u)
+    ci = (np.abs(ci_l - corr), ci_u - corr)
 
     return corr, ci
+
+
+def frac_explainable_var(y_true_mat, y_hat_mat):
+    m = y_true_mat.shape[0]
+    y_true = np.nanmean(y_true_mat, axis=1)
+    y_true = y_true - np.mean(y_true)
+    y_hat = np.nanmean(y_hat_mat, axis=1)
+    y_hat = y_hat - np.mean(y_hat)
+
+    n = np.sum(~np.isnan(y_true_mat), axis=1)
+    y_true_var_trials = np.nanvar(y_true_mat, ddof=1, axis=1)
+
+    numerator = np.dot(y_true, y_hat)**2
+    denominator = np.sum(y_true**2) * np.sum(y_hat**2)
+    numerator_correction = np.sum(y_true_var_trials / n * y_hat**2)
+    denominator_correction = (m - 1) * np.sum(y_true_var_trials / n * y_hat**2)
+
+    r_er_square = (numerator - numerator_correction) / (denominator - denominator_correction)
+
+    return r_er_square
 
 
 def nan_corr_data(data):
