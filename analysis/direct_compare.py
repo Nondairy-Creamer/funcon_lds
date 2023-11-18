@@ -159,12 +159,16 @@ for label in ax.get_xticklabels():
 plt.tight_layout()
 
 plt.figure()
-plot_x = np.arange(5)
-y_val = np.array([dense_to_measured, corr_to_measured, dense_rand_to_measured, sparse_to_measured, sparse_rand_to_measured])
-y_val_ci = np.stack([dense_to_measured_ci, corr_to_measured_ci, dense_rand_to_measured_ci, sparse_to_measured_ci, sparse_rand_to_measured_ci]).T
+# plot_x = np.arange(5)
+# y_val = np.array([dense_to_measured, corr_to_measured, dense_rand_to_measured, sparse_to_measured, sparse_rand_to_measured])
+# y_val_ci = np.stack([dense_to_measured_ci, corr_to_measured_ci, dense_rand_to_measured_ci, sparse_to_measured_ci, sparse_rand_to_measured_ci]).T
+plot_x = np.arange(4)
+y_val = np.array([dense_to_measured, dense_rand_to_measured, sparse_to_measured, sparse_rand_to_measured])
+y_val_ci = np.stack([dense_to_measured_ci, dense_rand_to_measured_ci, sparse_to_measured_ci, sparse_rand_to_measured_ci]).T
 plt.bar(plot_x, y_val)
 plt.errorbar(plot_x, y_val, y_val_ci, fmt='none', color='k')
-plt.xticks(plot_x, labels=['dense dynamics matrix', 'data correlation', 'scrambled cell labels', 'anatomy constrained\n dynamics matrix', 'scrambled anatomy'])
+# plt.xticks(plot_x, labels=['dense dynamics matrix', 'data correlation', 'scrambled cell labels', 'anatomy constrained\n dynamics matrix', 'scrambled anatomy'])
+plt.xticks(plot_x, labels=['full model', 'full model\n+ scrambled labels', 'anatomy constrained', 'scrambled anatomy\nconstrained'])
 plt.ylabel('correlation to measured IRMs')
 ax = plt.gca()
 for label in ax.get_xticklabels():
