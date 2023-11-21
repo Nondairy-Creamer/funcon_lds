@@ -3,6 +3,7 @@ from matplotlib import pyplot as plt
 import analysis_utilities as au
 import numpy as np
 import pickle
+import wormneuroatlas as wa
 
 
 def get_irms(data_in):
@@ -81,6 +82,25 @@ data_test = pickle.load(data_test_file)
 data_test_file.close()
 
 inputs_test = data_test['inputs']
+
+# get synapse signs
+cell_ids = data_test['cell_ids']
+watlas = wa.NeuroAtlas()
+chem_synapse_sign = watlas.get_anatomical_connectome(signed=True)
+atlas_ids = list(watlas.neuron_ids)
+atlas_ids[atlas_ids.index('AWCON')] = 'AWCR'
+atlas_ids[atlas_ids.index('AWCOFF')] = 'AWCL'
+atlas_inds = [atlas_ids.index(i) for i in cell_ids]
+chem_synapse_sign = chem_synapse_sign[np.ix_(atlas_inds, atlas_inds)]
+nan_mask = chem_synapse_sign == 0
+
+model_weights = model_sparse.dynamics_weights[:model_sparse.dynamics_dim, :model_sparse.dynamics_dim]
+
+model_weights = (model_weights > np.std(model_weights)/8).astype(float) - (model_weights < -np.std(model_weights)/8).astype(float)
+chem_synapse_sign = (chem_synapse_sign > np.std(chem_synapse_sign)/8).astype(float) - (chem_synapse_sign < -np.std(chem_synapse_sign)/8).astype(float)
+chem_synapse_sign[nan_mask] = np.nan
+
+a = au.nan_corr(chem_synapse_sign, model_weights)[0]
 
 # get the IRMs of the models and data
 # dense
@@ -174,6 +194,33 @@ ax = plt.gca()
 for label in ax.get_xticklabels():
     label.set_rotation(45)
 plt.tight_layout()
+
+chem_synapse, gap_junction, pep = au.load_anatomical_data(cell_ids)
+weights = np.abs(model_sparse.dynamics_weights[:model_sparse.dynamics_dim, :])
+weights = np.split(weights, model_sparse.dynamics_lags, axis=1)
+score, score_ci, left_recon, right_recon = au.compare_matrix_sets(chem_synapse, weights)
+
+left_recon = left_recon.reshape(-1)
+right_recon = right_recon.reshape(-1)
+
+zero_loc = (left_recon != 0) & (right_recon != 0)
+left_recon = left_recon[zero_loc]
+
+right_recon = np.abs(right_recon[zero_loc])
+score = au.nan_corr(left_recon, right_recon)[0]
+
+p = np.polyfit(left_recon, right_recon, 1)
+
+plt.figure()
+plt.scatter(left_recon.reshape(-1), np.abs(right_recon.reshape(-1)))
+x_range = plt.xlim()
+y = p[0] * np.array(x_range) + p[1]
+plt.plot(x_range, y, color='k')
+plt.xlabel('synapse count')
+plt.ylabel('model weights')
+plt.title(str(score))
+
+plt.savefig('/home/mcreamer/Documents/google_drive/leifer_pillow_lab/talks/2023_11_15_CosyneAbstract/anatomy_weights_vs_model.pdf')
 
 plt.show()
 

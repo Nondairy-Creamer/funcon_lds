@@ -209,7 +209,7 @@ Collect terms that depend on
 \end_layout
 
 \begin_layout Standard
-\begin_inset Formula $\frac{\partial L_{CD}}{\partial C}=-R^{-1}CM_{(1,T)}^{\intercal}+\text{Tr}\left[R^{-1}C\tilde{Y}\right]-\text{Tr}\left[R^{-1}D\tilde{U}_{(1,T)}C^{\intercal}\right]$
+\begin_inset Formula $\frac{\partial L_{CD}}{\partial C}=-R^{-1}CM_{(1,T)}^{\intercal}+R^{-1}\tilde{Y}^{\intercal}-R^{-1}D\tilde{U}_{(1,T)}$
 \end_inset
 
 

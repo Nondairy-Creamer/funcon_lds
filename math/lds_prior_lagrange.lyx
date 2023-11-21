@@ -209,7 +209,53 @@ Collect terms that depend on
 \end_layout
 
 \begin_layout Standard
-\begin_inset Formula $\frac{\partial L_{CD}}{\partial C}=-R^{-1}CM_{(1,T)}^{\intercal}+R^{-1}\tilde{Y}^{\intercal}-R^{-1}D\tilde{U}_{(1,T)}$
+\begin_inset Formula $\frac{\partial L_{CD}}{\partial C}=-R^{-1}CM_{(1,T)}+R^{-1}\tilde{Y}^{\intercal}-R^{-1}D\tilde{U}_{(1,T)}$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $0=-R^{-1}CM_{(1,T)}+R^{-1}\tilde{Y}^{\intercal}-R^{-1}D\tilde{U}_{(1,T)}$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\tilde{Y}^{\intercal}=CM_{(1,T)}+D\tilde{U}_{(1,T)}$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+add the lagrange multiplier
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\tilde{Y}^{\intercal}=CM_{(1,T)}+D\tilde{U}_{(1,T)}-\lambda(C1-1)$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\tilde{Y}^{\intercal}=CM_{(1,T)}+D\tilde{U}_{(1,T)}-C1\lambda-1\lambda$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\tilde{Y}^{\intercal}=C(M_{(1,T)}-\lambda1)+D\tilde{U}_{(1,T)}-1\lambda$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\tilde{Y}^{\intercal}+1\lambda=C(M_{(1,T)}-\lambda1)+D\tilde{U}_{(1,T)}$
 \end_inset
 
 

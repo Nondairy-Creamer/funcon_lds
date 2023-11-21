@@ -330,6 +330,11 @@ def plot_posterior(data, posterior_dict, cell_ids_chosen, sample_rate=0.5, windo
 
 
 def plot_missing_neuron(data, posterior_dict, sample_rate=0.5):
+    def find_nearest(array, value):
+        array = array.reshape(-1)
+        idx = np.nanargmin(np.abs(array - value))
+        return array[idx]
+
     cell_ids = data['cell_ids']
     posterior_missing = posterior_dict['posterior_missing']
     emissions = data['emissions']
@@ -338,26 +343,26 @@ def plot_missing_neuron(data, posterior_dict, sample_rate=0.5):
     missing_corr = np.zeros((len(emissions), emissions[0].shape[1]))
     for ei, pi in zip(range(len(emissions)), range(len(posterior_missing))):
         for n in range(emissions[ei].shape[1]):
-            if np.any(~np.isnan(emissions[ei][:, n])):
+            if np.mean(~np.isnan(emissions[ei][:, n])) > 0.5:
                 missing_corr[ei, n] = au.nan_corr(emissions[ei][:, n], posterior_missing[ei][:, n])[0]
             else:
                 missing_corr[ei, n] = np.nan
 
-    ave_missing_corr = np.nanmean(missing_corr, axis=0)
-
     plt.figure()
-    plt.hist(ave_missing_corr)
-    plt.xlabel('average correlation')
+    plt.hist(missing_corr.reshape(-1))
+    plt.xlabel('correlation')
     plt.ylabel('count')
 
-    corr_sort_inds = np.argsort(-ave_missing_corr)
-    best_neuron_ind = corr_sort_inds[0]
-    median_neuron_ind = corr_sort_inds[int(np.sum(~np.isnan(ave_missing_corr)) / 2)]
-    best_neuron_no_nan = missing_corr[:, best_neuron_ind]
-    best_data_ind = np.argsort(-best_neuron_no_nan)[0]
+    sorted_corr = np.sort(missing_corr.reshape(-1))
+    sorted_corr_inds = np.argsort(missing_corr.reshape(-1))
+    first_nan = np.where(np.isnan(sorted_corr))[0][0]
+    best_neuron = np.unravel_index(sorted_corr_inds[first_nan - 2], missing_corr.shape)
+    median_neuron = np.unravel_index(sorted_corr_inds[int((first_nan - 2) / 2) + 2], missing_corr.shape)
 
-    median_neuron_no_nan = missing_corr[:, median_neuron_ind]
-    median_data_ind = np.argsort(-median_neuron_no_nan)[0]
+    best_data_ind = best_neuron[0]
+    best_neuron_ind = best_neuron[1]
+    median_data_ind = median_neuron[0]
+    median_neuron_ind = median_neuron[1]
 
     plot_x = np.arange(emissions[best_data_ind].shape[0]) * sample_rate
     plt.figure()
@@ -369,10 +374,12 @@ def plot_missing_neuron(data, posterior_dict, sample_rate=0.5):
     plt.ylabel('neural activity')
 
     plot_x = np.arange(emissions[median_data_ind].shape[0]) * sample_rate
+    # plot_x = np.arange(1000) * sample_rate
     plt.subplot(2, 1, 2)
     plt.title('median held out neuron: ' + cell_ids[median_neuron_ind])
     plt.plot(plot_x, emissions[median_data_ind][:, median_neuron_ind], label='data')
     plt.plot(plot_x, posterior_missing[median_data_ind][:, median_neuron_ind], label='posterior')
+    plt.ylim(plt.ylim()[0], 1.2)
     plt.xlabel('time (s)')
     plt.ylabel('neural activity')
 
@@ -451,26 +458,10 @@ def plot_irm(model_weights, measured_irm, model_irm, data_corr, cell_ids, cell_i
 def compare_irm_w_anatomy(model_weights, measured_irm, model_irm, data_corr, cell_ids, cell_ids_chosen):
     chosen_neuron_inds = [cell_ids.index(i) for i in cell_ids_chosen]
 
-    nan_loc = np.isnan(measured_irm)
-
-    std_fact = 2
-    model_epsilon = np.nanstd(model_weights) / std_fact
-    model_weights = [(np.abs(i) > model_epsilon).astype(float) for i in model_weights]
-    for i in range(len(model_weights)):
-        model_weights[i][nan_loc] = np.nan
-
-    measured_irm = (np.abs(measured_irm) > (np.nanstd(measured_irm) / std_fact)).astype(float)
-    measured_irm[nan_loc] = np.nan
-    model_irm = (np.abs(model_irm) > (np.nanstd(model_irm) / std_fact)).astype(float)
-    model_irm[nan_loc] = np.nan
-    data_corr = (np.abs(data_corr) > (np.nanstd(data_corr) / std_fact)).astype(float)
-    data_corr[nan_loc] = np.nan
-
     chem_conn, gap_conn, pep_conn = au.load_anatomical_data(cell_ids)
 
     # compare each of the weights against measured
-    anatomy_list = [(chem_conn > 0).astype(float), (gap_conn > 0).astype(float), (pep_conn > 0).astype(float)]
-    anatomy_list = [(chem_conn + gap_conn) > 0]
+    anatomy_list = [chem_conn, gap_conn, pep_conn]
     measured_irm_score, measured_irm_score_ci, al_meas_l, al_meas_r = au.compare_matrix_sets(anatomy_list, measured_irm, positive_weights=True)
     model_irm_score, model_irm_score_ci, al_model_l, al_model_r = au.compare_matrix_sets(anatomy_list, model_irm, positive_weights=True)
     data_corr_score, data_corr_score_ci, al_corr_l, al_corr_r = au.compare_matrix_sets(anatomy_list, data_corr, positive_weights=True)
@@ -482,38 +473,38 @@ def compare_irm_w_anatomy(model_weights, measured_irm, model_irm, data_corr, cel
     name = ['measured IRMs', 'model IRMs', 'data corr', 'model weights']
 
     i = np.ix_(chosen_neuron_inds, chosen_neuron_inds)
-    # plot_x = np.arange(len(cell_ids_chosen))
-    # plt.figure()
-    # ax = plt.subplot(2, 2, 1)
-    # plt.title('chemical synapses')
-    # plt.imshow(anatomy_list[0][i], cmap=colormap)
-    # cmax = np.max(np.abs(anatomy_list[0][i])).astype(float)
-    # plt.clim((-cmax, cmax))
-    # plt.xticks(plot_x, cell_ids_chosen)
-    # plt.yticks(plot_x, cell_ids_chosen)
-    # for label in ax.get_xticklabels():
-    #     label.set_rotation(90)
-    #
-    # ax = plt.subplot(2, 2, 2)
-    # plt.title('gap junctions')
-    # plt.imshow(anatomy_list[1][i], cmap=colormap)
-    # cmax = np.max(np.abs(anatomy_list[1][i]))
-    # plt.clim((-cmax, cmax))
-    # plt.xticks(plot_x, cell_ids_chosen)
-    # plt.yticks(plot_x, cell_ids_chosen)
-    # for label in ax.get_xticklabels():
-    #     label.set_rotation(90)
-    #
-    # ax = plt.subplot(2, 2, 3)
-    # plt.title('neuropeptide connectome')
-    # plt.imshow(anatomy_list[2][i], cmap=colormap)
-    # cmax = np.max(np.abs(anatomy_list[2][i]))
-    # plt.clim((-cmax, cmax))
-    # plt.tight_layout()
-    # plt.xticks(plot_x, cell_ids_chosen)
-    # plt.yticks(plot_x, cell_ids_chosen)
-    # for label in ax.get_xticklabels():
-    #     label.set_rotation(90)
+    plot_x = np.arange(len(cell_ids_chosen))
+    plt.figure()
+    ax = plt.subplot(2, 2, 1)
+    plt.title('chemical synapses')
+    plt.imshow(anatomy_list[0][i], cmap=colormap)
+    cmax = np.max(np.abs(anatomy_list[0][i])).astype(float)
+    plt.clim((-cmax, cmax))
+    plt.xticks(plot_x, cell_ids_chosen)
+    plt.yticks(plot_x, cell_ids_chosen)
+    for label in ax.get_xticklabels():
+        label.set_rotation(90)
+
+    ax = plt.subplot(2, 2, 2)
+    plt.title('gap junctions')
+    plt.imshow(anatomy_list[1][i], cmap=colormap)
+    cmax = np.max(np.abs(anatomy_list[1][i]))
+    plt.clim((-cmax, cmax))
+    plt.xticks(plot_x, cell_ids_chosen)
+    plt.yticks(plot_x, cell_ids_chosen)
+    for label in ax.get_xticklabels():
+        label.set_rotation(90)
+
+    ax = plt.subplot(2, 2, 3)
+    plt.title('neuropeptide connectome')
+    plt.imshow(anatomy_list[2][i], cmap=colormap)
+    cmax = np.max(np.abs(anatomy_list[2][i]))
+    plt.clim((-cmax, cmax))
+    plt.tight_layout()
+    plt.xticks(plot_x, cell_ids_chosen)
+    plt.yticks(plot_x, cell_ids_chosen)
+    for label in ax.get_xticklabels():
+        label.set_rotation(90)
 
     for i in range(len(anatomy_combined)):
         plot_x = np.arange(len(cell_ids_chosen))
@@ -551,6 +542,17 @@ def compare_irm_w_anatomy(model_weights, measured_irm, model_irm, data_corr, cel
     plt.errorbar(plot_x, y_val, y_val_ci, fmt='.', color='k')
     plt.xticks(plot_x, ['data corr', 'measured IRM', 'model weights'])
     plt.ylabel('similarity to connectome')
+
+    plt.figure()
+    plot_x = np.arange(2)
+    y_val = np.array([measured_irm_score, model_weights_score])
+    y_val_ci = np.stack([measured_irm_score_ci, model_weights_score_ci]).T
+    plt.bar(plot_x, y_val)
+    plt.errorbar(plot_x, y_val, y_val_ci, fmt='.', color='k')
+    plt.xticks(plot_x, ['measured IRM', 'model weights'])
+    plt.ylabel('similarity to connectome')
+
+    plt.savefig('/home/mcreamer/Documents/google_drive/leifer_pillow_lab/talks/2023_11_15_CosyneAbstract/compare_w_anatomy.pdf')
 
     # plot the weights compare to their reconstructions
 
