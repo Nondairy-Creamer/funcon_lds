@@ -3,6 +3,7 @@ import warnings
 import wormneuroatlas as wa
 import scipy
 import pickle
+from pathlib import Path
 
 
 def auto_select_ids(inputs, cell_ids, num_neurons=10):
@@ -141,19 +142,31 @@ def get_impulse_response_magnitude(data, inputs, window=(-60, 120), sub_pre_stim
 
 def load_anatomical_data(cell_ids=None):
     # load in anatomical data
-    chem_file = open('anatomical_data/chemical.pkl', 'rb')
+    chem_path = Path('anatomical_data/chemical.pkl')
+    if not chem_path.exists():
+        chem_path = Path('../') / chem_path
+    chem_file = open(chem_path, 'rb')
     chemical_synapse_connectome = pickle.load(chem_file)
     chem_file.close()
 
-    gap_file = open('anatomical_data/gap.pkl', 'rb')
+    gap_path = Path('anatomical_data/gap.pkl')
+    if not gap_path.exists():
+        gap_path = Path('../') / gap_path
+    gap_file = open(gap_path, 'rb')
     gap_junction_connectome = pickle.load(gap_file)
     gap_file.close()
 
-    peptide_file = open('anatomical_data/peptide.pkl', 'rb')
+    peptide_path = Path('anatomical_data/peptide.pkl')
+    if not peptide_path.exists():
+        peptide_path = Path('../') / peptide_path
+    peptide_file = open(peptide_path, 'rb')
     peptide_connectome = pickle.load(peptide_file)
     peptide_file.close()
 
-    ids_file = open('anatomical_data/cell_ids.pkl', 'rb')
+    ids_path = Path('anatomical_data/cell_ids.pkl')
+    if not ids_path.exists():
+        ids_path = Path('../') / ids_path
+    ids_file = open(ids_path, 'rb')
     atlas_ids = pickle.load(ids_file)
     ids_file.close()
 

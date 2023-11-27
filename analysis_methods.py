@@ -330,11 +330,6 @@ def plot_posterior(data, posterior_dict, cell_ids_chosen, sample_rate=0.5, windo
 
 
 def plot_missing_neuron(data, posterior_dict, sample_rate=0.5):
-    def find_nearest(array, value):
-        array = array.reshape(-1)
-        idx = np.nanargmin(np.abs(array - value))
-        return array[idx]
-
     cell_ids = data['cell_ids']
     posterior_missing = posterior_dict['posterior_missing']
     emissions = data['emissions']
@@ -462,6 +457,16 @@ def compare_irm_w_anatomy(model_weights, measured_irm, model_irm, data_corr, cel
 
     # compare each of the weights against measured
     anatomy_list = [chem_conn, gap_conn, pep_conn]
+
+    # get everything in magnitudes
+    model_weights = [np.abs(i) for i in model_weights]
+    measured_irm = np.abs(measured_irm)
+    model_irm = np.abs(model_irm)
+    data_corr = np.abs(data_corr)
+
+    m = np.nansum(np.stack(model_weights), axis=0)
+    m[np.isnan(measured_irm)] = np.nan
+
     measured_irm_score, measured_irm_score_ci, al_meas_l, al_meas_r = au.compare_matrix_sets(anatomy_list, measured_irm, positive_weights=True)
     model_irm_score, model_irm_score_ci, al_model_l, al_model_r = au.compare_matrix_sets(anatomy_list, model_irm, positive_weights=True)
     data_corr_score, data_corr_score_ci, al_corr_l, al_corr_r = au.compare_matrix_sets(anatomy_list, data_corr, positive_weights=True)
@@ -543,25 +548,12 @@ def compare_irm_w_anatomy(model_weights, measured_irm, model_irm, data_corr, cel
     plt.xticks(plot_x, ['data corr', 'measured IRM', 'model weights'])
     plt.ylabel('similarity to connectome')
 
-    plt.figure()
-    plot_x = np.arange(2)
-    y_val = np.array([measured_irm_score, model_weights_score])
-    y_val_ci = np.stack([measured_irm_score_ci, model_weights_score_ci]).T
-    plt.bar(plot_x, y_val)
-    plt.errorbar(plot_x, y_val, y_val_ci, fmt='.', color='k')
-    plt.xticks(plot_x, ['measured IRM', 'model weights'])
-    plt.ylabel('similarity to connectome')
-
-    plt.savefig('/home/mcreamer/Documents/google_drive/leifer_pillow_lab/talks/2023_11_15_CosyneAbstract/compare_w_anatomy.pdf')
-
-    # plot the weights compare to their reconstructions
-
     plt.show()
 
     return
 
 
-def compare_measured_and_model_irm(model_weights, measured_irm, model_irm, data_corr, cell_ids, cell_ids_chosen):
+def compare_measured_and_model_irm(model_weights, model_corr, measured_irm, model_irm, data_corr, cell_ids, cell_ids_chosen):
     neuron_inds_chosen = [cell_ids.index(i) for i in cell_ids_chosen]
 
     # grab the avereage impulse values that you want to plot
@@ -619,11 +611,20 @@ def compare_measured_and_model_irm(model_weights, measured_irm, model_irm, data_
     plt.ylabel('data correlation')
     plt.tight_layout()
 
+    data_corr_score, data_corr_score_ci = au.nan_corr(model_corr, data_corr)
+
+    plt.figure()
+    plt.subplot(1, 2, 1)
+    plt.imshow(model_corr, interpolation='nearest')
+    plt.subplot(1, 2, 2)
+    plt.imshow(data_corr)
+
     plt.show()
 
     irm_scores = {'data_corr': [data_corr_score, data_corr_score_ci],
                   'model_sampled': [model_sampled_score, model_sampled_score_ci],
                   'model_weights': [model_weights_score, model_weights_score_ci]}
+
     return irm_scores
 
 

@@ -6,8 +6,8 @@ import loading_utilities as lu
 from pathlib import Path
 
 # run_params = lu.get_run_params(param_name='analysis_params/ana_test.yml')
-# run_params = lu.get_run_params(param_name='analysis_params/ana_syn_test_analysis.yml')
-run_params = lu.get_run_params(param_name='analysis_params/ana_exp_DL.yml')
+run_params = lu.get_run_params(param_name='analysis_params/ana_exp_synap.yml')
+# run_params = lu.get_run_params(param_name='analysis_params/ana_exp_DL.yml')
 # run_params = lu.get_run_params(param_name='analysis_params/ana_exp_DL_old.yml')
 # run_params = lu.get_run_params(param_name='analysis_params/ana_exp_DL_fullq.yml')
 # run_params = lu.get_run_params(param_name='analysis_params/ana_syn_ridge_sweep.yml')
@@ -85,23 +85,35 @@ for i in range(len(model_weights)):
 # run analysis methods on the data
 if run_params['plot_model_params']:
     am.plot_model_params(model=model, model_true=model_true, cell_ids_chosen=cell_ids_chosen)
+
 if run_params['plot_eigen_values']:
     am.plot_dynamics_eigs(model=model)
+
 if run_params['plot_posterior']:
     am.plot_posterior(data=data, posterior_dict=posterior_dict, cell_ids_chosen=cell_ids_chosen, sample_rate=model.sample_rate)
+
 if run_params['plot_irf']:
     am.plot_irf(measured_irf=measured_irf, measured_irf_sem=measured_irf_sem,
                 model_irf=model_irf, cell_ids=cell_ids, cell_ids_chosen=cell_ids_chosen,
                 window=window, sample_rate=model.sample_rate, num_plot=10)
+
 if run_params['plot_irm']:
     am.plot_irm(model_weights=model_weights, measured_irm=measured_irf_ave, model_irm=model_irf_ave,
                 data_corr=data_corr, cell_ids=cell_ids, cell_ids_chosen=cell_ids_chosen)
+
 if run_params['plot_irm_compare']:
-    am.compare_measured_and_model_irm(model_weights=model_weights, measured_irm=measured_irf_ave,
+    model_corr = np.identity(model.dynamics_dim_full)
+
+    for i in range(1000):
+        model_corr = model.dynamics_weights @ model_corr @ model.dynamics_weights.T + model.dynamics_cov
+
+    model_corr = model_corr[:model.dynamics_dim, :model.dynamics_dim]
+
+    am.compare_measured_and_model_irm(model_weights=model_weights, model_corr=model_corr, measured_irm=measured_irf_ave,
                                       model_irm=model_irf_ave, data_corr=data_corr,
                                       cell_ids=cell_ids, cell_ids_chosen=cell_ids_chosen)
-# if the data is not synthetic compare with the anatomy
 
+# if the data is not synthetic compare with the anatomy
 if run_params['plot_compare_w_anatomy']:
     if not is_synth:
         am.compare_irm_w_anatomy(model_weights=model_weights, measured_irm=measured_irf_ave,
