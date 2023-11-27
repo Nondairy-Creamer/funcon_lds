@@ -1,14 +1,14 @@
 from pathlib import Path
 from matplotlib import pyplot as plt
 import analysis_utilities as au
+import analysis_methods as am
 import numpy as np
 import pickle
-import wormneuroatlas as wa
 
 
 def get_irms(data_in):
     irfs, irfs_sem, irfs_all = au.get_impulse_response_function(data_in, inputs_test, window=window,
-                                            sub_pre_stim=sub_pre_stim, return_pre=True)
+                                                                sub_pre_stim=sub_pre_stim, return_pre=True)
 
     irms = np.nanmean(irfs[-window[0]:], axis=0)
     irms[np.eye(irms.shape[0], dtype=bool)] = np.nan
@@ -23,243 +23,165 @@ def get_irms(data_in):
 
     irms[num_stim < required_num_stim] = np.nan
 
-    return irms
+    return irms, irfs, irfs_sem
+
 
 required_num_stim = 5
 force_calc = False
 sub_pre_stim = True
 window = [-60, 120]
-path_dense = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/exp_DL4_IL45_N80_R0/20230914_201648')
-path_dense_randID = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/exp_DL4_IL45_N80_R0_randCellID/20231114_144009/')
-path_sparse = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/exp_DL4_IL45_N80_R0_synap/20231030_200902')
-path_sparse_randA = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/exp_DL4_IL45_N80_R0_synap_rand/20231114_125113/')
+cell_ids_chosen = ['AVER', 'AVJL', 'AVJR', 'M3R', 'RMDVL', 'RMDVR', 'RMEL', 'RMER', 'URXL', 'AVDR']
 
-# get the dense model files
-model_dense_file = open(path_dense / 'models' / 'model_trained.pkl', 'rb')
-model_dense = pickle.load(model_dense_file)
-model_dense_file.close()
+# paths for the full fit, with randomized IDs, and with randomized anatomy
+model_path = [Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/exp_DL4_IL45_N80_R0_synap/20231030_200902'),
+              Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/exp_DL4_IL45_N80_R0_synap_randCellID/20231120_122606'),
+              Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/exp_DL4_IL45_N80_R0_synap_rand/20231114_125113')]
 
-post_dense_file = open(path_dense / 'posterior_test.pkl', 'rb')
-post_dense = pickle.load(post_dense_file)
-post_dense_file.close()
+# get the models
+models = []
+posterior_dicts = []
+for mp in model_path:
+    model_file = open(mp / 'models' / 'model_trained.pkl', 'rb')
+    models.append(pickle.load(model_file))
+    model_file.close()
 
-# get the dense rand model files
-model_dense_randID_file = open(path_dense_randID / 'models' / 'model_trained.pkl', 'rb')
-model_dense_randID = pickle.load(model_dense_randID_file)
-model_dense_randID_file.close()
-#
-# post_dense_randID_file = open(path_dense_randID / 'posterior_test.pkl', 'rb')
-# post_dense_randID = pickle.load(post_dense_randID_file)
-# post_dense_randID_file.close()
+    post_file = open(mp / 'posterior_test.pkl', 'rb')
+    posterior_dicts.append(pickle.load(post_file))
+    post_file.close()
 
-# get the sparse model files
-model_sparse_file = open(path_sparse / 'models' / 'model_trained.pkl', 'rb')
-model_sparse = pickle.load(model_sparse_file)
-model_sparse_file.close()
-
-post_sparse_file = open(path_sparse / 'posterior_test.pkl', 'rb')
-post_sparse = pickle.load(post_sparse_file)
-post_sparse_file.close()
-
-# get the sparse random model files
-model_sparse_randA_file = open(path_sparse_randA / 'models' / 'model_trained.pkl', 'rb')
-model_sparse_randA = pickle.load(model_sparse_randA_file)
-model_sparse_randA_file.close()
-
-# post_sparse_randA_file = open(path_sparse_randA / 'posterior_test.pkl', 'rb')
-# post_sparse_randA = pickle.load(post_sparse_randA_file)
-# post_sparse_randA_file.close()
-
-# get the data
-data_train_file = open(path_dense / 'data_train.pkl', 'rb')
+# get the data (the same for all runs)
+data_train_file = open(model_path[0] / 'data_train.pkl', 'rb')
 data_train = pickle.load(data_train_file)
 data_train_file.close()
 
-data_corr = data_train['data_corr']
+if 'data_corr' in data_train.keys():
+    data_corr = data_train['data_corr']
+else:
+    data_corr = au.nan_corr_data(data_train['emissions'])
 
-data_test_file = open(path_dense / 'data_test.pkl', 'rb')
+    data_train['data_corr'] = data_corr
+
+    data_train_file = open(model_path[0] / 'data_train.pkl', 'wb')
+    pickle.dump(data_train, data_train_file)
+    data_train_file.close()
+
+data_test_file = open(model_path[0] / 'data_test.pkl', 'rb')
 data_test = pickle.load(data_test_file)
 data_test_file.close()
 
+# test data
+emissions_test = data_test['emissions']
 inputs_test = data_test['inputs']
-
-# get synapse signs
 cell_ids = data_test['cell_ids']
-watlas = wa.NeuroAtlas()
-chem_synapse_sign = watlas.get_anatomical_connectome(signed=True)
-atlas_ids = list(watlas.neuron_ids)
-atlas_ids[atlas_ids.index('AWCON')] = 'AWCR'
-atlas_ids[atlas_ids.index('AWCOFF')] = 'AWCL'
-atlas_inds = [atlas_ids.index(i) for i in cell_ids]
-chem_synapse_sign = chem_synapse_sign[np.ix_(atlas_inds, atlas_inds)]
-nan_mask = chem_synapse_sign == 0
+data_irms, data_irfs, data_irfs_sem = get_irms(emissions_test)
 
-model_weights = model_sparse.dynamics_weights[:model_sparse.dynamics_dim, :model_sparse.dynamics_dim]
-
-model_weights = (model_weights > np.std(model_weights)/8).astype(float) - (model_weights < -np.std(model_weights)/8).astype(float)
-chem_synapse_sign = (chem_synapse_sign > np.std(chem_synapse_sign)/8).astype(float) - (chem_synapse_sign < -np.std(chem_synapse_sign)/8).astype(float)
-chem_synapse_sign[nan_mask] = np.nan
-
-a = au.nan_corr(chem_synapse_sign, model_weights)[0]
+# get anatomical data
+chem_conn, gap_conn, pep_conn = au.load_anatomical_data(cell_ids=cell_ids)
 
 # get the IRMs of the models and data
 # dense
-model_sampled_dense = post_dense['model_sampled']
-model_irm_dense = get_irms(model_sampled_dense)
+model_irms = []
+model_irfs = []
+model_irfs_sem = []
+for pd in posterior_dicts:
+    this_model_irms, this_model_irfs, this_model_irfs_sem = get_irms(pd['model_sampled'])
+    model_irms.append(this_model_irms)
+    model_irfs.append(this_model_irfs)
+    model_irfs_sem.append(this_model_irfs_sem)
 
-model_corr_dense = np.identity(model_dense.dynamics_dim_full)
-for i in range(1000):
-    model_corr_dense = model_dense.dynamics_weights @ model_corr_dense @ model_dense.dynamics_weights.T +\
-                       model_dense.dynamics_cov
-model_corr_dense = model_corr_dense[:model_dense.dynamics_dim, :model_dense.dynamics_dim]
+# predict data correlation
+model_corrs = []
 
-# dense random
-if force_calc:
-    model_sampled_dense_randID = []
-    for i in inputs_test:
-        model_sampled_dense_randID.append(model_dense_randID.sample(num_time=i.shape[0], inputs_list=[i], add_noise=False)['emissions'][0])
+for m in models:
+    model_corrs.append(m.dynamics_weights @ m.dynamics_weights.T + m.dynamics_cov)
+    for i in range(1000):
+        model_corrs[-1] = m.dynamics_weights @ model_corrs[-1] @ m.dynamics_weights.T + m.dynamics_cov
+    model_corrs[-1] = model_corrs[-1][:m.dynamics_dim, :m.dynamics_dim]
 
-    dense_sampled_file = open(path_dense_randID / 'sampled_dense_rand.pkl', 'wb')
-    pickle.dump(model_sampled_dense_randID, dense_sampled_file)
-    dense_sampled_file.close()
-else:
-    dense_sampled_file = open(path_dense_randID / 'sampled_dense_rand.pkl', 'rb')
-    model_sampled_dense_randID = pickle.load(dense_sampled_file)
-    dense_sampled_file.close()
+# find nan locations across the irms and correlations and set them all to nan so we compare apples-to-apples
+nan_mask = np.isnan(model_irms[0])
+for i in model_irms[1:]:
+    nan_mask = nan_mask | np.isnan(i)
 
-model_irm_dense_randID = get_irms(model_sampled_dense_randID)
+nan_mask = nan_mask | np.isnan(data_irms)
+nan_mask = nan_mask | np.isnan(data_corr)
 
-model_corr_dense_randID = np.identity(model_dense_randID.dynamics_dim_full)
-for i in range(1000):
-    model_corr_dense_randID = model_dense_randID.dynamics_weights @ model_corr_dense_randID @ model_dense_randID.dynamics_weights.T \
-                              + model_dense_randID.dynamics_cov
-model_corr_dense_randID = model_corr_dense_randID[:model_dense_randID.dynamics_dim, :model_dense_randID.dynamics_dim]
+for i in range(len(model_irms)):
+    model_irms[i][nan_mask] = np.nan
+    model_corrs[i][nan_mask] = np.nan
 
-# sparse
-model_sampled_sparse = post_sparse['model_sampled']
-model_irm_sparse = get_irms(model_sampled_sparse)
-
-model_corr_sparse = np.identity(model_sparse.dynamics_dim_full)
-for i in range(1000):
-    model_corr_sparse = model_sparse.dynamics_weights @ model_corr_sparse @ model_sparse.dynamics_weights.T + model_sparse.dynamics_cov
-model_corr_sparse = model_corr_sparse[:model_sparse.dynamics_dim, :model_sparse.dynamics_dim]
-
-# sparse random
-if force_calc:
-    model_sampled_sparse_randA = []
-    for i in inputs_test:
-        model_sampled_sparse_randA.append(model_sparse_randA.sample(num_time=i.shape[0], inputs_list=[i], add_noise=False)['emissions'][0])
-
-    sparse_sampled_file = open(path_sparse_randA / 'sampled_sparse_rand.pkl', 'wb')
-    pickle.dump(model_sampled_sparse_randA, sparse_sampled_file)
-    sparse_sampled_file.close()
-else:
-    sparse_sampled_file = open(path_sparse_randA / 'sampled_sparse_rand.pkl', 'rb')
-    model_sampled_sparse_randA = pickle.load(sparse_sampled_file)
-    sparse_sampled_file.close()
-
-model_irm_sparse_randA = get_irms(model_sampled_sparse_randA)
-
-model_corr_sparse_randA = np.identity(model_sparse_randA.dynamics_dim_full)
-for i in range(1000):
-    model_corr_sparse_randA = model_sparse_randA.dynamics_weights @ model_corr_sparse_randA @ model_sparse_randA.dynamics_weights.T \
-                              + model_sparse_randA.dynamics_cov
-model_corr_sparse_randA = model_corr_sparse_randA[:model_sparse_randA.dynamics_dim, :model_sparse_randA.dynamics_dim]
-
-# test data
-emissions_test = data_test['emissions']
-data_irm_test = get_irms(emissions_test)
-
-# process the IRMs
-nan_mask = np.isnan(model_irm_dense) | np.isnan(model_irm_dense_randID) | \
-           np.isnan(model_irm_sparse) | np.isnan(model_irm_sparse_randA) | \
-           np.isnan(data_irm_test) | np.isnan(data_corr)
-
-model_irm_dense[nan_mask] = np.nan
-model_irm_dense_randID[nan_mask] = np.nan
-model_irm_sparse[nan_mask] = np.nan
-model_irm_sparse_randA[nan_mask] = np.nan
-data_irm_test[nan_mask] = np.nan
+data_irms[nan_mask] = np.nan
 data_corr[nan_mask] = np.nan
 
-dense_to_sparse = au.nan_corr(model_irm_dense, model_irm_sparse)[0]
-sparse_to_sparse_randA = au.nan_corr(model_irm_sparse, model_irm_sparse_randA)[0]
+# compare data corr and data IRM to connectome
+anatomy_list = [chem_conn, gap_conn]
+data_corr_conn, data_corr_conn_ci = au.compare_matrix_sets(anatomy_list, data_corr)[:2]
+data_irm_conn, data_irm_conn_ci = au.compare_matrix_sets(anatomy_list, data_irms)[:2]
 
-corr_to_measured_irm_irm, corr_to_measured_irm_ci = au.nan_corr(data_irm_test, data_corr)
-dense_to_measured_irm, dense_to_measured_irm_ci = au.nan_corr(data_irm_test, model_irm_dense)
-dense_randID_to_measured_irm, dense_randID_to_measured_irm_ci = au.nan_corr(data_irm_test, model_irm_dense_randID)
-sparse_to_measured_irm, sparse_to_measured_irm_ci = au.nan_corr(data_irm_test, model_irm_sparse)
-sparse_randA_to_measured_irm, sparse_randA_to_measured_irm_ci = au.nan_corr(data_irm_test, model_irm_sparse_randA)
+# compare model corr to measured corr
+model_corr_score = []
+model_corr_score_ci = []
+for mc in model_corrs:
+    model_corr_to_measured_corr, model_corr_to_measured_corr_ci = au.nan_corr(mc, data_corr)
+    model_corr_score.append(model_corr_to_measured_corr)
+    model_corr_score_ci.append(model_corr_to_measured_corr_ci)
+
+# compare model IRMs to measured IRMs
+model_irms_score = []
+model_irms_score_ci = []
+for mi in model_irms:
+    model_irms_to_measured_irms, model_irms_to_measured_irms_ci = au.nan_corr(mi, data_irms)
+    model_irms_score.append(model_irms_to_measured_irms)
+    model_irms_score_ci.append(model_irms_to_measured_irms_ci)
+
+# plotting
+am.plot_irf(measured_irf=data_irfs, measured_irf_sem=data_irfs_sem, model_irf=model_irfs[0],
+            cell_ids=cell_ids, cell_ids_chosen=cell_ids_chosen, window=window, num_plot=10)
+example_weights = models[0].dynamics_weights[:models[0].dynamics_dim, :models[0].dynamics_dim]
+example_weights[np.eye(example_weights.shape[0], dtype=bool)] = np.nan
+am.plot_irm(model_weights=example_weights, measured_irm=data_irms, model_irm=model_irms[0], data_corr=data_corr,
+            cell_ids=cell_ids, cell_ids_chosen=cell_ids_chosen)
 
 plt.figure()
-# plot_x = np.arange(5)
-plot_x = np.arange(3)
-y_val = np.array([sparse_to_measured_irm, dense_randID_to_measured_irm, sparse_randA_to_measured_irm])
-y_val_ci = np.stack([sparse_to_measured_irm_ci, dense_randID_to_measured_irm_ci, sparse_randA_to_measured_irm_ci]).T
+plot_x = np.arange(2)
+y_val = np.array([data_corr_conn, data_irm_conn])
+y_val_ci = np.stack([data_corr_conn_ci, data_irm_conn_ci]).T
 plt.bar(plot_x, y_val)
 plt.errorbar(plot_x, y_val, y_val_ci, fmt='none', color='k')
-plt.xticks(plot_x, labels=['model', 'model\n+ scrambled labels', 'scrambled anatomy\nconstrained'])
+plt.xticks(plot_x, labels=['data correlation', 'data IRMs'])
+plt.ylabel('similarity to connectome')
+ax = plt.gca()
+for label in ax.get_xticklabels():
+    label.set_rotation(45)
+plt.tight_layout()
+
+plt.figure()
+plot_x = np.arange(3)
+y_val = np.array(model_corr_score)
+y_val_ci = np.stack(model_corr_score_ci).T
+plt.bar(plot_x, y_val)
+plt.errorbar(plot_x, y_val, y_val_ci, fmt='none', color='k')
+plt.xticks(plot_x, labels=['model', 'model\n+ scrambled labels', 'model\n+ scrambled anatomy'])
+plt.ylabel('similarity to measured correlation')
+ax = plt.gca()
+for label in ax.get_xticklabels():
+    label.set_rotation(45)
+plt.tight_layout()
+
+plt.figure()
+plot_x = np.arange(3)
+y_val = np.array(model_irms_score)
+y_val_ci = np.stack(model_irms_score_ci).T
+plt.bar(plot_x, y_val)
+plt.errorbar(plot_x, y_val, y_val_ci, fmt='none', color='k')
+plt.xticks(plot_x, labels=['model', 'model\n+ scrambled labels', 'model\n+ scrambled anatomy'])
 plt.ylabel('similarity to measured IRMs')
 ax = plt.gca()
 for label in ax.get_xticklabels():
     label.set_rotation(45)
 plt.tight_layout()
 
-plt.savefig('/home/mcreamer/Documents/google_drive/leifer_pillow_lab/papers/2023_lds/figures/similarity_to_irm.pdf')
-
-sparse_to_corr, sparse_to_corr_ci = au.nan_corr(model_corr_sparse, data_corr)
-#TODO this should be sparse_randID when it comes up
-dense_randID_to_corr, dense_randID_to_corr_ci = au.nan_corr(model_corr_dense_randID, data_corr)
-sparse_randA_to_corr, sparse_randA_to_corr_ci = au.nan_corr(model_corr_sparse_randA, data_corr)
-
-plt.figure()
-plot_x = np.arange(3)
-y_val = np.array([sparse_to_corr, dense_randID_to_corr, sparse_randA_to_corr])
-y_val_ci = np.stack([sparse_to_corr_ci, dense_randID_to_corr_ci, sparse_randA_to_corr_ci]).T
-plt.bar(plot_x, y_val)
-plt.errorbar(plot_x, y_val, y_val_ci, fmt='none', color='k')
-plt.xticks(plot_x, labels=['model', 'model\n+ scrambled labels', 'scrambled anatomy\nconstrained'])
-plt.ylabel('similarity to measured correlations')
-ax = plt.gca()
-for label in ax.get_xticklabels():
-    label.set_rotation(45)
-plt.tight_layout()
-
-plt.savefig('/home/mcreamer/Documents/google_drive/leifer_pillow_lab/papers/2023_lds/figures/similarity_to_corr.pdf')
-
-chem_synapse, gap_junction, pep = au.load_anatomical_data(cell_ids)
-weights = np.abs(model_sparse.dynamics_weights[:model_sparse.dynamics_dim, :])
-weights = np.split(weights, model_sparse.dynamics_lags, axis=1)
-score, score_ci, left_recon, right_recon = au.compare_matrix_sets(chem_synapse, weights)
-
-left_recon = left_recon.reshape(-1)
-right_recon = right_recon.reshape(-1)
-
-zero_loc = (left_recon != 0) & (right_recon != 0)
-left_recon = left_recon[zero_loc]
-
-right_recon = np.abs(right_recon[zero_loc])
-score = au.nan_corr(left_recon, right_recon)[0]
-
-p = np.polyfit(left_recon, right_recon, 1)
-
-plt.figure()
-plt.scatter(left_recon.reshape(-1), np.abs(right_recon.reshape(-1)))
-x_range = plt.xlim()
-y = p[0] * np.array(x_range) + p[1]
-plt.plot(x_range, y, color='k')
-plt.xlabel('synapse count')
-plt.ylabel('model weights')
-plt.title(str(score))
-
 plt.show()
-
-a=1
-
-
-
-
-
 
 
 
