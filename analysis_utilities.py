@@ -215,19 +215,18 @@ def compare_matrix_sets(left_side, right_side, positive_weights=False):
     right_side_col = np.stack([i.reshape(-1) for i in right_side]).T
 
     # if num_left > 1 or num_right > 1:
-    x0 = np.zeros(num_left + num_right - 1) + (not positive_weights)
+    x0 = np.zeros(num_left + num_right - 2) + (not positive_weights)
 
     def obj_fun(x):
         if positive_weights:
             x = np.exp(x)
         left_weights = np.concatenate((np.ones(1), x[:num_left-1]), axis=0)
-        right_weights = x[num_left-1:]
+        right_weights = np.concatenate((np.ones(1), x[num_left-1:]), axis=0)
 
         left_val = left_side_col @ left_weights
         right_val = right_side_col @ right_weights
 
         return -nan_corr(left_val, right_val)[0]
-        # return -nan_r2(left_val, right_val)
 
     x_hat = scipy.optimize.minimize(obj_fun, x0).x
 
@@ -235,7 +234,11 @@ def compare_matrix_sets(left_side, right_side, positive_weights=False):
         x_hat = np.exp(x_hat)
 
     left_weights_hat = np.concatenate((np.ones(1), x_hat[:num_left - 1]), axis=0)
-    right_weights_hat = x_hat[num_left - 1:]
+    right_weights_hat = np.concatenate((np.ones(1), x_hat[num_left - 1:]), axis=0)
+
+    if positive_weights:
+        left_weights_hat /= np.sum(left_weights_hat)
+        right_weights_hat /= np.sum(right_weights_hat)
 
     left_recon = (left_side_col @ left_weights_hat).reshape(left_side[0].shape)
     right_recon = (right_side_col @ right_weights_hat).reshape(right_side[0].shape)
@@ -244,6 +247,24 @@ def compare_matrix_sets(left_side, right_side, positive_weights=False):
 
     return score, score_ci, left_recon, right_recon
 
+
+def simple_get_irms(data_in, inputs_in, required_num_stim=5, window=(-60, 120), sub_pre_stim=True):
+    irfs, irfs_sem, irfs_all = get_impulse_response_function(data_in, inputs_in, window=window, sub_pre_stim=sub_pre_stim, return_pre=True)
+
+    irms = np.nanmean(irfs[-window[0]:], axis=0)
+    irms[np.eye(irms.shape[0], dtype=bool)] = np.nan
+
+    num_neurons = irfs.shape[1]
+    num_stim = np.zeros((num_neurons, num_neurons))
+    for ni in range(num_neurons):
+        for nj in range(num_neurons):
+            resp_to_stim = irfs_all[ni][:, -window[0]:, nj]
+            num_obs_when_stim = np.sum(np.mean(~np.isnan(resp_to_stim), axis=1) >= 0.5)
+            num_stim[nj, ni] += num_obs_when_stim
+
+    irms[num_stim < required_num_stim] = np.nan
+
+    return irms, irfs, irfs_sem
 
 def balanced_accuracy(y_true, y_hat):
     # number of correct hits out of total correct

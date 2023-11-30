@@ -352,7 +352,7 @@ def plot_missing_neuron(data, posterior_dict, sample_rate=0.5):
     sorted_corr_inds = np.argsort(missing_corr.reshape(-1))
     first_nan = np.where(np.isnan(sorted_corr))[0][0]
     best_neuron = np.unravel_index(sorted_corr_inds[first_nan - 2], missing_corr.shape)
-    median_neuron = np.unravel_index(sorted_corr_inds[int((first_nan - 2) / 2) + 2], missing_corr.shape)
+    median_neuron = np.unravel_index(sorted_corr_inds[int((first_nan - 2) / 2) + 3], missing_corr.shape)
 
     best_data_ind = best_neuron[0]
     best_neuron_ind = best_neuron[1]
