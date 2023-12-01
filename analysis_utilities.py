@@ -215,13 +215,13 @@ def compare_matrix_sets(left_side, right_side, positive_weights=False):
     right_side_col = np.stack([i.reshape(-1) for i in right_side]).T
 
     # if num_left > 1 or num_right > 1:
-    x0 = np.zeros(num_left + num_right - 2) + (not positive_weights)
+    x0 = np.zeros(num_left + num_right - 1) + (not positive_weights)
 
     def obj_fun(x):
         if positive_weights:
             x = np.exp(x)
         left_weights = np.concatenate((np.ones(1), x[:num_left-1]), axis=0)
-        right_weights = np.concatenate((np.ones(1), x[num_left-1:]), axis=0)
+        right_weights = x[num_left-1:]
 
         left_val = left_side_col @ left_weights
         right_val = right_side_col @ right_weights
@@ -234,7 +234,7 @@ def compare_matrix_sets(left_side, right_side, positive_weights=False):
         x_hat = np.exp(x_hat)
 
     left_weights_hat = np.concatenate((np.ones(1), x_hat[:num_left - 1]), axis=0)
-    right_weights_hat = np.concatenate((np.ones(1), x_hat[num_left - 1:]), axis=0)
+    right_weights_hat = x_hat[num_left - 1:]
 
     if positive_weights:
         left_weights_hat /= np.sum(left_weights_hat)

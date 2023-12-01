@@ -329,7 +329,7 @@ def plot_posterior(data, posterior_dict, cell_ids_chosen, sample_rate=0.5, windo
     return
 
 
-def plot_missing_neuron(data, posterior_dict, sample_rate=0.5):
+def plot_missing_neuron(data, posterior_dict, sample_rate=0.5, fig_save_path=None):
     cell_ids = data['cell_ids']
     posterior_missing = posterior_dict['posterior_missing']
     emissions = data['emissions']
@@ -347,6 +347,9 @@ def plot_missing_neuron(data, posterior_dict, sample_rate=0.5):
     plt.hist(missing_corr.reshape(-1))
     plt.xlabel('correlation')
     plt.ylabel('count')
+
+    if fig_save_path is not None:
+        plt.savefig(fig_save_path / 'recon_hist.pdf')
 
     sorted_corr = np.sort(missing_corr.reshape(-1))
     sorted_corr_inds = np.argsort(missing_corr.reshape(-1))
@@ -380,12 +383,15 @@ def plot_missing_neuron(data, posterior_dict, sample_rate=0.5):
 
     plt.tight_layout()
 
+    if fig_save_path is not None:
+        plt.savefig(fig_save_path / 'recon_examples.pdf')
+
     plt.show()
 
     return
 
 
-def plot_irm(model_weights, measured_irm, model_irm, data_corr, cell_ids, cell_ids_chosen):
+def plot_irm(model_weights, measured_irm, model_irm, data_corr, cell_ids, cell_ids_chosen, fig_save_path=None):
     chosen_neuron_inds = [cell_ids.index(i) for i in cell_ids_chosen]
 
     # get the combination of weights that looks most like the measured irm
@@ -444,6 +450,9 @@ def plot_irm(model_weights, measured_irm, model_irm, data_corr, cell_ids, cell_i
     plt.clim((-1, 1))
 
     plt.tight_layout()
+
+    if fig_save_path is not None:
+        plt.savefig(fig_save_path / 'irms.pdf')
 
     plt.show()
 
@@ -629,7 +638,7 @@ def compare_measured_and_model_irm(model_weights, model_corr, measured_irm, mode
 
 
 def plot_irf(measured_irf, measured_irf_sem, model_irf, cell_ids, cell_ids_chosen, window,
-             sample_rate=0.5, num_plot=5):
+             sample_rate=0.5, num_plot=5, fig_save_path=None):
 
     chosen_neuron_inds = [cell_ids.index(i) for i in cell_ids_chosen]
     plot_x = np.arange(window[0], window[1]) * sample_rate
@@ -677,6 +686,9 @@ def plot_irf(measured_irf, measured_irf_sem, model_irf, cell_ids, cell_ids_chose
 
         plt.legend()
         plt.title('average responses to stimulation of: ' + plot_label[i][1])
+
+        if fig_save_path is not None:
+            plt.savefig(fig_save_path / ('irf_' + str(i) + '.pdf'))
 
     plt.show()
 

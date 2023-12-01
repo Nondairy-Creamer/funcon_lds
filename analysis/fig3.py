@@ -11,6 +11,7 @@ force_calc = False
 sub_pre_stim = True
 window = [-60, 120]
 cell_ids_chosen = ['AVER', 'AVJL', 'AVJR', 'M3R', 'RMDVL', 'RMDVR', 'RMEL', 'RMER', 'URXL', 'AVDR']
+fig_save_path = Path('/home/mcreamer/Documents/google_drive/leifer_pillow_lab/papers/2023_lds/figures/drafts_subpannels/fig3')
 
 # paths for the full fit, with randomized IDs, and with randomized anatomy
 model_path = [Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/exp_DL4_IL45_N80_R0_synap/20231030_200902'),
@@ -142,5 +143,6 @@ for wb in weights_bin:
     weights_to_anat_ci.append(this_weights_to_anat_ci)
 
 # plotting
-am.plot_missing_neuron(data=data_test, posterior_dict=posterior_dicts[0], sample_rate=models[0].sample_rate)
+am.plot_missing_neuron(data=data_test, posterior_dict=posterior_dicts[0], sample_rate=models[0].sample_rate,
+                       fig_save_path=fig_save_path)
 

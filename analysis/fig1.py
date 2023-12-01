@@ -12,6 +12,7 @@ sub_pre_stim = True
 window = [-60, 120]
 num_traces_plot = 5
 cell_ids_chosen = ['AVER', 'AVJL', 'AVJR', 'M3R', 'RMDVL', 'RMDVR', 'RMEL', 'RMER', 'URXL', 'AVDR']
+fig_save_path = Path('/home/mcreamer/Documents/google_drive/leifer_pillow_lab/papers/2023_lds/figures/drafts_subpannels/fig1')
 
 # paths for the full fit, with randomized IDs, and with randomized anatomy
 model_path = [Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/exp_DL4_IL45_N80_R0_synap/20231030_200902'),
@@ -148,9 +149,10 @@ for mi in model_irms:
 
 # plotting
 am.plot_irf(measured_irf=data_irfs, measured_irf_sem=data_irfs_sem, model_irf=model_irfs[0],
-            cell_ids=cell_ids, cell_ids_chosen=cell_ids_chosen, window=window, num_plot=num_traces_plot)
+            cell_ids=cell_ids, cell_ids_chosen=cell_ids_chosen, window=window, num_plot=num_traces_plot,
+            fig_save_path=fig_save_path)
 am.plot_irm(model_weights=model_weights_list[0], measured_irm=data_irms, model_irm=model_irms[0], data_corr=data_corr,
-            cell_ids=cell_ids, cell_ids_chosen=cell_ids_chosen)
+            cell_ids=cell_ids, cell_ids_chosen=cell_ids_chosen, fig_save_path=fig_save_path)
 
 plt.figure()
 y_val = np.array([model_weights_conn, data_corr_conn, data_irm_conn, ])
@@ -164,6 +166,7 @@ ax = plt.gca()
 for label in ax.get_xticklabels():
     label.set_rotation(45)
 plt.tight_layout()
+plt.savefig(fig_save_path / 'sim_to_conn.pdf')
 
 plt.figure()
 y_val = np.array(model_corr_score)
@@ -177,6 +180,7 @@ ax = plt.gca()
 for label in ax.get_xticklabels():
     label.set_rotation(45)
 plt.tight_layout()
+plt.savefig(fig_save_path / 'sim_to_corr.pdf')
 
 plt.figure()
 y_val = np.array(model_irms_score)
@@ -190,6 +194,7 @@ ax = plt.gca()
 for label in ax.get_xticklabels():
     label.set_rotation(45)
 plt.tight_layout()
+plt.savefig(fig_save_path / 'sim_to_irm.pdf')
 
 plt.show()
 
