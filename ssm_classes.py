@@ -498,6 +498,53 @@ class Lgssm:
 
         return ll, suff_stats, smoothed_means, new_init_covs
 
+    def dirfs(self, window=(-30, 60)):
+        # get the direct impulse response function between each pair of neurons
+        A = self.stacked_dynamics_weights()
+        B = self.dynamics_input_weights_diagonal()
+        num_t = int((window[1] - window[0]) / self.sample_rate)
+        u = np.zeros(num_t + self.dynamics_input_lags)
+        u[int(-window[0] / self.sample_rate + self.dynamics_input_lags)] = 1
+        dirfs = np.zeros((num_t, self.dynamics_dim, self.dynamics_dim))
+
+        # loop through the stimulated neuron
+        for s in range(self.dynamics_dim):
+            # loop through responding neuron
+            for r in range(self.dynamics_dim):
+                weights = A[(r, s), :, :][:, (r, s), :]
+                input_weights = B[s, :]
+                activity_history = np.zeros((self.dynamics_lags, 2))
+
+                for t in np.arange(num_t):
+                    current_activity = weights @ activity_history + (input_weights @ u[t:t+self.dynamics_input_lags])[:, None]
+                    dirfs[t, r, s] = current_activity[0]
+                    activity_history = np.roll(activity_history, 1)
+                    activity_history[0] = current_activity
+
+        return dirfs
+
+    def stacked_dynamics_weights(self, type='numpy'):
+        weights = self.dynamics_weights[:self.dynamics_dim, :]
+        weights = np.split(weights, self.dynamics_lags, axis=1)
+        if type == 'numpy':
+            weights = np.stack(weights)
+            weights = np.transpose(weights, axes=(1, 2, 0))
+        elif type == 'list':
+            # do nothing
+            pass
+        else:
+            raise Exception('stacked weights return type not recognized')
+
+        return weights
+
+    def dynamics_input_weights_diagonal(self):
+        weights = self.dynamics_input_weights[:self.dynamics_dim, :]
+        weights = np.split(weights, self.dynamics_input_lags, axis=1)
+        weights = [i.diagonal() for i in weights]
+        weights = np.stack(weights).T
+
+        return weights
+
     def em_step(self, emissions_list, inputs_list, init_mean_list, init_cov_list, cpu_id=0, num_cpus=1,
                 memmap_cpu_id=None, max_eig_allowed=1.0):
         #
