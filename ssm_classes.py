@@ -41,6 +41,7 @@ class Lgssm:
         self.emissions_weights = None
         self.emissions_input_weights = None
         self.emissions_cov = None
+        self.emissions_offset = None
 
         self.param_props = {'update': {'dynamics_weights': True,
                                        'dynamics_input_weights': True,
@@ -48,6 +49,7 @@ class Lgssm:
                                        'emissions_weights': True,
                                        'emissions_input_weights': True,
                                        'emissions_cov': True,
+                                       'emissions_offset': True,
                                        },
 
                             'shape': {'dynamics_weights': 'full',
@@ -56,6 +58,7 @@ class Lgssm:
                                       'emissions_weights': 'full',
                                       'emissions_input_weights': 'full',
                                       'emissions_cov': 'full',
+                                      'emissions_offset': 'full',
                                       },
 
                             'mask': {'dynamics_weights': None,
@@ -64,6 +67,7 @@ class Lgssm:
                                      'emissions_weights': None,
                                      'emissions_input_weights': None,
                                      'emissions_cov': None,
+                                     'emissions_offset': None,
                                      },
                             }
 
@@ -84,6 +88,7 @@ class Lgssm:
         self.emissions_weights_init = np.eye(self.emissions_dim)
         self.emissions_input_weights_init = np.zeros((self.emissions_input_lags, self.emissions_dim, self.input_dim))
         self.emissions_cov_init = np.eye(self.emissions_dim)
+        self.emissions_offset_init = np.ones(self.emissions_dim)
 
         self._pad_init_for_lags()
         # convert to tensors
@@ -177,6 +182,8 @@ class Lgssm:
             self.emissions_cov_init = rng.standard_normal((self.emissions_dim, self.emissions_dim))
             self.emissions_cov_init = noise_std * (self.emissions_cov_init.T @ self.emissions_cov_init / self.emissions_dim + np.eye(self.emissions_dim))
 
+        self.emissions_offset_init = rng.standard_normal(self.emissions_dim)
+
         self._pad_init_for_lags()
         self.set_to_init()
 
@@ -188,6 +195,7 @@ class Lgssm:
         self.emissions_weights = self.emissions_weights_init.copy()
         self.emissions_input_weights = self.emissions_input_weights_init.copy()
         self.emissions_cov = self.emissions_cov_init.copy()
+        self.emissions_offset = self.emissions_offset_init.copy()
 
     def get_params(self):
         params_out = {'init': {'dynamics_weights': self.dynamics_weights_init,
@@ -196,6 +204,7 @@ class Lgssm:
                                'emissions_weights': self.emissions_weights_init,
                                'emissions_input_weights': self.emissions_input_weights_init,
                                'emissions_cov': self.emissions_cov_init,
+                               'emissions_offset': self.emissions_offset_init,
                                },
 
                       'trained': {'dynamics_weights': self.dynamics_weights,
@@ -204,6 +213,7 @@ class Lgssm:
                                   'emissions_weights': self.emissions_weights,
                                   'emissions_input_weights': self.emissions_input_weights,
                                   'emissions_cov': self.emissions_cov,
+                                  'emissions_offset': self.emissions_offset,
                                   },
                       }
 
@@ -258,6 +268,7 @@ class Lgssm:
 
             emissions[0, :] = self.emissions_weights @ latents[0, :] + \
                               emissions_inputs[0, :] + \
+                              self.emissions_offset + \
                               emissions_noise[0, :]
 
             # loop through time and generate the latents and emissions
@@ -268,6 +279,7 @@ class Lgssm:
 
                 emissions[t, :] = (self.emissions_weights @ latents[t, :]) + \
                                    emissions_inputs[t, :] + \
+                                   self.emissions_offset + \
                                    emissions_noise[t, :]
 
             latents_list.append(latents[:, :self.dynamics_dim])
@@ -343,8 +355,8 @@ class Lgssm:
         pred_mean = init_mean.copy()
         pred_cov = init_cov.copy()
 
-        yyctr = y - emissions_inputs[0, :]
-        ll_mu = self.emissions_weights @ pred_mean + emissions_inputs[0, :]
+        yyctr = y - emissions_inputs[0, :] - self.emissions_offset
+        ll_mu = self.emissions_weights @ pred_mean + emissions_inputs[0, :] + self.emissions_offset
 
         ll_cov = self.emissions_weights @ pred_cov @ self.emissions_weights.T + R
         ll_cov_logdet = np.linalg.slogdet(ll_cov)[1]
