@@ -637,11 +637,11 @@ def compare_measured_and_model_irm(model_weights, model_corr, measured_irm, mode
     return irm_scores
 
 
-def plot_irf(measured_irf, measured_irf_sem, model_irf, cell_ids, cell_ids_chosen, window,
+def plot_irf(measured_irf, measured_irf_sem, model_irf, cell_ids, cell_ids_chosen, window=(30, 60),
              sample_rate=0.5, num_plot=5, fig_save_path=None):
 
     chosen_neuron_inds = [cell_ids.index(i) for i in cell_ids_chosen]
-    plot_x = np.arange(window[0], window[1]) * sample_rate
+    plot_x = np.arange(-window[0] / sample_rate, window[1] / sample_rate)
 
     # pull out the neurons we care about
     measured_irf = measured_irf[:, chosen_neuron_inds, :][:, :, chosen_neuron_inds]
@@ -665,7 +665,10 @@ def plot_irf(measured_irf, measured_irf_sem, model_irf, cell_ids, cell_ids_chose
     for pi, p in enumerate(plot_inds):
         measured_response_sem_chosen[:, pi] = measured_irf_sem[:, p[0], p[1]]
         measured_response_chosen[:, pi] = measured_irf[:, p[0], p[1]]
-        model_sampled_response_chosen[:, pi] = model_irf[:, p[0], p[1]]
+        mi = model_irf[:, p[0], p[1]]
+        z_pad = np.zeros(measured_irf_sem.shape[0] - mi.shape[0])
+        mi = np.concatenate((z_pad, mi))
+        model_sampled_response_chosen[:, pi] = mi
         plot_label.append((cell_ids_chosen[p[0]], cell_ids_chosen[p[1]]))
 
     ylim = (np.nanpercentile([measured_response_chosen - measured_response_sem_chosen, model_sampled_response_chosen], 1),

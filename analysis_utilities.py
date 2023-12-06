@@ -59,17 +59,15 @@ def get_impulse_response_function(data, inputs, window=(-60, 120), sub_pre_stim=
         stim_events = np.where(i == 1)
 
         for time, target in zip(stim_events[0], stim_events[1]):
-            if window[0] + time >= 0 and window[1] + time < num_time:
-                this_clip = e[window[0]+time:window[1]+time, :]
+            if time - window[0] >= 0 and window[1] + time < num_time:
+                this_clip = e[time-window[0]:time+window[1], :]
 
                 if sub_pre_stim:
-                    if window[0] < 0:
-                        baseline = np.nanmean(this_clip[:-window[0], :], axis=0)
-                        this_clip = this_clip - baseline
+                    baseline = np.nanmean(this_clip[:window[0], :], axis=0)
+                    this_clip = this_clip - baseline
 
                 if not return_pre:
-                    if window[0] < 0:
-                        this_clip = this_clip[-window[0]:, :]
+                    this_clip = this_clip[window[0]:, :]
 
                 responses[target].append(this_clip)
 
@@ -78,7 +76,7 @@ def get_impulse_response_function(data, inputs, window=(-60, 120), sub_pre_stim=
             responses[ri] = np.stack(r)
         else:
             if return_pre:
-                responses[ri] = np.zeros((0, window[1] - window[0], num_neurons))
+                responses[ri] = np.zeros((0, np.sum(window), num_neurons))
             else:
                 responses[ri] = np.zeros((0, window[1], num_neurons))
 
@@ -181,7 +179,11 @@ def load_anatomical_data(cell_ids=None):
         gap_junction_connectome = gap_junction_connectome[np.ix_(atlas_inds, atlas_inds)]
         peptide_connectome = peptide_connectome[np.ix_(atlas_inds, atlas_inds)]
 
-    return chemical_synapse_connectome, gap_junction_connectome, peptide_connectome
+    anatomy_dict = {'chem_conn': chemical_synapse_connectome,
+                    'gap_conn': gap_junction_connectome,
+                    'pep_conn': peptide_connectome}
+
+    return anatomy_dict
 
 
 def get_anatomical_data(cell_ids):
@@ -248,23 +250,90 @@ def compare_matrix_sets(left_side, right_side, positive_weights=False):
     return score, score_ci, left_recon, right_recon
 
 
-def simple_get_irms(data_in, inputs_in, required_num_stim=5, window=(-60, 120), sub_pre_stim=True):
+def simple_get_irms(data_in, inputs_in, sample_rate=0.5, required_num_stim=5, window=[30, 60], sub_pre_stim=True):
+    if window[0] < 0 or window[1] < 0 or np.sum(window) <= 0:
+        raise Exception('window must be positive and sum to > 0')
+
+    window = [int(i / sample_rate) for i in window]
+
     irfs, irfs_sem, irfs_all = get_impulse_response_function(data_in, inputs_in, window=window, sub_pre_stim=sub_pre_stim, return_pre=True)
 
-    irms = np.nanmean(irfs[-window[0]:], axis=0)
+    irms = np.nanmean(irfs[window[0]:], axis=0)
     irms[np.eye(irms.shape[0], dtype=bool)] = np.nan
 
     num_neurons = irfs.shape[1]
     num_stim = np.zeros((num_neurons, num_neurons))
     for ni in range(num_neurons):
         for nj in range(num_neurons):
-            resp_to_stim = irfs_all[ni][:, -window[0]:, nj]
+            resp_to_stim = irfs_all[ni][:, window[0]:, nj]
             num_obs_when_stim = np.sum(np.mean(~np.isnan(resp_to_stim), axis=1) >= 0.5)
             num_stim[nj, ni] += num_obs_when_stim
 
     irms[num_stim < required_num_stim] = np.nan
 
     return irms, irfs, irfs_sem
+
+
+def calculate_irfs(model, duration=60):
+    # get the direct impulse response function between each pair of neurons
+    A = model.stack_dynamics_weights()
+    B = model.dynamics_input_weights_diagonal()
+    num_t = int(duration / model.sample_rate)
+    u = np.zeros(num_t + model.dynamics_input_lags)
+    u[int(model.dynamics_input_lags)] = 1
+    irfs = np.zeros((num_t, model.dynamics_dim, model.dynamics_dim))
+
+    print('Calculating IRFs')
+    # loop through the stimulated neuron
+    for s in range(model.dynamics_dim):
+        # loop through responding neuron
+        input_weights = B[:, s]
+        activity_history = np.zeros((model.dynamics_lags, model.dynamics_dim))
+
+        for t in np.arange(num_t):
+            current_activity = np.sum(A @ activity_history[:, :, None], axis=0)[:, 0]
+            current_activity[s] += input_weights @ u[t:t + model.dynamics_input_lags]
+            irfs[t, :, s] = current_activity
+            activity_history = np.roll(activity_history, 1, axis=0)
+            activity_history[0, :] = current_activity
+
+        print(s + 1, '/', model.dynamics_dim)
+
+    return irfs
+
+
+def calculate_dirfs(model, duration=60):
+    # get the direct impulse response function between each pair of neurons
+    A = model.stack_dynamics_weights()
+    B = model.dynamics_input_weights_diagonal()
+    num_t = int(duration / model.sample_rate)
+    u = np.zeros(num_t + model.dynamics_input_lags)
+    u[int(model.dynamics_input_lags)] = 1
+    dirfs = np.zeros((num_t, model.dynamics_dim, model.dynamics_dim))
+
+    print('Calculating dIRFs')
+    # loop through the stimulated neuron
+    for s in range(model.dynamics_dim):
+        # loop through responding neuron
+        for r in range(model.dynamics_dim):
+            weights = A[:, (s, r), :][:, :, (s, r)]
+            input_weights = B[:, s]
+            activity_history = np.zeros((model.dynamics_lags, 2))
+
+            if np.all(weights[:, 1, 0] == 0):
+                continue
+
+            for t in np.arange(num_t):
+                current_activity = np.sum(weights @ activity_history[:, :, None], axis=0)[:, 0]
+                current_activity[0] += input_weights @ u[t:t + model.dynamics_input_lags]
+                dirfs[t, r, s] = current_activity[1]
+                activity_history = np.roll(activity_history, 1, axis=0)
+                activity_history[0, :] = current_activity
+
+        print(s + 1, '/', model.dynamics_dim)
+
+    return dirfs
+
 
 def balanced_accuracy(y_true, y_hat):
     # number of correct hits out of total correct
