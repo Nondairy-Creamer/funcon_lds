@@ -182,7 +182,7 @@ class Lgssm:
             self.emissions_cov_init = rng.standard_normal((self.emissions_dim, self.emissions_dim))
             self.emissions_cov_init = noise_std * (self.emissions_cov_init.T @ self.emissions_cov_init / self.emissions_dim + np.eye(self.emissions_dim))
 
-        self.emissions_offset_init = rng.standard_normal(self.emissions_dim)
+        self.emissions_offset_init = 10*rng.standard_normal(self.emissions_dim)
 
         self._pad_init_for_lags()
         self.set_to_init()
@@ -393,8 +393,8 @@ class Lgssm:
             pred_cov = self.dynamics_weights @ filtered_cov @ self.dynamics_weights.T + self.dynamics_cov
 
             # Update the log likelihood
-            yyctr = y - emissions_inputs[t, :]
-            ll_mu = self.emissions_weights @ pred_mean + emissions_inputs[t, :]
+            yyctr = y - emissions_inputs[t, :] - self.emissions_offset
+            ll_mu = self.emissions_weights @ pred_mean + emissions_inputs[t, :] + self.emissions_offset
 
             ll_cov = self.emissions_weights @ pred_cov @ self.emissions_weights.T + R
             ll_cov_logdet = np.linalg.slogdet(ll_cov)[1]
@@ -631,20 +631,30 @@ class Lgssm:
                 Mquad = iu.block([[Mz, Muz.T], [Muz, Mu2]], dims=(1, 0))  # from quadratic terms
                 CDnew = np.linalg.solve(Mquad.T, Mlin).T  # new A and B from regression
                 self.emissions_weights = CDnew[:, :nz]  # new A
-                self.emissions_input_weights = CDnew[:, nz:]  # new B
+                self.emissions_input_weights = CDnew[:, nz:-1]  # new B
+                self.emissions_offset = CDnew[:, -1]  # new B
             elif self.param_props['update']['emissions_weights']:  # update C only
-                Cnew = np.linalg.solve(Mz.T, Mzy - Muz.T @ self.emissions_input_weights.T).T  # new A
-                self.emissions_weights = Cnew
+                Cnew = np.linalg.solve(Mz.T, Mzy - Muz.T @ self.emissions_input_weights.T).T  # new C
+                self.emissions_weights = Cnew[:, :-1]
+                self.emissions_offset = Cnew[:, -1]  # new B
             elif self.param_props['update']['emissions_input_weights']:  # update D only
-                Dnew = np.linalg.solve(Mu2.T, Muy - Muz @ self.emissions_weights.T).T  # new B
-                self.emissions_input_weights = Dnew
+                Dnew = np.linalg.solve(Mu2.T, Muy - Muz @ self.emissions_weights.T).T  # new D
+                self.emissions_input_weights = Dnew[:, :-1]
+                self.emissions_offset = Dnew[:, -1]  # new B
+            else:
+                dnew = np.linalg.solve(Mu2.T, Muy - Muz @ self.emissions_weights.T).T  # new d
+                self.emissions_input_weights = dnew[:, :-1]
+
 
             # update obs noise covariance R
             if self.param_props['update']['emissions_cov']:
-                self.emissions_cov = (My + self.emissions_weights @ Mz @ self.emissions_weights.T + self.emissions_input_weights @ Mu2 @ self.emissions_input_weights.T
+                ew = np.concatenate((self.emissions_input_weights, self.emissions_offset[:, None]), axis=1)
+                self.emissions_cov = (My + self.emissions_weights @ Mz @ self.emissions_weights.T
+                                      + ew @ Mu2 @ ew.T
                                       - self.emissions_weights @ Mzy - Mzy.T @ self.emissions_weights.T
-                                      - self.emissions_input_weights @ Muy - Muy.T @ self.emissions_input_weights.T
-                                      + self.emissions_weights @ Muz.T @ self.emissions_input_weights.T + self.emissions_input_weights @ Muz @ self.emissions_weights.T)
+                                      - ew @ Muy - Muy.T @ ew.T
+                                      + self.emissions_weights @ Muz.T @ ew.T
+                                      + ew @ Muz @ self.emissions_weights.T)
 
                 if self.param_props['shape']['emissions_cov'] == 'diag':
                     self.emissions_cov = np.diag(np.diag(self.emissions_cov))
@@ -663,6 +673,8 @@ class Lgssm:
 
         dynamics_inputs = self.get_lagged_data(inputs, self.dynamics_input_lags)
         emissions_inputs = self.get_lagged_data(inputs, self.emissions_input_lags)
+        # add in offset for emissions
+        emissions_inputs = np.concatenate((emissions_inputs, np.ones((emissions_inputs.shape[0], 1))), axis=1)
 
         smoothed_covs_sum = suff_stats['smoothed_covs_sum']
         smoothed_crosses_sum = suff_stats['smoothed_crosses_sum']
