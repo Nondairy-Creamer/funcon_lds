@@ -642,9 +642,7 @@ class Lgssm:
                 self.emissions_input_weights = Dnew[:, :-1]
                 self.emissions_offset = Dnew[:, -1]  # new B
             else:
-                dnew = np.linalg.solve(Mu2.T, Muy - Muz @ self.emissions_weights.T).T  # new d
-                self.emissions_input_weights = dnew[:, :-1]
-
+                self.emissions_offset = np.linalg.solve(Mu2.T, (Muy - Muz @ self.emissions_weights.T)).T[:, -1]  # new d
 
             # update obs noise covariance R
             if self.param_props['update']['emissions_cov']:
