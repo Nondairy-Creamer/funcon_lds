@@ -155,6 +155,7 @@ def fit_em(model, data, init_mean=None, init_cov=None, num_steps=10,
 
         starting_log_likelihood = model.log_likelihood
         starting_time = model.train_time
+        model.emissions_offset = np.nanmean(np.stack([np.nanmean(i, axis=0) for i in data['emissions']]), axis=0)
 
     else:
         emissions = None

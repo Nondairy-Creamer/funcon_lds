@@ -5,8 +5,8 @@ import analysis_utilities as au
 import loading_utilities as lu
 from pathlib import Path
 
-# run_params = lu.get_run_params(param_name='analysis_params/ana_test.yml')
-run_params = lu.get_run_params(param_name='analysis_params/ana_exp_synap.yml')
+run_params = lu.get_run_params(param_name='analysis_params/ana_test.yml')
+# run_params = lu.get_run_params(param_name='analysis_params/ana_exp_synap.yml')
 # run_params = lu.get_run_params(param_name='analysis_params/ana_exp_DL.yml')
 # run_params = lu.get_run_params(param_name='analysis_params/ana_exp_DL_old.yml')
 # run_params = lu.get_run_params(param_name='analysis_params/ana_exp_DL_fullq.yml')
