@@ -88,7 +88,7 @@ class Lgssm:
         self.emissions_weights_init = np.eye(self.emissions_dim)
         self.emissions_input_weights_init = np.zeros((self.emissions_input_lags, self.emissions_dim, self.input_dim))
         self.emissions_cov_init = np.eye(self.emissions_dim)
-        self.emissions_offset_init = np.ones(self.emissions_dim)
+        self.emissions_offset_init = np.zeros(self.emissions_dim)
 
         self._pad_init_for_lags()
         # convert to tensors
@@ -554,20 +554,24 @@ class Lgssm:
         suff_stats = iu.individual_gather_sum(suff_stats, root=0)
 
         if cpu_id == 0:
-            Mz1 = suff_stats[1]['Mz1'] / (suff_stats[1]['nt'] - len(emissions_list))
-            Mz2 = suff_stats[1]['Mz2'] / (suff_stats[1]['nt'] - len(emissions_list))
-            Mz12 = suff_stats[1]['Mz12'] / (suff_stats[1]['nt'] - len(emissions_list))
-            Mu1 = suff_stats[1]['Mu1'] / (suff_stats[1]['nt'] - len(emissions_list))
-            Muz2 = suff_stats[1]['Muz2'] / (suff_stats[1]['nt'] - len(emissions_list))
-            Muz21 = suff_stats[1]['Muz21'] / (suff_stats[1]['nt'] - len(emissions_list))
+            Mz1 = suff_stats[1]['Mz1']
+            Mz2 = suff_stats[1]['Mz2']
+            Mz12 = suff_stats[1]['Mz12']
+            Mu1 = suff_stats[1]['Mu1']
+            Muz2 = suff_stats[1]['Muz2']
+            Muz21 = suff_stats[1]['Muz21']
 
-            Mz = suff_stats[1]['Mz'] / suff_stats[1]['nt']
-            Mu2 = suff_stats[1]['Mu2'] / suff_stats[1]['nt']
-            Muz = suff_stats[1]['Muz'] / suff_stats[1]['nt']
+            Mz = suff_stats[1]['Mz']
+            Mu2 = suff_stats[1]['Mu2']
+            Muz = suff_stats[1]['Muz']
 
-            Mzy = suff_stats[1]['Mzy'] / suff_stats[1]['nt']
-            Muy = suff_stats[1]['Muy'] / suff_stats[1]['nt']
-            My = suff_stats[1]['My'] / suff_stats[1]['nt']
+            Mzy = suff_stats[1]['Mzy']
+            Muy = suff_stats[1]['Muy']
+            My = suff_stats[1]['My']
+
+            sy = suff_stats[1]['sy']
+            sm = suff_stats[1]['sm']
+            su = suff_stats[1]['su']
 
             # update dynamics matrix A & input matrix B
             # append the trivial parts of the weights from input lags
@@ -614,10 +618,13 @@ class Lgssm:
 
             # Update noise covariance Q
             if self.param_props['update']['dynamics_cov']:
-                self.dynamics_cov = (Mz2 + self.dynamics_weights @ Mz1 @ self.dynamics_weights.T + self.dynamics_input_weights @ Mu1 @ self.dynamics_input_weights.T
-                                     - self.dynamics_weights @ Mz12 - Mz12.T @ self.dynamics_weights.T
-                                     - self.dynamics_input_weights @ Muz2 - Muz2.T @ self.dynamics_input_weights.T
-                                     + self.dynamics_weights @ Muz21.T @ self.dynamics_input_weights.T + self.dynamics_input_weights @ Muz21 @ self.dynamics_weights.T) #/ (nt - 1)
+                self.dynamics_cov = ((Mz2 + self.dynamics_weights @ Mz1 @ self.dynamics_weights.T
+                                      + self.dynamics_input_weights @ Mu1 @ self.dynamics_input_weights.T
+                                      - self.dynamics_weights @ Mz12 - Mz12.T @ self.dynamics_weights.T
+                                      - self.dynamics_input_weights @ Muz2 - Muz2.T @ self.dynamics_input_weights.T
+                                      + self.dynamics_weights @ Muz21.T @ self.dynamics_input_weights.T
+                                      + self.dynamics_input_weights @ Muz21 @ self.dynamics_weights.T
+                                      ) / (suff_stats[1]['nt'] - len(emissions_list)))
 
                 self.dynamics_cov = self.dynamics_cov / 2 + self.dynamics_cov.T / 2
 
@@ -626,6 +633,7 @@ class Lgssm:
 
             # update obs matrix C & input matrix D
             if self.param_props['update']['emissions_weights'] and self.param_props['update']['emissions_input_weights']:
+                raise Exception('Updating emissions weights and emissions input weights is broken atm')
                 # do a joint update to C and D
                 Mlin = np.concatenate((Mzy, Muy), axis=0)  # from linear terms
                 Mquad = iu.block([[Mz, Muz.T], [Muz, Mu2]], dims=(1, 0))  # from quadratic terms
@@ -634,25 +642,36 @@ class Lgssm:
                 self.emissions_input_weights = CDnew[:, nz:-1]  # new B
                 self.emissions_offset = CDnew[:, -1]  # new B
             elif self.param_props['update']['emissions_weights']:  # update C only
+                raise Exception('Updating emissions weights and emissions input weights is broken atm')
+
                 Cnew = np.linalg.solve(Mz.T, Mzy - Muz.T @ self.emissions_input_weights.T).T  # new C
                 self.emissions_weights = Cnew[:, :-1]
                 self.emissions_offset = Cnew[:, -1]  # new B
             elif self.param_props['update']['emissions_input_weights']:  # update D only
+                raise Exception('Updating emissions weights and emissions input weights is broken atm')
+
                 Dnew = np.linalg.solve(Mu2.T, Muy - Muz @ self.emissions_weights.T).T  # new D
                 self.emissions_input_weights = Dnew[:, :-1]
                 self.emissions_offset = Dnew[:, -1]  # new B
             else:
-                self.emissions_offset = np.linalg.solve(Mu2.T, (Muy - Muz @ self.emissions_weights.T)).T[:, -1]  # new d
+                self.emissions_offset = (sy - self.emissions_weights @ sm - self.emissions_input_weights @ su) / (suff_stats[1]['nt'])
 
             # update obs noise covariance R
             if self.param_props['update']['emissions_cov']:
-                ew = np.concatenate((self.emissions_input_weights, self.emissions_offset[:, None]), axis=1)
-                self.emissions_cov = (My + self.emissions_weights @ Mz @ self.emissions_weights.T
-                                      + ew @ Mu2 @ ew.T
+                self.emissions_cov = ((My + self.emissions_weights @ Mz @ self.emissions_weights.T
+                                      + self.emissions_input_weights @ Mu2 @ self.emissions_input_weights.T
                                       - self.emissions_weights @ Mzy - Mzy.T @ self.emissions_weights.T
-                                      - ew @ Muy - Muy.T @ ew.T
-                                      + self.emissions_weights @ Muz.T @ ew.T
-                                      + ew @ Muz @ self.emissions_weights.T)
+                                      - self.emissions_input_weights @ Muy - Muy.T @ self.emissions_input_weights.T
+                                      + self.emissions_weights @ Muz.T @ self.emissions_input_weights.T
+                                      + self.emissions_input_weights @ Muz @ self.emissions_weights.T
+
+                                      - sy[:, None] @ self.emissions_offset[:, None].T - self.emissions_offset[:, None] @ sy[:, None].T
+                                      + self.emissions_weights @ sm[:, None] @ self.emissions_offset[:, None].T
+                                      + self.emissions_offset[:, None] @ sm[:, None].T @ self.emissions_weights.T
+                                      + self.emissions_input_weights @ su[:, None] @ self.emissions_offset[:, None].T
+                                      + self.emissions_offset[:, None] @ su[:, None].T @ self.emissions_input_weights.T
+                                      ) / (suff_stats[1]['nt'])
+                                      + self.emissions_offset[:, None] @ self.emissions_offset[:, None].T)
 
                 if self.param_props['shape']['emissions_cov'] == 'diag':
                     self.emissions_cov = np.diag(np.diag(self.emissions_cov))
@@ -671,8 +690,6 @@ class Lgssm:
 
         dynamics_inputs = self.get_lagged_data(inputs, self.dynamics_input_lags)
         emissions_inputs = self.get_lagged_data(inputs, self.emissions_input_lags)
-        # add in offset for emissions
-        emissions_inputs = np.concatenate((emissions_inputs, np.ones((emissions_inputs.shape[0], 1))), axis=1)
 
         smoothed_covs_sum = suff_stats['smoothed_covs_sum']
         smoothed_crosses_sum = suff_stats['smoothed_crosses_sum']
@@ -682,7 +699,7 @@ class Lgssm:
         mzy_correction = suff_stats['mzy_correction']
 
         y_nan_loc = np.isnan(emissions)
-        y = np.where(y_nan_loc, (self.emissions_weights @ smoothed_means.T).T, emissions)
+        y = np.where(y_nan_loc, (self.emissions_weights @ smoothed_means.T).T + self.emissions_offset, emissions)
 
         # =============== Update dynamics parameters ==============
         # Compute sufficient statistics for latents
@@ -709,6 +726,11 @@ class Lgssm:
         Mu2 = emissions_inputs.T @ emissions_inputs
         Muz = emissions_inputs.T @ smoothed_means
 
+        # stats for calculating offset
+        sy = np.sum(y, axis=0)
+        sm = np.sum(smoothed_means, axis=0)
+        su = np.sum(emissions_inputs, axis=0)
+
         suff_stats = {'Mz1': Mz1,
                       'Mz2': Mz2,
                       'Mz12': Mz12,
@@ -722,6 +744,10 @@ class Lgssm:
                       'Mz': Mz,
                       'Mu2': Mu2,
                       'Muz': Muz,
+
+                      'sy': sy,
+                      'sm': sm,
+                      'su': su,
 
                       'nt': nt,
                       }
