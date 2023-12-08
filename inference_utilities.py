@@ -132,7 +132,7 @@ def solve_masked(A, b, mask=None, ridge_penalty=None):
     return x_hat
 
 
-def fit_em(model, data, init_mean=None, init_cov=None, num_steps=10,
+def fit_em(model, data, emissions_offset=None, init_mean=None, init_cov=None, num_steps=10,
            save_folder='em_test', save_every=10, memmap_cpu_id=None, starting_step=0):
     comm = pkl5.Intracomm(MPI.COMM_WORLD)
     cpu_id = comm.Get_rank()
@@ -147,6 +147,9 @@ def fit_em(model, data, init_mean=None, init_cov=None, num_steps=10,
         if len(emissions) < size:
             raise Exception('Number of cpus must be <= number of data sets')
 
+        if emissions_offset is None:
+            emissions_offset = model.estimate_emissions_offset(emissions)
+
         if init_mean is None:
             init_mean = model.estimate_init_mean(emissions)
 
@@ -155,11 +158,11 @@ def fit_em(model, data, init_mean=None, init_cov=None, num_steps=10,
 
         starting_log_likelihood = model.log_likelihood
         starting_time = model.train_time
-        model.emissions_offset = np.nanmean(np.stack([np.nanmean(i, axis=0) for i in data['emissions']]), axis=0)
 
     else:
         emissions = None
         inputs = None
+        emissions_offset = None
         init_mean = None
         init_cov = None
 
@@ -171,11 +174,14 @@ def fit_em(model, data, init_mean=None, init_cov=None, num_steps=10,
         model = comm.bcast(model, root=0)
 
         ll, smoothed_means, new_init_covs = \
-            model.em_step(emissions, inputs, init_mean, init_cov, cpu_id=cpu_id, num_cpus=size, memmap_cpu_id=memmap_cpu_id)
+            model.em_step(emissions, inputs, emissions_offset, init_mean, init_cov,
+                          cpu_id=cpu_id, num_cpus=size, memmap_cpu_id=memmap_cpu_id)
 
         if cpu_id == 0:
             # set the initial mean and cov to the first smoothed mean / cov
             for i in range(len(smoothed_means)):
+                emissions_offset[i] = (emissions[i].sum(0) - model.emissions_weights @ smoothed_means[i].sum(0)
+                                       - model.emissions_input_weights @ inputs[i].sum(0)) / emissions[i].shape[0]
                 init_mean[i] = smoothed_means[i][0, :]
                 init_cov[i] = new_init_covs[i] / 2 + new_init_covs[i].T / 2
 
@@ -193,6 +199,7 @@ def fit_em(model, data, init_mean=None, init_cov=None, num_steps=10,
 
                 posterior_train = {'ll': ll,
                                    'posterior': smoothed_means,
+                                   'emissions_offset': emissions_offset,
                                    'init_mean': init_mean,
                                    'init_cov': init_cov,
                                    }
@@ -207,12 +214,12 @@ def fit_em(model, data, init_mean=None, init_cov=None, num_steps=10,
                 print('Estimated remaining =', time_remaining, 's')
 
     if cpu_id == 0:
-        return ll, model, init_mean, init_cov
+        return ll, model, emissions_offset, init_mean, init_cov
     else:
         return None, None, None, None
 
 
-def parallel_get_post(model, data, init_mean=None, init_cov=None, max_iter=1, converge_res=1e-2, time_lim=300,
+def parallel_get_post(model, data, emissions_offset=None, init_mean=None, init_cov=None, max_iter=1, converge_res=1e-2, time_lim=300,
                       memmap_cpu_id=None, infer_missing=False):
     comm = pkl5.Intracomm(MPI.COMM_WORLD)
     cpu_id = comm.Get_rank()
@@ -222,13 +229,16 @@ def parallel_get_post(model, data, init_mean=None, init_cov=None, max_iter=1, co
         emissions = data['emissions']
         inputs = data['inputs']
 
+        if emissions_offset is None:
+            emissions_offset = model.estimate_emissions_offset(emissions)
+
         if init_mean is None:
             init_mean = model.estimate_init_mean(emissions)
 
         if init_cov is None:
             init_cov = model.estimate_init_cov(emissions)
 
-        test_data_packaged = model.package_data_mpi(emissions, inputs, init_mean, init_cov, size)
+        test_data_packaged = model.package_data_mpi(emissions, inputs, emissions_offset, init_mean, init_cov, size)
     else:
         test_data_packaged = None
 
@@ -241,24 +251,30 @@ def parallel_get_post(model, data, init_mean=None, init_cov=None, max_iter=1, co
         for ii, i in enumerate(data_out):
             emissions = i[0][:time_lim, :].copy()
             inputs = i[1][:time_lim, :].copy()
-            init_mean = i[2].copy()
-            init_cov = i[3].copy()
+            emissions_offset = i[2].copy()
+            init_mean = i[3].copy()
+            init_cov = i[4].copy()
             converged = False
             iter_num = 1
 
             while not converged and iter_num <= max_iter:
-                ll, smoothed_means, suff_stats = model.lgssm_smoother(emissions, inputs, init_mean, init_cov,
+                ll, smoothed_means, suff_stats = model.lgssm_smoother(emissions, inputs, emissions_offset,
+                                                                      init_mean, init_cov,
                                                                       memmap_cpu_id=memmap_cpu_id)
 
+                emissions_offset_new = (emissions.sum(0) - model.emissions_weights @ smoothed_means.sum(0)
+                                        - model.emissions_input_weights @ inputs.sum(0)) / emissions.shape[0]
                 init_mean_new = smoothed_means[0, :].copy()
                 init_cov_new = suff_stats['first_cov'].copy()
                 init_cov_new = init_cov_new / 2 + init_cov_new.T / 2
 
+                emissions_offset_same = np.max(np.abs(emissions_offset - emissions_offset_new)) < converge_res
                 init_mean_same = np.max(np.abs(init_mean - init_mean_new)) < converge_res
                 init_cov_same = np.max(np.abs(init_cov - init_cov_new)) < converge_res
-                if init_mean_same and init_cov_same:
+                if emissions_offset_same and init_mean_same and init_cov_same:
                     converged = True
                 else:
+                    emissions_offset = emissions_offset_new.copy()
                     init_mean = init_mean_new.copy()
                     init_cov = init_cov_new.copy()
 
@@ -269,9 +285,13 @@ def parallel_get_post(model, data, init_mean=None, init_cov=None, max_iter=1, co
             emissions = i[0].copy()
             inputs = i[1].copy()
 
-            ll, posterior = model.lgssm_smoother(emissions, inputs, init_mean, init_cov, memmap_cpu_id)[:2]
-            model_sampled = model.sample(num_time=emissions.shape[0], inputs_list=[inputs], init_mean=[init_mean], init_cov=[init_cov], add_noise=False)
-            model_sampled_noise = model.sample(num_time=emissions.shape[0], inputs_list=[inputs], init_mean=[init_mean], init_cov=[init_cov])
+            ll, posterior = model.lgssm_smoother(emissions, inputs, emissions_offset, init_mean, init_cov, memmap_cpu_id)[:2]
+            model_sampled = model.sample(num_time=emissions.shape[0], inputs_list=[inputs],
+                                         emissions_offset=[emissions_offset], init_mean=[init_mean], init_cov=[init_cov],
+                                         add_noise=False)
+            model_sampled_noise = model.sample(num_time=emissions.shape[0], inputs_list=[inputs],
+                                               emissions_offset=[emissions_offset], init_mean=[init_mean], init_cov=[init_cov],
+                                               add_noise=False)
 
             posterior = posterior[:, :model.dynamics_dim]
             model_sampled = model_sampled['latents'][0][:, :model.dynamics_dim]
@@ -289,7 +309,9 @@ def parallel_get_post(model, data, init_mean=None, init_cov=None, max_iter=1, co
                     if np.any(~np.isnan(emissions[:, n])):
                         emissions_missing = emissions.copy()
                         emissions_missing[:, n] = np.nan
-                        ll_missing_this, posterior_recon = model.lgssm_smoother(emissions_missing, inputs, init_mean, init_cov, memmap_cpu_id)[:2]
+                        ll_missing_this, posterior_recon = model.lgssm_smoother(emissions_missing, inputs,
+                                                                                emissions_offset, init_mean, init_cov,
+                                                                                memmap_cpu_id)[:2]
 
                         ll_missing.append(ll_missing_this)
                         posterior_missing[:, n] = posterior_recon[:, n]
@@ -297,7 +319,8 @@ def parallel_get_post(model, data, init_mean=None, init_cov=None, max_iter=1, co
                         ll_missing.append(ll.copy())
                         posterior_missing[:, n] = posterior[:, n]
 
-            ll_smeans.append((ll, posterior, model_sampled, model_sampled_noise, init_mean, init_cov, posterior_missing, ll_missing))
+            ll_smeans.append((ll, posterior, model_sampled, model_sampled_noise, emissions_offset, init_mean, init_cov,
+                              posterior_missing, ll_missing))
     else:
         ll_smeans = None
 
@@ -320,15 +343,17 @@ def parallel_get_post(model, data, init_mean=None, init_cov=None, max_iter=1, co
         smoothed_means = [i[1] for i in ll_smeans]
         model_sampled = [i[2] for i in ll_smeans]
         model_sampled_noise = [i[3] for i in ll_smeans]
-        init_mean = [i[4] for i in ll_smeans]
-        init_cov = [i[5] for i in ll_smeans]
-        posterior_missing = [i[6] for i in ll_smeans]
-        ll_missing = [i[7] for i in ll_smeans]
+        emissions_offset = [i[4] for i in ll_smeans]
+        init_mean = [i[5] for i in ll_smeans]
+        init_cov = [i[6] for i in ll_smeans]
+        posterior_missing = [i[7] for i in ll_smeans]
+        ll_missing = [i[8] for i in ll_smeans]
 
         inference_test = {'ll': ll,
                           'posterior': smoothed_means,
                           'model_sampled': model_sampled,
                           'model_sampled_noise': model_sampled_noise,
+                          'emissions_offset': emissions_offset,
                           'init_mean': init_mean,
                           'init_cov': init_cov,
                           'cell_ids': model.cell_ids,
@@ -349,10 +374,11 @@ def parallel_get_ll(model, data):
     if cpu_id == 0:
         emissions = data['emissions']
         inputs = data['inputs']
+        emissions_offset = data['emissions_offset']
         init_mean = data['init_mean']
         init_cov = data['init_cov']
 
-        test_data_packaged = model.package_data_mpi(emissions, inputs, init_mean, init_cov, size)
+        test_data_packaged = model.package_data_mpi(emissions, inputs, emissions_offset, init_mean, init_cov, size)
     else:
         test_data_packaged = None
 
@@ -362,10 +388,11 @@ def parallel_get_ll(model, data):
 
     emissions_this = [i[0] for i in data_out]
     inputs_this = [i[1] for i in data_out]
-    init_mean_this = [i[2] for i in data_out]
-    init_cov_this = [i[3] for i in data_out]
+    emissions_offset = [i[2] for i in data_out]
+    init_mean_this = [i[3] for i in data_out]
+    init_cov_this = [i[4] for i in data_out]
 
-    ll = model.get_ll(emissions_this, inputs_this,
+    ll = model.get_ll(emissions_this, inputs_this, emissions_offset,
                       init_mean_this, init_cov_this)
 
     ll = individual_gather(ll)

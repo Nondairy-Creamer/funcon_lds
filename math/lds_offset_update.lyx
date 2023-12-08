@@ -258,7 +258,7 @@ for
 \end_layout
 
 \begin_layout Standard
-\begin_inset Formula $TR=\frac{1}{T}\left(Y-C\tilde{Y}-\tilde{Y}^{\intercal}C^{\intercal}-DU_{y}-U_{y}^{\intercal}D^{\intercal}-\sum_{t=1}^{T}y_{t}d^{\intercal}-d\sum_{t=1}^{T}y_{t}^{\intercal}+CM_{(1,T)}C^{\intercal}+C\sum_{t=1}^{T}m_{t}d^{\intercal}+d\sum_{t=1}^{T}m_{t}^{\intercal}C^{\intercal}+D\sum_{t=1}^{T}U_{(1,T)}D^{\intercal}+D\sum_{t=1}^{T}u_{t}d^{\intercal}+d\sum_{t=1}^{T}u_{t}^{\intercal}D^{\intercal}\right)+dd^{\intercal}$
+\begin_inset Formula $R=\frac{1}{T}\left(Y-C\tilde{Y}-\tilde{Y}^{\intercal}C^{\intercal}-DU_{y}-U_{y}^{\intercal}D^{\intercal}-\sum_{t=1}^{T}y_{t}d^{\intercal}-d\sum_{t=1}^{T}y_{t}^{\intercal}+CM_{(1,T)}C^{\intercal}+C\sum_{t=1}^{T}m_{t}d^{\intercal}+d\sum_{t=1}^{T}m_{t}^{\intercal}C^{\intercal}+D\sum_{t=1}^{T}U_{(1,T)}D^{\intercal}+D\sum_{t=1}^{T}u_{t}d^{\intercal}+d\sum_{t=1}^{T}u_{t}^{\intercal}D^{\intercal}\right)+dd^{\intercal}$
 \end_inset
 
 

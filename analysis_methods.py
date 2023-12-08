@@ -169,21 +169,6 @@ def plot_model_params(model, model_true=None, cell_ids_chosen=None):
 
     plot_matrix(R, R_true, labels_x=cell_ids_chosen, labels_y=cell_ids_chosen, title='R')
 
-    # Plot the offset
-    d = model_params['trained']['emissions_offset']
-    d = d[neuron_inds_chosen]
-
-    plot_x = np.arange(neuron_inds_chosen.shape[0])
-    plt.figure()
-    plt.plot(plot_x, d, label='fit emissions offset')
-    plt.xticks(plot_x, labels=cell_ids_chosen)
-
-    if has_ground_truth:
-        d_true = model_params_true['trained']['emissions_offset']
-        d_true = d_true[neuron_inds_chosen]
-        plt.plot(plot_x, d_true, label='true emissions offset')
-
-    plt.legend()
     plt.show()
 
     return
