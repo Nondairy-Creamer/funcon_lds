@@ -221,7 +221,7 @@ class Lgssm:
         init_cov_list = []
 
         if emissions_offset is None:
-            emissions_offset = [rng.standard_normal(self.dynamics_dim_full) for i in range(num_data_sets)]
+            emissions_offset = [rng.standard_normal(self.dynamics_dim) for i in range(num_data_sets)]
 
         if init_mean is None:
             init_mean = [np.zeros(self.dynamics_dim_full) for i in range(num_data_sets)]
@@ -682,12 +682,14 @@ class Lgssm:
             # update obs noise covariance R
             if self.param_props['update']['emissions_cov']:
                 self.emissions_cov = ((My + self.emissions_weights @ Mz @ self.emissions_weights.T
-                                      + self.emissions_input_weights @ Mu2 @ self.emissions_input_weights.T
-                                      - self.emissions_weights @ Mzy - Mzy.T @ self.emissions_weights.T
-                                      - self.emissions_input_weights @ Muy - Muy.T @ self.emissions_input_weights.T
-                                      + self.emissions_weights @ Muz.T @ self.emissions_input_weights.T
-                                      + self.emissions_input_weights @ Muz @ self.emissions_weights.T
-                                      - sy + sm + su + dd) / suff_stats[1]['nt'])
+                                       + self.emissions_input_weights @ Mu2 @ self.emissions_input_weights.T
+                                       - self.emissions_weights @ Mzy - Mzy.T @ self.emissions_weights.T
+                                       - self.emissions_input_weights @ Muy - Muy.T @ self.emissions_input_weights.T
+                                       + self.emissions_weights @ Muz.T @ self.emissions_input_weights.T
+                                       + self.emissions_input_weights @ Muz @ self.emissions_weights.T
+                                       + self.emissions_weights @ sm + sm.T @ self.emissions_weights.T
+                                       + self.emissions_input_weights @ su + su.T @ self.emissions_input_weights.T
+                                       - sy - sy.T + dd) / suff_stats[1]['nt'])
 
                 if self.param_props['shape']['emissions_cov'] == 'diag':
                     self.emissions_cov = np.diag(np.diag(self.emissions_cov))
@@ -744,11 +746,8 @@ class Lgssm:
 
         # stats for calculating offset
         sy = np.sum(y, axis=0)[:, None] @ emissions_offset[:, None].T
-        sy = sy + sy.T
         sm = np.sum(smoothed_means, axis=0)[:, None] @ emissions_offset[:, None].T
-        sm = sm + sm.T
         su = np.sum(emissions_inputs, axis=0)[:, None] @ emissions_offset[:, None].T
-        su = su + su.T
         dd = nt * emissions_offset[:, None] @ emissions_offset[:, None].T
 
         suff_stats = {'Mz1': Mz1,
