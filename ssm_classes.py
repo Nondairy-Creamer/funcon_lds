@@ -687,7 +687,7 @@ class Lgssm:
                                       - self.emissions_input_weights @ Muy - Muy.T @ self.emissions_input_weights.T
                                       + self.emissions_weights @ Muz.T @ self.emissions_input_weights.T
                                       + self.emissions_input_weights @ Muz @ self.emissions_weights.T
-                                      - sy + sm + su) / (suff_stats[1]['nt']) + dd)
+                                      - sy + sm + su + dd) / suff_stats[1]['nt'])
 
                 if self.param_props['shape']['emissions_cov'] == 'diag':
                     self.emissions_cov = np.diag(np.diag(self.emissions_cov))
@@ -749,7 +749,7 @@ class Lgssm:
         sm = sm + sm.T
         su = np.sum(emissions_inputs, axis=0)[:, None] @ emissions_offset[:, None].T
         su = su + su.T
-        dd = emissions_offset[:, None] @ emissions_offset[:, None].T
+        dd = nt * emissions_offset[:, None] @ emissions_offset[:, None].T
 
         suff_stats = {'Mz1': Mz1,
                       'Mz2': Mz2,

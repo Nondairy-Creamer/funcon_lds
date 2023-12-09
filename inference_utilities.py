@@ -180,7 +180,8 @@ def fit_em(model, data, emissions_offset=None, init_mean=None, init_cov=None, nu
         if cpu_id == 0:
             # set the initial mean and cov to the first smoothed mean / cov
             for i in range(len(smoothed_means)):
-                emissions_offset[i] = (emissions[i].sum(0) - model.emissions_weights @ smoothed_means[i].sum(0)
+                y = np.where(np.isnan(emissions[i]), (model.emissions_weights @ smoothed_means[i].T).T + emissions_offset[i], emissions[i])
+                emissions_offset[i] = (y.sum(0) - model.emissions_weights @ smoothed_means[i].sum(0)
                                        - model.emissions_input_weights @ inputs[i].sum(0)) / emissions[i].shape[0]
                 init_mean[i] = smoothed_means[i][0, :]
                 init_cov[i] = new_init_covs[i] / 2 + new_init_covs[i].T / 2
@@ -216,7 +217,7 @@ def fit_em(model, data, emissions_offset=None, init_mean=None, init_cov=None, nu
     if cpu_id == 0:
         return ll, model, emissions_offset, init_mean, init_cov
     else:
-        return None, None, None, None
+        return None, None, None, None, None
 
 
 def parallel_get_post(model, data, emissions_offset=None, init_mean=None, init_cov=None, max_iter=1, converge_res=1e-2, time_lim=300,
@@ -262,7 +263,8 @@ def parallel_get_post(model, data, emissions_offset=None, init_mean=None, init_c
                                                                       init_mean, init_cov,
                                                                       memmap_cpu_id=memmap_cpu_id)
 
-                emissions_offset_new = (emissions.sum(0) - model.emissions_weights @ smoothed_means.sum(0)
+                y = np.where(np.isnan(emissions), (model.emissions_weights @ smoothed_means.T).T + emissions_offset, emissions)
+                emissions_offset_new = (y.sum(0) - model.emissions_weights @ smoothed_means.sum(0)
                                         - model.emissions_input_weights @ inputs.sum(0)) / emissions.shape[0]
                 init_mean_new = smoothed_means[0, :].copy()
                 init_cov_new = suff_stats['first_cov'].copy()
