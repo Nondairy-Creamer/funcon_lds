@@ -173,16 +173,13 @@ def fit_em(model, data, emissions_offset=None, init_mean=None, init_cov=None, nu
     for ep in range(starting_step, starting_step + num_steps):
         model = comm.bcast(model, root=0)
 
-        ll, smoothed_means, new_init_covs = \
+        ll, smoothed_means, emissions_offset, new_init_covs = \
             model.em_step(emissions, inputs, emissions_offset, init_mean, init_cov,
                           cpu_id=cpu_id, num_cpus=size, memmap_cpu_id=memmap_cpu_id)
 
         if cpu_id == 0:
             # set the initial mean and cov to the first smoothed mean / cov
             for i in range(len(smoothed_means)):
-                y = np.where(np.isnan(emissions[i]), (model.emissions_weights @ smoothed_means[i].T).T + emissions_offset[i], emissions[i])
-                emissions_offset[i] = (y.sum(0) - model.emissions_weights @ smoothed_means[i].sum(0)
-                                       - model.emissions_input_weights @ inputs[i].sum(0)) / emissions[i].shape[0]
                 init_mean[i] = smoothed_means[i][0, :]
                 init_cov[i] = new_init_covs[i] / 2 + new_init_covs[i].T / 2
 

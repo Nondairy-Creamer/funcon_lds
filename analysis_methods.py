@@ -145,6 +145,22 @@ def plot_model_params(model, model_true=None, cell_ids_chosen=None):
 
     plot_matrix(B, B_true, labels_y=cell_ids_chosen, title='B')
 
+    # plot the C matrix
+    C_full = model_params['trained']['emissions_weights']
+    C = np.split(C_full, model.dynamics_lags, axis=1)
+    C = np.stack([np.diag(i) for i in C]).T
+    C = C[neuron_inds_chosen, :]
+
+    if has_ground_truth:
+        C_full_true = model_params_true['trained']['emissions_weights']
+        C_true = np.split(C_full_true, model.dynamics_lags, axis=1)
+        C_true = np.stack([np.diag(i) for i in C_true]).T
+        C_true = C_true[neuron_inds_chosen, :]
+    else:
+        C_true = None
+
+    plot_matrix(C, C_true, labels_y=cell_ids_chosen, title='C')
+
     # Plot the Q matrix
     Q = model_params['trained']['dynamics_cov'][:model.dynamics_dim, :model.dynamics_dim]
     Q = Q[np.ix_(neuron_inds_chosen, neuron_inds_chosen)]

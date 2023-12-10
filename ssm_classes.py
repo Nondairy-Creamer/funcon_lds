@@ -95,26 +95,28 @@ class Lgssm:
             anat = au.load_anatomical_data(self.cell_ids)
             combined_mask = (anat['chem_conn'] + anat['gap_conn'] + anat['pep_conn'] + np.eye(self.dynamics_dim)) > 0
             self.param_props['mask']['dynamics_weights'] = np.tile(combined_mask, (1, self.dynamics_lags))
-
         elif self.param_props['shape']['dynamics_weights'] == 'synaptic':
             anat = au.load_anatomical_data(self.cell_ids)
             combined_mask = (anat['chem_conn'] + anat['gap_conn'] + np.eye(self.dynamics_dim)) > 0
             self.param_props['mask']['dynamics_weights'] = np.tile(combined_mask, (1, self.dynamics_lags))
-
         elif self.param_props['shape']['dynamics_weights'] == 'full':
             self.param_props['mask']['dynamics_weights'] = np.ones((self.dynamics_dim, self.dynamics_dim_full)) == 1
-
         else:
             raise Exception('dynamics weights mask shape not recognized')
 
         if self.param_props['shape']['dynamics_input_weights'] == 'diag':
             self.param_props['mask']['dynamics_input_weights'] = np.tile(np.eye(self.input_dim, dtype=bool), (1, self.dynamics_input_lags))
-
         elif self.param_props['shape']['dynamics_input_weights'] == 'full':
             self.param_props['mask']['dynamics_input_weights'] = np.ones((self.dynamics_dim, self.dynamics_input_dim_full)) == 1
-
         else:
-            raise Exception('dynamics weights mask shape not recognized')
+            raise Exception('dynamics input weights mask shape not recognized')
+
+        if self.param_props['shape']['emissions_weights'] == 'diag':
+            self.param_props['mask']['emissions_weights'] = np.tile(np.eye(self.emissions_dim, dtype=bool), (1, self.dynamics_lags))
+        elif self.param_props['shape']['emissions__weights'] == 'full':
+            self.param_props['mask']['emissions_weights'] = np.ones((self.emissions_dim, self.dynamics_dim_full)) == 1
+        else:
+            raise Exception('emissions weights mask shape not recognized')
 
     def save(self, path='trained_models/trained_model.pkl'):
         save_file = open(path, 'wb')
@@ -660,8 +662,14 @@ class Lgssm:
                     self.dynamics_cov = np.diag(np.diag(self.dynamics_cov))
 
             # update obs matrix C & input matrix D
+            y = []
+            for i in range(len(emissions_list)):
+                em_nan = np.isnan(emissions_list[i])
+                prediction = (self.emissions_weights @ suff_stats[2][i].T).T + emissions_offset_list[i]
+                y.append(np.where(em_nan, prediction, emissions_list[i]))
+
             if self.param_props['update']['emissions_weights'] and self.param_props['update']['emissions_input_weights']:
-                raise Exception('Updating emissions weights and emissions input weights is broken atm, because it doesnt deal with emissions offset')
+                raise Exception('Updating emissions input weights is broken atm, because it doesnt deal with emissions offset')
                 # do a joint update to C and D
                 Mlin = np.concatenate((Mzy, Muy), axis=0)  # from linear terms
                 Mquad = iu.block([[Mz, Muz.T], [Muz, Mu2]], dims=(1, 0))  # from quadratic terms
@@ -669,15 +677,60 @@ class Lgssm:
                 self.emissions_weights = CDnew[:, :nz]  # new A
                 self.emissions_input_weights = CDnew[:, nz:-1]  # new B
             elif self.param_props['update']['emissions_weights']:  # update C only
-                raise Exception('Updating emissions weights and emissions input weights is broken atm, because it doesnt deal with emissions offset')
+                one_vec = np.ones((self.dynamics_dim_full, 1))
+                sm_ind = np.stack([i.sum(0) for i in suff_stats[2]]).T
+                alpha = np.block([[Mz, len(emissions_list) * one_vec], [one_vec.T, np.zeros((1, 1))]])
+                zero_pad = np.zeros((1, sm_ind.shape[1]))
+                beta = np.concatenate((sm_ind, zero_pad), axis=0)
+                delta = np.diag([i.shape[0] for i in emissions_list])
+                feat_mat = np.block([[alpha, beta], [beta.T, delta]])
+                sum_ys = np.stack([i.sum(0) for i in y]).T
+                sum_us = np.stack([self.emissions_input_weights @ i.sum(0) for i in inputs_list]).T
+                one_vec = np.ones((self.emissions_dim, 1))
+                lin_out = np.block([Mzy.T, one_vec, sum_ys - sum_us]).T
 
-                Cnew = np.linalg.solve(Mz.T, Mzy - Muz.T @ self.emissions_input_weights.T).T  # new C
-                self.emissions_weights = Cnew[:, :-1]
+                em_mask = np.zeros((feat_mat.shape[0], lin_out.shape[1])) == 0
+                em_mask[:self.dynamics_dim_full, :] = self.param_props['mask']['emissions_weights'].T
+                c_lambda_d = iu.solve_masked(feat_mat, lin_out, mask=em_mask)
+
+
+                # delta_inv = np.array([1 / i.shape[0] for i in emissions_list])[:, None]
+                # f_inv = np.linalg.inv(alpha - beta @ (delta_inv * beta.T))
+                # mat_inv_11 = f_inv
+                # mat_inv_12 = -f_inv @ (beta * delta_inv.T)
+                # mat_inv_21 = -(delta_inv * beta.T) @ f_inv
+                # mat_inv_22 = np.diag(delta_inv[:, 0]) + (delta_inv * beta.T) @ f_inv @ (beta * delta_inv.T)
+                # mat_inv = np.block([[mat_inv_11, mat_inv_12], [mat_inv_21, mat_inv_22]])
+                #
+
+                # lin_out = np.block([Mzy.T, one_vec, sum_ys - sum_us]).T
+                #
+                # # find the solution to the linear equation, respecting the mask
+                # c_lambda_d = np.zeros((mat_inv.shape[0], lin_out.shape[1]))
+                # em_mask = np.zeros_like(c_lambda_d) == 0
+                # em_mask[:self.emissions_dim, :] = self.param_props['mask']['emissions_weights']
+                # for i in range(lin_out.shape[1]):
+                #     nonzero_loc = em_mask[:, i]
+                #     mat_inv_zerod = mat_inv[np.ix_(nonzero_loc, nonzero_loc)]
+                #
+                #     c_lambda_d[nonzero_loc, i]= mat_inv_zerod @ lin_out[nonzero_loc, i]
+
+                self.emissions_weights = c_lambda_d[:self.dynamics_dim_full, :].T
+                ls = c_lambda_d[self.dynamics_dim_full, :]
+                ds = c_lambda_d[self.dynamics_dim_full+1:, :]
+                emissions_offset_list = np.split(ds, ds.shape[0], axis=0)
+                emissions_offset_list = [i[0, :] for i in emissions_offset_list]
+
             elif self.param_props['update']['emissions_input_weights']:  # update D only
-                raise Exception('Updating emissions weights and emissions input weights is broken atm, because it doesnt deal with emissions offset')
+                raise Exception('Updating emissions input weights is broken atm, because it doesnt deal with emissions offset')
 
                 Dnew = np.linalg.solve(Mu2.T, Muy - Muz @ self.emissions_weights.T).T  # new D
                 self.emissions_input_weights = Dnew[:, :-1]
+            else:
+                # suff_stats[2] are the smoothed means
+                for i in range(len(emissions_list)):
+                    emissions_offset_list[i] = (y[i].sum(0) - self.emissions_weights @ suff_stats[2][i].sum(0)
+                                                - self.emissions_input_weights @ inputs_list[i].sum(0)) / emissions_list[i].shape[0]
 
             # update obs noise covariance R
             if self.param_props['update']['emissions_cov']:
@@ -696,9 +749,9 @@ class Lgssm:
 
                 self.emissions_cov = self.emissions_cov / 2 + self.emissions_cov.T / 2
 
-            return suff_stats[0], suff_stats[2], suff_stats[3]
+            return suff_stats[0], suff_stats[2], emissions_offset_list, suff_stats[3]
 
-        return None, None, None
+        return None, None, None, None
 
     def get_suff_stats(self, emissions, inputs, emissions_offset, init_mean, init_cov, memmap_cpu_id=None):
         nt = emissions.shape[0]

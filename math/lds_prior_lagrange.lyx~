@@ -29,10 +29,9 @@
 \bibtex_command default
 \index_command default
 \paperfontsize default
-\spacing single
 \use_hyperref false
 \papersize default
-\use_geometry true
+\use_geometry false
 \use_package amsmath 1
 \use_package amssymb 1
 \use_package cancel 1
@@ -45,7 +44,6 @@
 \use_package undertilde 1
 \cite_engine basic
 \cite_engine_type default
-\biblio_style plain
 \use_bibtopic false
 \use_indices false
 \paperorientation portrait
@@ -57,10 +55,6 @@
 \shortcut idx
 \color #008000
 \end_index
-\leftmargin 2cm
-\topmargin 2cm
-\rightmargin 2cm
-\bottommargin 2cm
 \secnumdepth 3
 \tocdepth 3
 \paragraph_separation indent
@@ -155,61 +149,275 @@ If
 \end_layout
 
 \begin_layout Standard
-Complete data log likelihood for the emissions.
- We're going to add lagrange multiplier to make 
+Complete data log likelihood
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\mathbb{E}\left[\sum_{t=1}^{T}\log\mathcal{N}(y_{t};Cx_{t},R)\right]=-\frac{1}{2}\mathbb{E}\left[\sum_{t=1}^{T}(y_{t}-Cx_{t}-Du_{t}-d)^{\intercal}R^{-1}(y_{t}-Cx_{t}-Du_{t}-d)\right]-\frac{T}{2}\log|2\pi R|$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $=-\frac{1}{2}\text{Tr}\left[R^{-1}\sum_{t=1}^{T}y_{t}y_{t}^{\intercal}-2R^{-1}C\sum_{t=1}^{T}\mathbb{E}[x_{t}y_{t}^{\intercal}]-2R^{-1}D\sum_{t=1}^{T}u_{t}y_{t}^{\intercal}-2R^{-1}\sum_{t=1}^{T}y_{t}d^{\intercal}+C^{\intercal}R^{-1}C\sum_{t=1}^{T}\mathbb{E}[x_{t}x_{t}^{\intercal}]+2R^{-1}C\sum_{t=1}^{T}\mathbb{E}[x_{t}d^{\intercal}]+D^{\intercal}R^{-1}D\sum_{t=1}^{T}u_{t}u_{t}^{\intercal}+2R^{-1}D\sum_{t=1}^{T}u_{t}d^{\intercal}+R^{-1}Tdd^{\intercal}\right]-\frac{T}{2}\log|2\pi R|-\lambda^{\intercal}(1-C1)$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $=-\frac{1}{2}\text{Tr}\left[R^{-1}\sum_{t=1}^{T}y_{t}y_{t}^{\intercal}-2R^{-1}C\sum_{t=1}^{T}m_{t}y_{t}^{\intercal}-2R^{-1}D\sum_{t=1}^{T}u_{t}y_{t}^{\intercal}-2R^{-1}\sum_{t=1}^{T}y_{t}d^{\intercal}+C^{\intercal}R^{-1}C\sum_{t=1}^{T}m_{t}m_{t}^{\intercal}+2R^{-1}C\sum_{t=1}^{T}m_{t}d^{\intercal}+D^{\intercal}R^{-1}D\sum_{t=1}^{T}u_{t}u_{t}^{\intercal}+2R^{-1}D\sum_{t=1}^{T}u_{t}d^{\intercal}+R^{-1}Tdd^{\intercal}\right]-\frac{T}{2}\log|2\pi R|-\lambda^{\intercal}(1-C1)$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $=-\frac{1}{2}\text{Tr}\left[R^{-1}\sum_{t=1}^{T}y_{t}y_{t}^{\intercal}\right]+\text{Tr}\left[R^{-1}C\sum_{t=1}^{T}m_{t}y_{t}^{\intercal}\right]+\text{Tr}\left[R^{-1}D\sum_{t=1}^{T}u_{t}y_{t}^{\intercal}\right]+\text{Tr}\left[R^{-1}\sum_{t=1}^{T}y_{t}d^{\intercal}\right]-\frac{1}{2}\text{Tr}\left[C^{\intercal}R^{-1}C\sum_{t=1}^{T}m_{t}m_{t}^{\intercal}\right]-\text{Tr}\left[R^{-1}C\sum_{t=1}^{T}m_{t}d^{\intercal}\right]-\frac{1}{2}\text{Tr}\left[D^{\intercal}R^{-1}D\sum_{t=1}^{T}u_{t}u_{t}^{\intercal}\right]-\text{Tr}\left[R^{-1}D\sum_{t=1}^{T}u_{t}d^{\intercal}\right]-\frac{T}{2}\text{Tr}\left[R^{-1}dd^{\intercal}\right]-\frac{T}{2}\log|2\pi R|-\lambda^{\intercal}(1-C1)$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $=-\frac{1}{2}\text{Tr}\left[R^{-1}Y\right]+\text{Tr}\left[R^{-1}C\tilde{Y}\right]+\text{Tr}\left[R^{-1}DU_{y}\right]+\text{Tr}\left[R^{-1}\sum_{t=1}^{T}y_{t}d^{\intercal}\right]-\frac{1}{2}\text{Tr}\left[C^{\intercal}R^{-1}CM_{(1,T)}\right]-\text{Tr}\left[R^{-1}C\sum_{t=1}^{T}m_{t}d^{\intercal}\right]-\frac{1}{2}\text{Tr}\left[D^{\intercal}R^{-1}D\sum_{t=1}^{T}U_{(1,T)}\right]-\text{Tr}\left[R^{-1}D\sum_{t=1}^{T}u_{t}d^{\intercal}\right]-\frac{T}{2}\text{Tr}\left[R^{-1}dd^{\intercal}\right]-\frac{T}{2}\log|2\pi R|-\lambda^{\intercal}1+\lambda^{\intercal}C1$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Derivative with respect to 
+\begin_inset Formula $d$
+\end_inset
+
+, and sneakily add in the sums over 
+\begin_inset Formula $W$
+\end_inset
+
+ worms
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\frac{\partial L_{CD}}{\partial C}=R^{-1}\sum_{i}^{W}\tilde{Y}^{(i)\intercal}-R^{-1}C\sum_{i}^{W}M_{(1,T)}^{(i)}-R^{-1}\sum_{i}^{W}d^{(i)}\sum_{t=1}^{T}m_{t}^{(i)\intercal}-W\lambda1^{\intercal}$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\frac{\partial L_{CD}}{\partial\lambda}=WC1-W1$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\frac{\partial L_{CD}}{\partial d_{i}}=R^{-1}\sum_{t=1}^{T^{(i)}}y_{t}^{(i)}-R^{-1}C\sum_{t=1}^{T_{i}}m_{t}^{(i)}-R^{-1}D\sum_{t=1}^{T^{(i)}}u_{t}^{(i)}-R^{-1}T^{(i)}d^{(i)}$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+set all terms to 0
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $0=\sum_{i}^{W}\tilde{Y}^{(i)\intercal}-C\sum_{i}^{W}M_{(1,T)}^{(i)}-d\sum_{i}^{W}\sum_{t=1}^{T^{(i)}}m_{t}^{(i)\intercal}-W\lambda1^{\intercal}$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $0=C1-1$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $0=\sum_{t=1}^{T^{(i)}}y_{t}^{(i)}-C\sum_{t=1}^{T^{(i)}}m_{t}^{(i)}-D\sum_{t=1}^{T^{(i)}}u_{t}^{(i)}-T^{(i)}d^{(i)}$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+gather all terms not including 
+\begin_inset Formula $d$
+\end_inset
+
+, 
 \begin_inset Formula $C$
 \end_inset
 
- integrate to 
-\begin_inset Formula $1$
+, or 
+\begin_inset Formula $\lambda$
 \end_inset
 
 
 \end_layout
 
 \begin_layout Standard
-\begin_inset Formula $L_{CD}=$
-\end_inset
-
-
-\begin_inset Formula $-\frac{1}{2}\text{Tr}\left[R^{-1}\left(Y+CM_{(1,T)}C^{\intercal}+DU_{(1,T)}D^{\intercal}-2C\tilde{Y}-2D\tilde{U}+2D\tilde{U}_{(1,T)}C^{\intercal}\right)\right]$
+\begin_inset Formula $\sum_{i}^{W}\tilde{Y}^{(i)\intercal}=C\sum_{i}^{W}M_{(1,T)}^{(i)}+d\sum_{i}^{W}\sum_{t=1}^{T^{(i)}}m_{t}^{(i)\intercal}+W\lambda1^{\intercal}$
 \end_inset
 
 
 \end_layout
 
 \begin_layout Standard
-\begin_inset Formula $L_{CD}=$
-\end_inset
-
-
-\begin_inset Formula $-\frac{1}{2}\text{Tr}\left[R^{-1}Y\right]-\frac{1}{2}\text{Tr}\left[R^{-1}CM_{(1,T)}C^{\intercal}\right]-\frac{1}{2}\text{Tr}\left[R^{-1}DU_{(1,T)}D^{\intercal}\right]+\text{Tr}\left[R^{-1}C\tilde{Y}\right]+\text{Tr}\left[R^{-1}D\tilde{U}\right]-\text{Tr}\left[R^{-1}D\tilde{U}_{(1,T)}C^{\intercal}\right]$
+\begin_inset Formula $1=C1$
 \end_inset
 
 
 \end_layout
 
 \begin_layout Standard
-Derivatives
-\end_layout
-
-\begin_layout Standard
-Collect terms that depend on 
-\begin_inset Formula $C$
+\begin_inset Formula $\sum_{t=1}^{T^{(i)}}y_{t}^{(i)}-D\sum_{t=1}^{T^{(i)}}u_{t}^{(i)}=C\sum_{t=1}^{T^{(i)}}m_{t}^{(i)}+T^{(i)}d^{(i)}$
 \end_inset
 
 
 \end_layout
 
 \begin_layout Standard
-\begin_inset Formula $L_{CD}=-\frac{1}{2}\text{Tr}\left[R^{-1}CM_{(1,T)}C^{\intercal}\right]+\text{Tr}\left[R^{-1}C\tilde{Y}\right]-\text{Tr}\left[R^{-1}D\tilde{U}_{(1,T)}C^{\intercal}\right]$
+Turn it into a linear equation
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\left[\begin{array}{ccc}
+\sum_{i}^{W}\tilde{Y}^{(i)\intercal} & 1 & \sum_{t=1}^{T^{(i)}}y_{t}^{(i)}-D\sum_{t=1}^{T^{(i)}}u_{t}^{(i)}\end{array}\right]=\left[\begin{array}{ccc}
+C & \lambda & d^{(i)}\end{array}\right]\left[\begin{array}{ccc}
+\sum_{i}^{W}M_{(1,T)}^{(i)} & 1 & \sum_{t=1}^{T^{(i)}}m_{t}^{(i)}\\
+W1^{\intercal} & 0 & 0\\
+\sum_{i}^{W}\sum_{t=1}^{T}m_{t}^{(i)\intercal} & 0 & T^{(i)}
+\end{array}\right]$
 \end_inset
 
 
 \end_layout
 
 \begin_layout Standard
-\begin_inset Formula $\frac{\partial L_{CD}}{\partial C}=-R^{-1}CM_{(1,T)}^{\intercal}+R^{-1}\tilde{Y}^{\intercal}-R^{-1}D\tilde{U}_{(1,T)}$
+\begin_inset Formula $\left[\begin{array}{c}
+\sum_{i}^{W}\tilde{Y}^{(i)}\\
+1^{\intercal}\\
+\sum_{t=1}^{T^{(i)}}y_{t}^{(i)\intercal}-\sum_{t=1}^{T^{(i)}}u_{t}^{(i)\intercal}D^{\intercal}
+\end{array}\right]=\left[\begin{array}{ccc}
+\sum_{i}^{W}M_{(1,T)}^{(i)} & W1 & \sum_{i}^{W}\sum_{t=1}^{T}m_{t}^{(i)}\\
+1^{\intercal} & 0 & 0\\
+\sum_{t=1}^{T^{(i)}}m_{t}^{(i)\intercal} & 0 & T^{(i)}
+\end{array}\right]\left[\begin{array}{c}
+C^{\intercal}\\
+\lambda^{\intercal}\\
+d^{(i)\intercal}
+\end{array}\right]$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Write this out for two data sets
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\left[\begin{array}{c}
+\sum_{i}^{W}\tilde{Y}^{(i)}\\
+1^{\intercal}\\
+\sum_{t=1}^{T^{(i)}}y_{t}^{(i)\intercal}-\sum_{t=1}^{T^{(i)}}u_{t}^{(i)\intercal}D^{\intercal}
+\end{array}\right]=\left[\begin{array}{cccc}
+\sum_{i}^{W}M_{(1,T)}^{(i)} & W1 & \sum_{t=1}^{T}m_{t}^{(1)} & \sum_{t=1}^{T}m_{t}^{(2)}\\
+1^{\intercal} & 0 & 0 & 0\\
+\sum_{t=1}^{T^{(1)}}m_{t}^{(1)\intercal} & 0 & T^{(1)} & 0\\
+\sum_{t=1}^{T^{(2)}}m_{t}^{(2)\intercal} & 0 & 0 & T^{(2)}
+\end{array}\right]\left[\begin{array}{c}
+C^{\intercal}\\
+\lambda^{\intercal}\\
+d^{(1)\intercal}\\
+d^{(2)\intercal}
+\end{array}\right]$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Use lemma for block matrix inversions to simplify
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\left[\begin{array}{cc}
+\alpha & \beta\\
+\gamma & \delta
+\end{array}\right]^{-1}=\left[\begin{array}{cc}
+F^{-1} & -F^{-1}\beta\delta^{-1}\\
+-\delta^{-1}\gamma F^{-1} & \delta^{-1}+\delta^{-1}\gamma F^{-1}\beta\delta^{-1}
+\end{array}\right]$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\alpha=\left[\begin{array}{cc}
+\sum_{i}^{W}M_{(1,T)}^{(i)} & W1\\
+1^{\intercal} & 0
+\end{array}\right]$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\beta=\left[\begin{array}{cc}
+\sum_{t=1}^{T}m_{t}^{(1)} & \sum_{t=1}^{T}m_{t}^{(2)}\\
+0 & 0
+\end{array}\right]$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\gamma=\beta^{\intercal}$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\delta=\left[\begin{array}{cc}
+T^{(1)} & 0\\
+0 & T^{(2)}
+\end{array}\right]$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $F=\alpha-\beta\delta^{-1}\gamma$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $F=\text{\left[\begin{array}{cc}
+0 & 1\\
+W1 & \sum_{i}^{W}M_{(1,T)}^{(i)}
+\end{array}\right]}-\left[\begin{array}{cc}
+0 & 0\\
+\sum_{t=1}^{T^{(i)}}m_{t}^{(1)\intercal} & \sum_{t=1}^{T^{(i)}}m_{t}^{(2)\intercal}
+\end{array}\right]\left[\begin{array}{cc}
+T^{(1)} & 0\\
+0 & T^{(2)}
+\end{array}\right]\left[\begin{array}{cc}
+0 & \sum_{t=1}^{T}m_{t}^{(1)}\\
+0 & \sum_{t=1}^{T}m_{t}^{(2)}
+\end{array}\right]$
 \end_inset
 
 
