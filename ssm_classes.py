@@ -687,7 +687,7 @@ class Lgssm:
                 sum_ys = np.stack([i.sum(0) for i in y]).T
                 sum_us = np.stack([self.emissions_input_weights @ i.sum(0) for i in inputs_list]).T
                 one_vec = np.ones((self.emissions_dim, 1))
-                lin_out = np.block([Mzy.T, one_vec, sum_ys - sum_us]).T
+                lin_out = np.block([Mzy.T - self.emissions_input_weights @ Muz, one_vec, sum_ys - sum_us]).T
 
                 em_mask = np.zeros((feat_mat.shape[0], lin_out.shape[1])) == 0
                 em_mask[:self.dynamics_dim_full, :] = self.param_props['mask']['emissions_weights'].T
