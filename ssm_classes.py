@@ -82,7 +82,7 @@ class Lgssm:
         self.dynamics_input_weights_init = np.zeros((self.dynamics_input_lags, self.dynamics_dim, self.input_dim,))
 
         # initialize emissions weights
-        self.emissions_weights_init = np.eye(self.emissions_dim)
+        self.emissions_weights_init = np.eye(self.emissions_dim, self.dynamics_dim_full)
         self.emissions_input_weights_init = np.zeros((self.emissions_input_lags, self.emissions_dim, self.input_dim))
         self.emissions_cov_init = np.eye(self.emissions_dim)
 
@@ -113,7 +113,7 @@ class Lgssm:
 
         if self.param_props['shape']['emissions_weights'] == 'diag':
             self.param_props['mask']['emissions_weights'] = np.tile(np.eye(self.emissions_dim, dtype=bool), (1, self.dynamics_lags))
-        elif self.param_props['shape']['emissions__weights'] == 'full':
+        elif self.param_props['shape']['emissions_weights'] == 'full':
             self.param_props['mask']['emissions_weights'] = np.ones((self.emissions_dim, self.dynamics_dim_full)) == 1
         else:
             raise Exception('emissions weights mask shape not recognized')
@@ -159,7 +159,8 @@ class Lgssm:
             self.dynamics_cov_init = noise_std * (self.dynamics_cov_init.T @ self.dynamics_cov_init / self.dynamics_dim + np.eye(self.dynamics_dim))
 
         # randomize emissions weights
-        self.emissions_weights_init = rng.standard_normal((self.emissions_dim, self.dynamics_dim))
+        self.emissions_weights_init = np.abs(rng.standard_normal((self.emissions_dim, self.dynamics_dim_full)))
+        self.emissions_weights_init = self.emissions_weights_init / np.sum(self.emissions_weights_init, axis=1)[:, None]
 
         # randomize emission input weights but with decaying weights into the past
         emissions_input_tau = self.emissions_input_lags / lag_factor
@@ -175,7 +176,7 @@ class Lgssm:
         self.emissions_input_weights_init = self.emissions_input_weights_init * emissions_input_time_decay[:, None, None]
 
         if self.param_props['shape']['emissions_cov'] == 'diag':
-            self.emissions_cov_init = np.diag(np.exp(noise_std * rng.standard_normal(self.dynamics_dim)))
+            self.emissions_cov_init = np.diag(np.exp(noise_std * rng.standard_normal(self.emissions_dim)))
         else:
             self.emissions_cov_init = rng.standard_normal((self.emissions_dim, self.emissions_dim))
             self.emissions_cov_init = noise_std * (self.emissions_cov_init.T @ self.emissions_cov_init / self.emissions_dim + np.eye(self.emissions_dim))
@@ -223,7 +224,7 @@ class Lgssm:
         init_cov_list = []
 
         if emissions_offset is None:
-            emissions_offset = [rng.standard_normal(self.dynamics_dim) for i in range(num_data_sets)]
+            emissions_offset = [rng.standard_normal(self.emissions_dim) for i in range(num_data_sets)]
 
         if init_mean is None:
             init_mean = [np.zeros(self.dynamics_dim_full) for i in range(num_data_sets)]
@@ -434,7 +435,7 @@ class Lgssm:
             init_mean = self.estimate_init_mean([emissions])[0]
 
         if init_cov is None:
-            init_mean = self.estimate_init_cov([emissions])[0]
+            init_cov = self.estimate_init_cov([emissions])[0]
 
         # first run the kalman forward pass
         ll, filtered_means, filtered_covs = self.lgssm_filter(emissions, inputs, emissions_offset, init_mean, init_cov, memmap_cpu_id=memmap_cpu_id)
@@ -679,7 +680,7 @@ class Lgssm:
             elif self.param_props['update']['emissions_weights']:  # update C only
                 one_vec = np.ones((self.dynamics_dim_full, 1))
                 sm_ind = np.stack([i.sum(0) for i in suff_stats[2]]).T
-                alpha = np.block([[Mz, len(emissions_list) * one_vec], [one_vec.T, np.zeros((1, 1))]])
+                alpha = np.block([[Mz, one_vec], [one_vec.T, np.zeros((1, 1))]])
                 zero_pad = np.zeros((1, sm_ind.shape[1]))
                 beta = np.concatenate((sm_ind, zero_pad), axis=0)
                 delta = np.diag([i.shape[0] for i in emissions_list])
@@ -720,6 +721,7 @@ class Lgssm:
                 ds = c_lambda_d[self.dynamics_dim_full+1:, :]
                 emissions_offset_list = np.split(ds, ds.shape[0], axis=0)
                 emissions_offset_list = [i[0, :] for i in emissions_offset_list]
+                a=1
 
             elif self.param_props['update']['emissions_input_weights']:  # update D only
                 raise Exception('Updating emissions input weights is broken atm, because it doesnt deal with emissions offset')
@@ -834,7 +836,6 @@ class Lgssm:
         self.dynamics_cov_init = np.eye(self.dynamics_dim_full) / self.epsilon
         self.dynamics_cov_init[:self.dynamics_dim, :self.dynamics_dim] = dci_block
 
-        self.emissions_weights_init = self._pad_zeros(self.emissions_weights_init, self.dynamics_lags, axis=1)
         self.emissions_input_weights_init = self._get_lagged_weights(self.emissions_input_weights_init, 1, fill='zeros')
 
     @staticmethod
@@ -847,36 +848,16 @@ class Lgssm:
         return emissions_offset
 
     def estimate_init_mean(self, emissions):
-        # estimate the initial mean of a data set as the mean over time
-        init_mean_list = []
-
-        for i in emissions:
-            # initialize init_mean to frist nonmean value of the trace
-            init_mean = i[0, :]
-
-            # for values that are not nan, find the first non_nan value,
-            for nan_loc in np.where(np.isnan(init_mean)):
-                first_non_nan_loc = np.where(~np.isnan(i[:, nan_loc]))[0]
-
-                if len(first_non_nan_loc) > 0:
-                    init_mean[nan_loc] = i[first_non_nan_loc[0], nan_loc]
-                else:
-                    init_mean[nan_loc] = np.nan
-
-            # for traces that are all nan, set to the man of all init
-            init_mean[np.isnan(init_mean)] = np.nanmean(init_mean)
-            init_mean = np.tile(init_mean, [self.dynamics_lags])
-            init_mean_list.append(init_mean)
+        # estimate the initial mean of a data set as zeros
+        init_mean_list = [np.zeros(self.dynamics_dim_full) for i in emissions]
 
         return init_mean_list
 
     def estimate_init_cov(self, emissions):
-        init_cov_list = []
+        # just initialize the covariances with identity
+        init_dynamics_cov_list = [np.eye(self.dynamics_dim_full) for i in emissions]
 
-        for i in emissions:
-            init_cov_list.append(np.eye(self.dynamics_dim_full))
-
-        return init_cov_list
+        return init_dynamics_cov_list
 
     @staticmethod
     def get_lagged_data(data, lags, add_pad=True):

@@ -218,14 +218,14 @@ Derivative with respect to
 \end_layout
 
 \begin_layout Standard
-\begin_inset Formula $\frac{\partial L_{CD}}{\partial C}=R^{-1}\sum_{i}^{W}\tilde{Y}^{(i)\intercal}-R^{-1}C\sum_{i}^{W}M_{(1,T)}^{(i)}-R^{-1}D\tilde{U}_{(1,T)}-R^{-1}\sum_{i}^{W}d^{(i)}\sum_{t=1}^{T}m_{t}^{(i)\intercal}-W\lambda1^{\intercal}$
+\begin_inset Formula $\frac{\partial L_{CD}}{\partial C}=R^{-1}\sum_{i}^{W}\tilde{Y}^{(i)\intercal}-R^{-1}C\sum_{i}^{W}M_{(1,T)}^{(i)}-R^{-1}D\tilde{U}_{(1,T)}-R^{-1}\sum_{i}^{W}d^{(i)}\sum_{t=1}^{T}m_{t}^{(i)\intercal}-\lambda1^{\intercal}$
 \end_inset
 
 
 \end_layout
 
 \begin_layout Standard
-\begin_inset Formula $\frac{\partial L_{CD}}{\partial\lambda}=WC1-W1$
+\begin_inset Formula $\frac{\partial L_{CD}}{\partial\lambda}=C1-1$
 \end_inset
 
 
@@ -243,7 +243,7 @@ set all terms to 0
 \end_layout
 
 \begin_layout Standard
-\begin_inset Formula $0=\sum_{i}^{W}\tilde{Y}^{(i)\intercal}-C\sum_{i}^{W}M_{(1,T)}^{(i)}-D\tilde{U}_{(1,T)}-\sum_{i}^{W}d^{(i)}\sum_{t=1}^{T^{(i)}}m_{t}^{(i)\intercal}-W\lambda1^{\intercal}$
+\begin_inset Formula $0=\sum_{i}^{W}\tilde{Y}^{(i)\intercal}-C\sum_{i}^{W}M_{(1,T)}^{(i)}-D\tilde{U}_{(1,T)}-\sum_{i}^{W}d^{(i)}\sum_{t=1}^{T^{(i)}}m_{t}^{(i)\intercal}-\lambda1^{\intercal}$
 \end_inset
 
 
@@ -280,7 +280,7 @@ gather all terms not including
 \end_layout
 
 \begin_layout Standard
-\begin_inset Formula $\sum_{i}^{W}\tilde{Y}^{(i)\intercal}-D\tilde{U}_{(1,T)}=C\sum_{i}^{W}M_{(1,T)}^{(i)}+\sum_{i}^{W}d^{(i)}\sum_{t=1}^{T^{(i)}}m_{t}^{(i)\intercal}+W\lambda1^{\intercal}$
+\begin_inset Formula $\sum_{i}^{W}\tilde{Y}^{(i)\intercal}-D\tilde{U}_{(1,T)}=C\sum_{i}^{W}M_{(1,T)}^{(i)}+\sum_{i}^{W}d^{(i)}\sum_{t=1}^{T^{(i)}}m_{t}^{(i)\intercal}+\lambda1^{\intercal}$
 \end_inset
 
 
@@ -309,7 +309,7 @@ Turn it into a linear equation
 \sum_{i}^{W}\tilde{Y}^{(i)\intercal}-D\tilde{U}_{(1,T)} & 1 & \sum_{t=1}^{T^{(i)}}y_{t}^{(i)}-D\sum_{t=1}^{T^{(i)}}u_{t}^{(i)}\end{array}\right]=\left[\begin{array}{ccc}
 C & \lambda & d^{(i)}\end{array}\right]\left[\begin{array}{ccc}
 \sum_{i}^{W}M_{(1,T)}^{(i)} & 1 & \sum_{t=1}^{T^{(i)}}m_{t}^{(i)}\\
-W1^{\intercal} & 0 & 0\\
+1^{\intercal} & 0 & 0\\
 \sum_{t=1}^{T}m_{t}^{(i)\intercal} & 0 & T^{(i)}
 \end{array}\right]$
 \end_inset
@@ -323,7 +323,7 @@ W1^{\intercal} & 0 & 0\\
 1^{\intercal}\\
 \sum_{t=1}^{T^{(i)}}y_{t}^{(i)\intercal}-\sum_{t=1}^{T^{(i)}}u_{t}^{(i)\intercal}D^{\intercal}
 \end{array}\right]=\left[\begin{array}{ccc}
-\sum_{i}^{W}M_{(1,T)}^{(i)} & W1 & \sum_{t=1}^{T}m_{t}^{(i)}\\
+\sum_{i}^{W}M_{(1,T)}^{(i)} & 1 & \sum_{t=1}^{T}m_{t}^{(i)}\\
 1^{\intercal} & 0 & 0\\
 \sum_{t=1}^{T^{(i)}}m_{t}^{(i)\intercal} & 0 & T^{(i)}
 \end{array}\right]\left[\begin{array}{c}
@@ -347,7 +347,7 @@ Write this out for two data sets
 \sum_{t=1}^{T^{(1)}}y_{t}^{(1)\intercal}-\sum_{t=1}^{T^{(1)}}u_{t}^{(1)\intercal}D^{\intercal}\\
 \sum_{t=1}^{T^{(2)}}y_{t}^{(2)\intercal}-\sum_{t=1}^{T^{(2)}}u_{t}^{(2)\intercal}D^{\intercal}
 \end{array}\right]=\left[\begin{array}{cccc}
-\sum_{i}^{W}M_{(1,T)}^{(i)} & W1 & \sum_{t=1}^{T}m_{t}^{(1)} & \sum_{t=1}^{T}m_{t}^{(2)}\\
+\sum_{i}^{W}M_{(1,T)}^{(i)} & 1 & \sum_{t=1}^{T}m_{t}^{(1)} & \sum_{t=1}^{T}m_{t}^{(2)}\\
 1^{\intercal} & 0 & 0 & 0\\
 \sum_{t=1}^{T^{(1)}}m_{t}^{(1)\intercal} & 0 & T^{(1)} & 0\\
 \sum_{t=1}^{T^{(2)}}m_{t}^{(2)\intercal} & 0 & 0 & T^{(2)}
@@ -368,7 +368,7 @@ Use lemma for block matrix inversions to simplify
 
 \begin_layout Standard
 \begin_inset Formula $\alpha=\left[\begin{array}{cc}
-\sum_{i}^{W}M_{(1,T)}^{(i)} & W1\\
+\sum_{i}^{W}M_{(1,T)}^{(i)} & 1\\
 1^{\intercal} & 0
 \end{array}\right]$
 \end_inset

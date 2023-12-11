@@ -86,6 +86,14 @@ for i in range(len(model_weights)):
 if run_params['plot_model_params']:
     am.plot_model_params(model=model, model_true=model_true, cell_ids_chosen=cell_ids_chosen)
 
+from matplotlib import pyplot as plt
+
+for i in range(len(emissions)):
+    plt.figure()
+    plt.plot(data['emissions_offset'][i])
+    plt.plot(posterior_dict['emissions_offset'][i])
+plt.show()
+
 if run_params['plot_eigen_values']:
     am.plot_dynamics_eigs(model=model)
 

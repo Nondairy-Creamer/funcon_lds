@@ -96,12 +96,24 @@ def plot_model_params(model, model_true=None, cell_ids_chosen=None):
 
     # plot the log likelihood
     plt.figure()
-    plt.plot(model.log_likelihood, label='fit parameters')
+    plt.subplot(1, 2, 1)
+    num_iter = np.arange(len(model.log_likelihood))
+    plt.plot(num_iter, model.log_likelihood, label='fit parameters')
     if has_ground_truth:
         plt.axhline(model_true.log_likelihood[0], color='k', linestyle=':', label='true parameters')
         plt.legend()
     plt.xlabel('EM iteration')
     plt.ylabel('log likelihood')
+
+    plt.subplot(1, 2, 2)
+    subset = np.arange(int(len(num_iter) / 2), len(num_iter))
+    plt.plot(num_iter[subset], [model.log_likelihood[i] for i in subset], label='fit parameters')
+    if has_ground_truth:
+        plt.axhline(model_true.log_likelihood[0], color='k', linestyle=':', label='true parameters')
+        plt.legend()
+    plt.xlabel('EM iteration')
+    plt.ylabel('log likelihood')
+    plt.tight_layout()
     plt.show()
 
     # plot the dynamics weights
