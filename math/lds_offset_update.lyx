@@ -149,7 +149,12 @@ If
 \end_layout
 
 \begin_layout Standard
-Complete data log likelihood
+Consider the term in the complete data log likelihood which deals with emissions
+ 
+\begin_inset Formula $y$
+\end_inset
+
+
 \end_layout
 
 \begin_layout Standard

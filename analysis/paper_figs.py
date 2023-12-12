@@ -24,7 +24,7 @@ def figure_1(weights, masks, cell_ids, fig_save_path=None, window=(30, 60), num_
     # compare data corr and data IRM to connectome
     data_corr = weights['data']['corr']
     data_irms = weights['data']['irms']
-    weights_mag =  weights['models']['synap']['dirms']
+    weights_mag = weights['models']['synap']['dirms']
     anatomy_bin = masks['synap']
     std_factor = 3
     data_corr_bin = (np.abs(data_corr) > (np.nanstd(data_corr) / std_factor)).astype(float)

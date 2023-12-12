@@ -264,5 +264,47 @@ for
 
 \end_layout
 
+\begin_layout Standard
+Multiple data sets
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $=-\frac{1}{2}\text{Tr}\left[R^{-1}\sum_{i=1}^{W}Y_{i}\right]+\text{Tr}\left[R^{-1}C\sum_{i=1}^{W}\tilde{Y}_{i}\right]+\text{Tr}\left[R^{-1}D\sum_{i=1}^{W}U_{y,i}\right]+\text{Tr}\left[R^{-1}\sum_{i=1}^{W}\sum_{t=1}^{T}y_{t,i}d_{i}^{\intercal}\right]-\frac{1}{2}\text{Tr}\left[C^{\intercal}R^{-1}C\sum_{i=1}^{W}M_{(1,T),i}\right]-\text{Tr}\left[R^{-1}C\sum_{i=1}^{W}\sum_{t=1}^{T}m_{t,i}d_{i}^{\intercal}\right]-\frac{1}{2}\text{Tr}\left[D^{\intercal}R^{-1}D\sum_{i=1}^{W}\sum_{t=1}^{T}U_{(1,T),i}\right]-\text{Tr}\left[R^{-1}D\sum_{i=1}^{W}\sum_{t=1}^{T}u_{t,i}d_{i}^{\intercal}\right]-\sum_{i=1}^{W}\frac{T_{i}}{2}\text{Tr}\left[R^{-1}d_{i}d_{i}^{\intercal}\right]-\log|2\pi R|\sum_{i=1}^{W}\frac{T_{i}}{2}$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+So this works similarly except the suff stats for updating 
+\begin_inset Formula $R$
+\end_inset
+
+ 
+\begin_inset Formula $d$
+\end_inset
+
+ now get multiplied and summed for each data set (i.e) 
+\begin_inset Formula $\sum_{i=1}^{W}\sum_{t=1}^{T}y_{t,i}d_{i}^{\intercal}$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+The one change is to the 
+\begin_inset Formula $dd^{\intercal}$
+\end_inset
+
+ term
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\frac{\partial}{\partial R^{-1}}\sum_{i=1}^{W}\frac{T_{i}}{2}\text{Tr}\left[R^{-1}d_{i}d_{i}^{\intercal}\right]=\frac{1}{2}\sum_{i=1}^{W}T_{i}d_{i}d_{i}^{\intercal}$
+\end_inset
+
+
+\end_layout
+
 \end_body
 \end_document

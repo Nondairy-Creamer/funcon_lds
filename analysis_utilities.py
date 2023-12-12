@@ -47,7 +47,7 @@ def stack_weights(weights, num_split, axis=-1):
     return np.stack(np.split(weights, num_split, axis=axis))
 
 
-def get_impulse_response_function(data, inputs, window=(-60, 120), sub_pre_stim=True, return_pre=True):
+def get_impulse_response_function(data, inputs, window=(30, 60), sub_pre_stim=True, return_pre=True):
     num_neurons = data[0].shape[1]
 
     responses = []

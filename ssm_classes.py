@@ -694,28 +694,6 @@ class Lgssm:
                 em_mask[:self.dynamics_dim_full, :] = self.param_props['mask']['emissions_weights'].T
                 c_lambda_d = iu.solve_masked(feat_mat, lin_out, mask=em_mask)
 
-
-                # delta_inv = np.array([1 / i.shape[0] for i in emissions_list])[:, None]
-                # f_inv = np.linalg.inv(alpha - beta @ (delta_inv * beta.T))
-                # mat_inv_11 = f_inv
-                # mat_inv_12 = -f_inv @ (beta * delta_inv.T)
-                # mat_inv_21 = -(delta_inv * beta.T) @ f_inv
-                # mat_inv_22 = np.diag(delta_inv[:, 0]) + (delta_inv * beta.T) @ f_inv @ (beta * delta_inv.T)
-                # mat_inv = np.block([[mat_inv_11, mat_inv_12], [mat_inv_21, mat_inv_22]])
-                #
-
-                # lin_out = np.block([Mzy.T, one_vec, sum_ys - sum_us]).T
-                #
-                # # find the solution to the linear equation, respecting the mask
-                # c_lambda_d = np.zeros((mat_inv.shape[0], lin_out.shape[1]))
-                # em_mask = np.zeros_like(c_lambda_d) == 0
-                # em_mask[:self.emissions_dim, :] = self.param_props['mask']['emissions_weights']
-                # for i in range(lin_out.shape[1]):
-                #     nonzero_loc = em_mask[:, i]
-                #     mat_inv_zerod = mat_inv[np.ix_(nonzero_loc, nonzero_loc)]
-                #
-                #     c_lambda_d[nonzero_loc, i]= mat_inv_zerod @ lin_out[nonzero_loc, i]
-
                 self.emissions_weights = c_lambda_d[:self.dynamics_dim_full, :].T
                 ls = c_lambda_d[self.dynamics_dim_full, :]
                 ds = c_lambda_d[self.dynamics_dim_full+1:, :]
