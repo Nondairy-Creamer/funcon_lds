@@ -98,10 +98,12 @@ def load_and_preprocess_data(data_path, num_data_sets=None, force_preprocess=Fal
     inputs_train = []
     cell_ids_train = []
     path_name = []
+    sample_rate = 0.5 # seconds per sample DEFAULT
 
     # find all files in the folder that have francesco_green.npy
     for i in sorted(data_path.rglob('francesco_green.npy'))[::-1]:
         path_name.append(i.parts[-2])
+        sample_rate = 0.5  # seconds per sample
 
         # check if a processed version exists
         preprocess_path = i.parent / preprocess_filename
@@ -157,6 +159,7 @@ def load_and_preprocess_data(data_path, num_data_sets=None, force_preprocess=Fal
     # find all files in the folder that have calcium_to_multicolor_alignment.mat
     for i in sorted(data_path.rglob('calcium_to_multicolor_alignment.mat'))[::-1]:
         path_name.append(i.parts[-2])
+        sample_rate = 1 / 6  # samples per second
 
         # check if a processed version exists
         preprocess_path = i.parent / preprocess_filename
@@ -299,10 +302,12 @@ def load_and_preprocess_data(data_path, num_data_sets=None, force_preprocess=Fal
     data_train['emissions'] = [i[:, neurons_to_keep] for i in data_train['emissions']]
     data_train['inputs'] = [i[:, neurons_to_keep] for i in data_train['inputs']]
     data_train['cell_ids'] = [data_train['cell_ids'][i] for i in range(len(data_train['cell_ids'])) if neurons_to_keep[i]]
+    data_train['sample_rate'] = sample_rate
 
     data_test['emissions'] = [i[:, neurons_to_keep] for i in data_test['emissions']]
     data_test['inputs'] = [i[:, neurons_to_keep] for i in data_test['inputs']]
     data_test['cell_ids'] = [data_test['cell_ids'][i] for i in range(len(data_test['cell_ids'])) if neurons_to_keep[i]]
+    data_train['sample_rate'] = sample_rate
 
     return data_train, data_test
 

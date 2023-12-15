@@ -4,6 +4,7 @@ import wormneuroatlas as wa
 import scipy
 import pickle
 from pathlib import Path
+from scipy.stats import norm
 
 
 def auto_select_ids(inputs, cell_ids, num_neurons=10):
@@ -310,13 +311,18 @@ def calculate_dirfs(model, duration=60):
     u = np.zeros(num_t + model.dynamics_input_lags)
     u[int(model.dynamics_input_lags)] = 1
     dirfs = np.zeros((num_t, model.dynamics_dim, model.dynamics_dim))
+    dirfs[:, np.eye(model.dynamics_dim, dtype=bool)] = np.nan
 
     print('Calculating dIRFs')
     # loop through the stimulated neuron
     for s in range(model.dynamics_dim):
         # loop through responding neuron
         for r in range(model.dynamics_dim):
+            if s == r:
+                continue
+
             weights = A[:, (s, r), :][:, :, (s, r)]
+            weights[0, 1] = 0
             input_weights = B[:, s]
             activity_history = np.zeros((model.dynamics_lags, 2))
 
@@ -335,14 +341,58 @@ def calculate_dirfs(model, duration=60):
     return dirfs
 
 
-def balanced_accuracy(y_true, y_hat):
-    # number of correct hits out of total correct
-    true_positives = y_true == 1
-    tpr = np.nanmean(y_hat[true_positives] == 1)
-    true_negatives = y_true == 0
-    tnr = np.nanmean(y_hat[true_negatives] == 0)
+def precision(y_true, y_hat):
+    y_true = y_true.reshape(-1)
+    y_hat = y_hat.reshape(-1)
 
-    return (tpr + tnr) / 2
+    nan_loc = np.isnan(y_true) | np.isnan(y_hat)
+    y_true = y_true[~nan_loc]
+    y_hat = y_hat[~nan_loc]
+
+    true_positives = np.sum((y_true == 1) & (y_hat == 1))
+    false_positives = np.sum((y_true == 0) & (y_hat == 1))
+
+    return true_positives / (true_positives + false_positives)
+
+
+def recall(y_true, y_hat):
+    y_true = y_true.reshape(-1)
+    y_hat = y_hat.reshape(-1)
+
+    nan_loc = np.isnan(y_true) | np.isnan(y_hat)
+    y_true = y_true[~nan_loc]
+    y_hat = y_hat[~nan_loc]
+
+    true_positives = np.sum((y_true == 1) & (y_hat == 1))
+    false_negatives = np.sum((y_true == 1) & (y_hat == 0))
+
+    return true_positives / (true_positives + false_negatives)
+
+
+def f_measure(y_true, y_hat):
+    y_true = y_true.reshape(-1)
+    y_hat = y_hat.reshape(-1)
+
+    nan_loc = np.isnan(y_true) | np.isnan(y_hat)
+    y_true = y_true[~nan_loc]
+    y_hat = y_hat[~nan_loc]
+
+    p = precision(y_true, y_hat)
+    r = recall(y_true, y_hat)
+
+    return (2 * p * r) / (p + r)
+
+
+def f_measure_null(y_true, num_sample=100, rng=np.random.default_rng()):
+    y_true = y_true[~np.isnan(y_true)]
+    rand_dist = []
+    rand_prob = np.mean(y_true)
+
+    for i in range(num_sample):
+        rand_sample = (rng.uniform(0, 1, size=y_true.shape[0]) < rand_prob).astype(float)
+        rand_dist.append(f_measure(y_true, rand_sample))
+
+    return np.mean(rand_dist)
 
 
 def find_stim_events(inputs, emissions=None, chosen_neuron_ind=None, window_size=1000):
@@ -458,12 +508,14 @@ def frac_explainable_var(y_true, y_hat, y_true_std_trials):
     return r_er_square
 
 
-def nan_corr_data(data):
+def nan_corr_data(data, alpha=0.05):
+    num_neurons = data[0].shape[1]
+
     with warnings.catch_warnings():
         warnings.simplefilter('ignore', category=RuntimeWarning)
         # calculate the average cross correlation between neurons
         emissions_cov = []
-        num_neurons = data[0].shape[1]
+
         for i in range(len(data)):
             emissions_this = data[i]
             nan_loc = np.isnan(emissions_this)
@@ -479,9 +531,20 @@ def nan_corr_data(data):
             emissions_cov_this = em_z_score.T @ em_z_score / num_measured
             emissions_cov.append(emissions_cov_this)
 
-        correlation = np.nanmean(np.stack(emissions_cov), axis=0)
+        stacked_cov = np.stack(emissions_cov)
+        correlation = np.nanmean(stacked_cov, axis=0)
+        correlation_std = np.nanstd(stacked_cov, axis=0, ddof=1)
+        correlation[np.isnan(correlation_std)] = np.nan
 
-    return correlation
+        ci_low = np.zeros_like(correlation)
+        ci_high = np.zeros_like(correlation)
+
+        for i in range(num_neurons):
+            for j in range(num_neurons):
+                ci_low[i, j] = norm.ppf(alpha/2, loc=correlation[i, j], scale=correlation_std[i, j])
+                ci_high[i, j] = norm.ppf(1 - alpha/2, loc=correlation[i, j], scale=correlation_std[i, j])
+
+    return correlation, [ci_low, ci_high]
 
 
 def nancorrcoef(data):
