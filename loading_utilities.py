@@ -131,8 +131,9 @@ def load_and_preprocess_data(data_path, num_data_sets=None, force_preprocess=Fal
             this_stim_volume_inds = np.load(str(i.parent / 'stim_volumes_inds.npy'), allow_pickle=True)
 
             this_inputs = np.zeros_like(this_emissions)
-            this_stim_volume_inds = this_stim_volume_inds[this_stim_cell_ids != -2]
-            this_stim_cell_ids = this_stim_cell_ids[this_stim_cell_ids != -2]
+            nonnegative_inds = (this_stim_cell_ids != -1) & (this_stim_cell_ids != -2) & (this_stim_cell_ids != -3)
+            this_stim_volume_inds = this_stim_volume_inds[nonnegative_inds]
+            this_stim_cell_ids = this_stim_cell_ids[nonnegative_inds]
             this_inputs[this_stim_volume_inds, this_stim_cell_ids] = 1
 
             start = time.time()

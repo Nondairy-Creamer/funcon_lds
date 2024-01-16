@@ -343,7 +343,7 @@ Finally, add a lagrange multiplier such that the columns of
 
  vector.
  
-\begin_inset Formula $-\boldsymbol{\lambda}^{\intercal}(1-C1)=-\boldsymbol{\lambda}^{\intercal}1+\boldsymbol{\lambda}^{\intercal}C1$
+\begin_inset Formula $-\boldsymbol{\lambda}^{\intercal}(\boldsymbol{1}-C\boldsymbol{1})=-\boldsymbol{\lambda}^{\intercal}\boldsymbol{1}+\boldsymbol{\lambda}^{\intercal}C\boldsymbol{1}$
 \end_inset
 
 
@@ -363,7 +363,7 @@ L_{y}=-\frac{1}{2}\left[\begin{array}{c}
 +\text{Tr}\left[R^{-1}DU_{(1,T)}D^{\intercal}\right]\\
 +\text{Tr}\left[R^{-1}\sum_{i=1}^{W}\boldsymbol{d}^{(i)}\bar{U}^{(i)\intercal}D^{\intercal}\right]+\text{Tr}\left[R^{-1}D\sum_{i=1}^{W}\bar{U}^{(i)}\boldsymbol{d}^{(i)\intercal}\right]\\
 +\text{Tr}\left[R^{-1}\sum_{i=1}^{W}T^{(i)}\boldsymbol{d}^{(i)}\boldsymbol{d}^{(i)\intercal}\right]
-\end{array}\right]-\frac{1}{2}\sum_{i=1}^{W}T^{(i)}\log|2\pi R|-\boldsymbol{\lambda}^{\intercal}1+\boldsymbol{\lambda}^{\intercal}C1
+\end{array}\right]-\frac{1}{2}\sum_{i=1}^{W}T^{(i)}\log|2\pi R|-\boldsymbol{\lambda}^{\intercal}\boldsymbol{1}+\boldsymbol{\lambda}^{\intercal}C\boldsymbol{1}
 \end{equation}
 
 \end_inset
@@ -406,8 +406,8 @@ Take the derivative of
 \begin_inset Formula 
 \begin{equation}
 \begin{array}{ccc}
-\frac{\partial L_{y}}{\partial C} & = & R^{-1}\tilde{Y}^{\intercal}-R^{-1}CM_{(1,T)}-R^{-1}D\tilde{U}_{(1,T)}-R^{-1}\sum_{i=1}^{W}\boldsymbol{d}^{(i)}\bar{M}^{(i)\intercal}+\boldsymbol{\lambda}1^{\intercal}\\
-\frac{\partial L_{y}}{\partial\boldsymbol{\lambda}} & = & C1-1\\
+\frac{\partial L_{y}}{\partial C} & = & R^{-1}\tilde{Y}^{\intercal}-R^{-1}CM_{(1,T)}-R^{-1}D\tilde{U}_{(1,T)}-R^{-1}\sum_{i=1}^{W}\boldsymbol{d}^{(i)}\bar{M}^{(i)\intercal}+\boldsymbol{\lambda}\boldsymbol{1}^{\intercal}\\
+\frac{\partial L_{y}}{\partial\boldsymbol{\lambda}} & = & C\boldsymbol{1}-\boldsymbol{1}\\
 \frac{\partial L_{y}}{\partial\boldsymbol{d}^{(i)}} & = & R^{-1}\bar{Y}^{(i)}-R^{-1}C\bar{M}^{(i)}-R^{-1}D\bar{U}^{(i)}-T^{(i)}R^{-1}\boldsymbol{d}^{(i)}
 \end{array}
 \end{equation}
@@ -445,8 +445,8 @@ Set all terms to
 \begin_inset Formula 
 \begin{equation}
 \begin{array}{ccc}
-\tilde{Y}^{\intercal}-D\tilde{U}_{(1,T)} & = & CM_{(1,T)}+\sum_{i=1}^{W}\boldsymbol{d}^{(i)}\bar{M}^{(i)\intercal}-R\boldsymbol{\lambda}1^{\intercal}\\
-1 & = & C1\\
+\tilde{Y}^{\intercal}-D\tilde{U}_{(1,T)} & = & CM_{(1,T)}+\sum_{i=1}^{W}\boldsymbol{d}^{(i)}\bar{M}^{(i)\intercal}-R\boldsymbol{\lambda}\boldsymbol{1}^{\intercal}\\
+\boldsymbol{1} & = & C\boldsymbol{1}\\
 \bar{Y}^{(i)}-D\bar{U}^{(i)} & = & C\bar{M}^{(i)}+T^{(i)}\boldsymbol{d}^{(i)}
 \end{array}
 \end{equation}
@@ -491,8 +491,8 @@ Transpose and rewrite as a linear equation.
 \begin_inset Formula 
 \begin{equation}
 \begin{array}{ccc}
-\tilde{Y}-\tilde{U}_{(1,T)}^{\intercal}D^{\intercal} & = & M_{(1,T)}C^{\intercal}+\bar{M}^{(i)}\sum_{i=1}^{W}\boldsymbol{d}^{(i)\intercal}+1\boldsymbol{\lambda}^{\intercal}(-R)\\
-1^{\intercal} & = & 1^{\intercal}C^{\intercal}\\
+\tilde{Y}-\tilde{U}_{(1,T)}^{\intercal}D^{\intercal} & = & M_{(1,T)}C^{\intercal}+\bar{M}^{(i)}\sum_{i=1}^{W}\boldsymbol{d}^{(i)\intercal}+\boldsymbol{1}\boldsymbol{\lambda}^{\intercal}(-R)\\
+\boldsymbol{1}^{\intercal} & = & \boldsymbol{1}^{\intercal}C^{\intercal}\\
 \bar{Y}^{(i)\intercal}-\bar{U}^{(i)\intercal}D^{\intercal} & = & \bar{M}^{(i)\intercal}C^{\intercal}+T^{(i)}\boldsymbol{d}^{(i)\intercal}
 \end{array}
 \end{equation}
@@ -507,11 +507,11 @@ Transpose and rewrite as a linear equation.
 \begin{equation}
 \left[\begin{array}{c}
 \tilde{Y}-\tilde{U}_{(1,T)}^{\intercal}D^{\intercal}\\
-1^{\intercal}\\
+\boldsymbol{1}^{\intercal}\\
 \bar{Y}^{(i)\intercal}-\bar{U}^{(i)\intercal}D^{\intercal}
 \end{array}\right]=\left[\begin{array}{ccccc}
-M_{(1,T)} & 1 & \bar{M}^{(1)} & \cdots & \bar{M}^{(W)}\\
-1^{\intercal} & 0 & 0 & 0 & 0\\
+M_{(1,T)} & \boldsymbol{1} & \bar{M}^{(1)} & \cdots & \bar{M}^{(W)}\\
+\boldsymbol{1}^{\intercal} & 0 & 0 & 0 & 0\\
 \bar{M}^{(1)\intercal} & 0 & T^{(1)} & 0 & 0\\
 \vdots & 0 & 0 & \ddots & 0\\
 \bar{M}^{(W)\intercal} & 0 & 0 & 0 & T^{(W)}
@@ -538,12 +538,12 @@ Here is an example with two data sets
 \begin{equation}
 \left[\begin{array}{c}
 \tilde{Y}-\tilde{U}_{(1,T)}^{\intercal}D^{\intercal}\\
-1^{\intercal}\\
+\boldsymbol{1}^{\intercal}\\
 \bar{Y}^{(1)\intercal}-\bar{U}^{(1)\intercal}D^{\intercal}\\
 \bar{Y}^{(2)\intercal}-\bar{U}^{(2)\intercal}D^{\intercal}
 \end{array}\right]=\left[\begin{array}{cccc}
-M_{(1,T)} & 1 & \bar{M}^{(1)} & \bar{M}^{(2)}\\
-1^{\intercal} & 0 & 0 & 0\\
+M_{(1,T)} & \boldsymbol{1} & \bar{M}^{(1)} & \bar{M}^{(2)}\\
+\boldsymbol{1}^{\intercal} & 0 & 0 & 0\\
 \bar{M}^{(1)\intercal} & 0 & T^{(1)} & 0\\
 \bar{M}^{(2)\intercal} & 0 & 0 & T^{(2)}
 \end{array}\right]\left[\begin{array}{c}

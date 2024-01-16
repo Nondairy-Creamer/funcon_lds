@@ -132,6 +132,7 @@ def fit_experimental(param_name, save_folder):
         model_trained.emissions_weights = np.eye(model_trained.emissions_dim, model_trained.dynamics_dim_full)
         model_trained.emissions_input_weights = np.zeros(model_trained.emissions_input_weights.shape)
 
+        # permute the mask for the dynamics weights so that it is a randomized version
         if 'permute_mask' in run_params:
             if run_params['permute_mask']:
                 rng = np.random.default_rng(run_params['random_seed'])
