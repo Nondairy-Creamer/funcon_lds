@@ -82,7 +82,7 @@ class Lgssm:
         self.dynamics_input_weights_init = np.zeros((self.dynamics_input_lags, self.dynamics_dim, self.input_dim,))
 
         # initialize emissions weights
-        self.emissions_weights_init = np.eye(self.emissions_dim, self.dynamics_dim_full)
+        self.emissions_weights_init = np.tile(np.eye(self.emissions_dim, self.dynamics_dim), (1, self.dynamics_lags)) / self.dynamics_lags
         self.emissions_input_weights_init = np.zeros((self.emissions_input_lags, self.emissions_dim, self.input_dim))
         self.emissions_cov_init = np.eye(self.emissions_dim)
 
@@ -699,7 +699,6 @@ class Lgssm:
                 ds = c_lambda_d[self.dynamics_dim_full+1:, :]
                 emissions_offset_list = np.split(ds, ds.shape[0], axis=0)
                 emissions_offset_list = [i[0, :] for i in emissions_offset_list]
-                a=1
 
             elif self.param_props['update']['emissions_input_weights']:  # update D only
                 raise Exception('Updating emissions input weights is broken atm, because it doesnt deal with emissions offset')

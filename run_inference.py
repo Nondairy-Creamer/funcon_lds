@@ -27,7 +27,7 @@ def fit_synthetic(param_name, save_folder):
                            dynamics_lags=run_params['dynamics_lags'], dynamics_input_lags=run_params['dynamics_input_lags'],
                            emissions_input_lags=run_params['emissions_input_lags'], param_props=run_params['param_props'],)
         model_true.randomize_weights(rng=rng)
-        model_true.emissions_weights_init = np.eye(model_true.emissions_dim, model_true.dynamics_dim_full)
+        model_true.emissions_weights_init = np.tile(np.eye(model_true.emissions_dim, model_true.dynamics_dim), (1, model_true.dynamics_lags)) / model_true.dynamics_lags
         model_true.emissions_input_weights_init = np.zeros(model_true.emissions_input_weights_init.shape)
         model_true.set_to_init()
 
@@ -59,6 +59,7 @@ def fit_synthetic(param_name, save_folder):
             if not model_trained.param_props['update'][k]:
                 init_key = k + '_init'
                 setattr(model_trained, init_key, getattr(model_true, init_key))
+
         model_trained.set_to_init()
 
         lu.save_run(save_folder, model_true=model_true, model_trained=model_trained, ep=0, data_train=data_train,
@@ -129,7 +130,7 @@ def fit_experimental(param_name, save_folder):
                               ridge_lambda=run_params['ridge_lambda'],
                               cell_ids=data_train['cell_ids'])
 
-        model_trained.emissions_weights = np.eye(model_trained.emissions_dim, model_trained.dynamics_dim_full)
+        # model_trained.emissions_weights = np.eye(model_trained.emissions_dim, model_trained.dynamics_dim_full)
         model_trained.emissions_input_weights = np.zeros(model_trained.emissions_input_weights.shape)
 
         # permute the mask for the dynamics weights so that it is a randomized version
