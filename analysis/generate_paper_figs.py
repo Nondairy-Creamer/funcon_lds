@@ -4,6 +4,7 @@ import numpy as np
 import pickle
 import loading_utilities as lu
 import analysis.paper_figs as pf
+import copy
 
 run_params = lu.get_run_params(param_name='../analysis_params/paper_figures.yml')
 
@@ -74,13 +75,14 @@ else:
     data_test_file.close()
 
 cell_ids = {'all': data_test['cell_ids'], 'chosen': cell_ids_chosen}
+models = [au.normalize_model(m)[0] for m in models]
 
 # get data IRMs
-data_irms_train, data_irfs_train, data_irfs_sem_train = \
+data_irms_train, data_irfs_train, data_irfs_sem_train, _ = \
     au.simple_get_irms(data_train['emissions'], data_train['inputs'], required_num_stim=required_num_stim,
                        window=window, sub_pre_stim=sub_pre_stim)
 
-data_irms_test, data_irfs_test, data_irfs_sem_test = \
+data_irms_test, data_irfs_test, data_irfs_sem_test, num_stim = \
     au.simple_get_irms(data_test['emissions'], data_test['inputs'], required_num_stim=required_num_stim,
                        window=window, sub_pre_stim=sub_pre_stim)
 
@@ -151,32 +153,42 @@ for m in models:
     weights['models'][m]['corr'] = model_corr
 
 # set up the masks
+# get masks based on number of stims
+num_stim_sweep = np.arange(1, 15)
+n_stim_mask = []
+for ni, n in enumerate(num_stim_sweep):
+    n_stim_mask.append((num_stim < n) | np.isnan(weights['data']['test']['corr']))
+
 masks = {'diagonal': np.eye(data_irms_train.shape[0], dtype=bool),
          'synap': (weights['anatomy']['chem_conn'] + weights['anatomy']['gap_conn']) > 0,
          'chem': weights['anatomy']['chem_conn'] > 0,
-         'nan': np.isnan(weights['data']['test']['irms']) | np.isnan(weights['data']['test']['corr'])}
+         'nan': np.isnan(weights['data']['test']['irms']) | np.isnan(weights['data']['test']['corr']),
+         'n_stim_mask': n_stim_mask,
+         'n_stim_sweep': num_stim_sweep}
 
 # set all the weights to nan with the nan mask
-for i in weights:
-    for j in weights[i]:
-        if isinstance(weights[i][j], dict):
-            for k in weights[i][j]:
-                if weights[i][j][k].ndim == 2:
-                    weights[i][j][k][masks['nan']] = np.nan
-                elif weights[i][j][k].ndim == 3:
-                    weights[i][j][k][:, masks['nan']] = np.nan
+weights_masked = copy.deepcopy(weights)
+for i in weights_masked:
+    for j in weights_masked[i]:
+        if isinstance(weights_masked[i][j], dict):
+            for k in weights_masked[i][j]:
+                if weights_masked[i][j][k].ndim == 2:
+                    weights_masked[i][j][k][masks['nan']] = np.nan
+                elif weights_masked[i][j][k].ndim == 3:
+                    weights_masked[i][j][k][:, masks['nan']] = np.nan
                 else:
                     raise Exception('Weights shape not recognized')
 
         else:
-            if weights[i][j].ndim == 2:
-                weights[i][j][masks['nan']] = np.nan
-            elif weights[i][j].ndim == 3:
-                weights[i][j][:, masks['nan']] = np.nan
+            if weights_masked[i][j].ndim == 2:
+                weights_masked[i][j][masks['nan']] = np.nan
+            elif weights_masked[i][j].ndim == 3:
+                weights_masked[i][j][:, masks['nan']] = np.nan
             else:
                 raise Exception('Weights shape not recognized')
 
-pf.figure_1(weights, masks, cell_ids, fig_save_path=fig_save_path, window=window)
-pf.figure_2(weights, masks, cell_ids, fig_save_path=fig_save_path, window=window)
-pf.figure_3(weights, masks, cell_ids, fig_save_path=fig_save_path, window=window)
+pf.corr_irm_recon(weights, weights_masked, masks, fig_save_path=fig_save_path)
+# pf.figure_1(weights, weights_masked, masks, cell_ids, fig_save_path=fig_save_path, window=window)
+# pf.figure_2(weights_masked, masks, cell_ids, fig_save_path=fig_save_path, window=window)
+# pf.figure_3(weights_masked, masks, cell_ids, fig_save_path=fig_save_path, window=window)
 

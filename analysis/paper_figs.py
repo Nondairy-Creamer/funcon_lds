@@ -6,14 +6,189 @@ import numpy as np
 import pickle
 
 
-def figure_1(weights, masks, cell_ids, fig_save_path=None, window=(30, 60), num_traces_plot=5):
-    # compare data corr and data IRM to connectome
-    data_corr = weights['data']['train']['corr']
-    data_irms = weights['data']['test']['irms']
+def corr_irm_recon(weights, weights_masked, masks, fig_save_path=None):
+    # this figure will demonstrate that the model can reconstruct the observed data correlation and IRMs
+    # first we will sweep across the data and restrict to neuron pairs where a stimulation event was recorded N times
+    # we will demonstrate that ratio between best possible correlation and our model correlation remains constant
+    # this suggests that this ratio is independent of number of data
 
-    model_weights_conn = au.f_measure(masks['synap'], weights['models']['synap']['dirms_binarized'])
-    data_corr_conn = au.f_measure(masks['synap'], weights['data']['train']['corr_binarized'])
-    data_irm_conn = au.f_measure(masks['synap'], weights['data']['train']['q'])
+    # compare data corr and data IRM to connectome
+    n_stim_mask = masks['n_stim_mask']
+    n_stim_sweep = masks['n_stim_sweep']
+    num_neuron_pairs = [np.sum(~i) for i in n_stim_mask]
+
+    # compare model corr to measured corr and compare model IRMs to measured IRMs
+    model_name = []
+
+    model_corr_score = []
+    model_corr_score_ci = []
+    model_irms_score = []
+    model_irms_score_ci = []
+
+    model_corr_score_sweep = []
+    model_corr_score_sweep_ci = []
+    model_irms_score_sweep = []
+    model_irms_score_sweep_ci = []
+
+    # sweep through the minimum number of stimulations allowed and calculate the score
+    # as the number of required stimulations goes up the quality of correlation goes up
+    corr_baseline_sweep = np.zeros(n_stim_sweep.shape[0])
+    corr_baseline_sweep_ci = np.zeros((2, n_stim_sweep.shape[0]))
+    irms_baseline_sweep = np.zeros(n_stim_sweep.shape[0])
+    irms_baseline_sweep_ci = np.zeros((2, n_stim_sweep.shape[0]))
+
+    # get the baseline correlation and IRMs. This is the best the model could have done
+    # across all data
+    corr_baseline = au.nan_corr(weights_masked['data']['train']['corr'],
+                                weights_masked['data']['test']['corr'])[0]
+
+    irms_baseline = au.nan_corr(weights_masked['data']['train']['irms'],
+                                weights_masked['data']['test']['irms'])[0]
+
+    # sweep across number of stims
+    for ni, n in enumerate(n_stim_sweep):
+        data_train_corr = weights['data']['train']['corr'].copy()
+        data_train_irms = weights['data']['train']['irms'].copy()
+        data_test_corr = weights['data']['test']['corr'].copy()
+        data_test_irms = weights['data']['test']['irms'].copy()
+
+        data_train_corr[n_stim_mask[ni]] = np.nan
+        data_train_irms[n_stim_mask[ni]] = np.nan
+        data_test_corr[n_stim_mask[ni]] = np.nan
+        data_test_irms[n_stim_mask[ni]] = np.nan
+
+        corr_baseline_sweep[ni], corr_baseline_sweep_ci[:, ni] = au.nan_corr(data_train_corr, data_test_corr)
+        irms_baseline_sweep[ni], irms_baseline_sweep_ci[:, ni] = au.nan_corr(data_train_irms, data_test_irms)
+
+    # get the comparison between model prediction and data irm/correlation
+    for m in weights['models']:
+        if m in ['synap', 'synap_randC', 'synap_randA']:
+            # first, get the correlation for each model using all the data. Then compare with only part of the data
+            model_corr_to_measured_corr, model_corr_to_measured_corr_ci = \
+                au.nan_corr(weights_masked['models'][m]['corr'], weights_masked['data']['test']['corr'])
+            model_corr_score.append(model_corr_to_measured_corr)
+            model_corr_score_ci.append(model_corr_to_measured_corr_ci)
+
+            model_irms_to_measured_irms, model_irms_to_measured_irms_ci = \
+                au.nan_corr(weights_masked['models'][m]['irms'], weights_masked['data']['test']['irms'])
+            model_irms_score.append(model_irms_to_measured_irms)
+            model_irms_score_ci.append(model_irms_to_measured_irms_ci)
+
+            # for each model, calculate its score for both corr and IRM reconstruction across the n stim sweep
+            model_name.append(m)
+            model_corr_score_sweep.append(np.zeros(n_stim_sweep.shape[0]))
+            model_corr_score_sweep_ci.append(np.zeros((2, n_stim_sweep.shape[0])))
+            model_irms_score_sweep.append(np.zeros(n_stim_sweep.shape[0]))
+            model_irms_score_sweep_ci.append(np.zeros((2, n_stim_sweep.shape[0])))
+
+            for ni, n in enumerate(n_stim_sweep):
+                # mask the model predicted correlations and IRMs based on how many stimulation events were observed
+                model_corr = weights['models'][m]['corr'].copy()
+                model_irms = weights['models'][m]['irms'].copy()
+                model_corr[n_stim_mask[ni]] = np.nan
+                model_irms[n_stim_mask[ni]] = np.nan
+
+                model_corr_to_measured_corr, model_corr_to_measured_corr_ci = \
+                    au.nan_corr(model_corr, weights['data']['test']['corr'])
+                model_corr_score_sweep[-1][ni] = model_corr_to_measured_corr
+                model_corr_score_sweep_ci[-1][:, ni] = model_corr_to_measured_corr_ci
+
+                model_irms_to_measured_irms, model_irms_to_measured_irms_ci = \
+                    au.nan_corr(model_irms, weights['data']['test']['irms'])
+                model_irms_score_sweep[-1][ni] = model_irms_to_measured_irms
+                model_irms_score_sweep_ci[-1][:, ni] = model_irms_to_measured_irms_ci
+
+    # plot model reconstruction of correlations
+    plt.figure()
+    plt.subplot(1, 2, 1)
+    plt.errorbar(n_stim_sweep, corr_baseline_sweep, corr_baseline_sweep_ci, label='explainable correlation')
+    for n, mcs, mcs_ci in zip(model_name, model_corr_score_sweep, model_corr_score_sweep_ci):
+        plt.errorbar(n_stim_sweep, mcs, mcs_ci, label=n)
+    plt.ylim([0, plt.ylim()[1]])
+    plt.xlabel('minimum # of stimulation events')
+    plt.ylabel('similarity to measured correlation')
+    # plt.legend()
+
+    plt.subplot(1, 2, 2)
+    plt.plot(n_stim_sweep, corr_baseline_sweep / corr_baseline_sweep, label='explainable correlation')
+    for n, mcs, mcs_ci in zip(model_name, model_corr_score_sweep, model_corr_score_sweep_ci):
+        plt.errorbar(n_stim_sweep, mcs / corr_baseline_sweep, mcs_ci / corr_baseline_sweep, label=n)
+    plt.ylim([0, 1])
+    plt.xlabel('minimum # of stimulation events')
+    plt.ylabel('similarity to measured correlation')
+    plt.legend()
+
+    plt.figure()
+    y_val = np.array(model_corr_score)
+    y_val_ci = np.stack(model_corr_score_ci).T
+    plot_x = np.arange(y_val.shape[0])
+    plt.bar(plot_x, y_val / corr_baseline)
+    plt.errorbar(plot_x, y_val / corr_baseline, y_val_ci / corr_baseline, fmt='none', color='k')
+    plt.xticks(plot_x, labels=['model', 'model\n+ scrambled labels', 'model\n+ scrambled anatomy'])
+    plt.ylabel('normalized similarity to measured correlation')
+    ax = plt.gca()
+    for label in ax.get_xticklabels():
+        label.set_rotation(45)
+
+    plt.tight_layout()
+    plt.savefig(fig_save_path / 'sim_to_corr.pdf')
+
+    # plot model reconstruction of IRMs
+    plt.figure()
+    plt.subplot(1, 2, 1)
+    plt.errorbar(n_stim_sweep, irms_baseline_sweep, irms_baseline_sweep_ci, label='explainable correlation')
+    for n, mcs, mcs_ci in zip(model_name, model_irms_score_sweep, model_irms_score_sweep_ci):
+        plt.errorbar(n_stim_sweep, mcs, mcs_ci, label=n)
+    plt.ylim([0, plt.ylim()[1]])
+    plt.xlabel('minimum # of stimulation events')
+    plt.ylabel('similarity to measured IRMs')
+    # plt.legend()
+
+    plt.subplot(1, 2, 2)
+    plt.plot(n_stim_sweep, irms_baseline_sweep / irms_baseline_sweep, label='explainable correlation')
+    for n, mcs, mcs_ci in zip(model_name, model_irms_score_sweep, model_irms_score_sweep_ci):
+        plt.errorbar(n_stim_sweep, mcs / irms_baseline_sweep, mcs_ci / irms_baseline_sweep, label=n)
+    plt.ylim([0, 1])
+    plt.xlabel('minimum # of stimulation events')
+    plt.ylabel('similarity to measured IRMs')
+    plt.legend()
+
+    plt.figure()
+    y_val = np.array(model_irms_score)
+    y_val_ci = np.stack(model_irms_score_ci).T
+    plot_x = np.arange(y_val.shape[0])
+    plt.bar(plot_x, y_val / irms_baseline)
+    plt.errorbar(plot_x, y_val / irms_baseline, y_val_ci / irms_baseline, fmt='none', color='k')
+    plt.xticks(plot_x, labels=['model', 'model\n+ scrambled labels', 'model\n+ scrambled anatomy'])
+    plt.ylabel('normalized similarity to measured IRMs')
+    ax = plt.gca()
+    for label in ax.get_xticklabels():
+        label.set_rotation(45)
+    plt.tight_layout()
+    plt.savefig(fig_save_path / 'sim_to_irm.pdf')
+
+    plt.figure()
+    plt.subplot(1, 2, 1)
+    plt.plot(n_stim_sweep, num_neuron_pairs)
+    plt.ylabel('number of neuron pairs')
+    plt.xlabel('minimum # of stimulation events')
+
+    plt.subplot(1, 2, 2)
+    plt.plot(n_stim_sweep[n_stim_sweep.shape[0]//2:], num_neuron_pairs[n_stim_sweep.shape[0]//2:])
+    plt.ylabel('number of neuron pairs')
+    plt.xlabel('minimum # of stimulation events')
+
+    plt.show()
+
+
+def figure_1(weights, weights_masked, masks, cell_ids, fig_save_path=None):
+    # compare data corr and data IRM to connectome
+    data_corr = weights_masked['data']['train']['corr']
+    data_irms = weights_masked['data']['test']['irms']
+
+    model_weights_conn = au.f_measure(masks['synap'], weights_masked['models']['synap']['dirms_binarized'])
+    data_corr_conn = au.f_measure(masks['synap'], weights_masked['data']['train']['corr_binarized'])
+    data_irm_conn = au.f_measure(masks['synap'], weights_masked['data']['train']['q'])
     conn_null = au.f_measure_null(masks['synap'])
 
     # compare model corr to measured corr and compare model IRMs to measured IRMs
@@ -21,30 +196,64 @@ def figure_1(weights, masks, cell_ids, fig_save_path=None, window=(30, 60), num_
     model_corr_score_ci = []
     model_irms_score = []
     model_irms_score_ci = []
+    num_stim_sweep = np.arange(2, 7)
+    model_name = []
+
+    # sweep through the minimum number of stimulations allowed and calculate the score
+    # as the number of required stimulations goes up the quality of correlation goes up
+    n_stim_mask = masks['n_stim_mask']
+    corr_baseline = np.zeros(num_stim_sweep.shape[0])
+    irms_baseline = np.zeros(num_stim_sweep.shape[0])
+    # get the mask for number of stims
+    for ni, n in enumerate(num_stim_sweep):
+        data_train_corr = weights_masked['data']['train']['corr'].copy()
+        data_train_irms = weights_masked['data']['train']['irms'].copy()
+        data_train_corr[n_stim_mask[ni]] = np.nan
+        data_train_irms[n_stim_mask[ni]] = np.nan
+
+        corr_baseline[ni] = au.nan_corr(data_train_corr, weights_masked['data']['test']['corr'])[0]
+        irms_baseline[ni] = au.nan_corr(data_train_irms, weights_masked['data']['test']['irms'])[0]
+
     for m in weights['models']:
         if m in ['synap', 'synap_randC', 'synap_randA']:
+            model_corr_score.append(np.zeros(num_stim_sweep.shape[0]))
+            model_corr_score_ci.append(np.zeros((2, num_stim_sweep.shape[0])))
+            model_irms_score.append(np.zeros(num_stim_sweep.shape[0]))
+            model_irms_score_ci.append(np.zeros((2, num_stim_sweep.shape[0])))
+
+            model_name.append(m)
+
             model_corr_to_measured_corr, model_corr_to_measured_corr_ci = au.nan_corr(weights['models'][m]['corr'], data_corr)
             model_corr_score.append(model_corr_to_measured_corr)
             model_corr_score_ci.append(model_corr_to_measured_corr_ci)
 
-            model_irms_to_measured_irms, model_irms_to_measured_irms_ci = au.nan_corr(weights['models'][m]['irms'], data_irms)
-            model_irms_score.append(model_irms_to_measured_irms)
-            model_irms_score_ci.append(model_irms_to_measured_irms_ci)
 
-    corr_baseline = au.nan_corr(weights['data']['train']['corr'], weights['data']['test']['corr'])[0]
-    irms_baseline = au.nan_corr(weights['data']['train']['irms'], weights['data']['test']['irms'])[0]
+            for ni, n in enumerate(num_stim_sweep):
+                model_corr = weights_masked['models'][m]['corr'].copy()
+                model_irms = weights_masked['models'][m]['irms'].copy()
+                model_corr[n_stim_mask[ni]] = np.nan
+                model_irms[n_stim_mask[ni]] = np.nan
+
+                model_corr_to_measured_corr, model_corr_to_measured_corr_ci = au.nan_corr(model_corr, data_corr)
+                model_corr_score[-1][ni] = model_corr_to_measured_corr
+                model_corr_score_ci[-1][:, ni] = model_corr_to_measured_corr_ci
+
+                model_irms_to_measured_irms, model_irms_to_measured_irms_ci = au.nan_corr(model_irms, data_irms)
+                model_irms_score[-1][ni] = model_irms_to_measured_irms
+                model_irms_score_ci[-1][:, ni] = model_irms_to_measured_irms_ci
+
 
     # plotting
     # am.plot_irf(measured_irf=weights['data']['test']['irfs'], measured_irf_sem=weights['data']['test']['irfs_sem'],
     #             model_irf=weights['models']['synap']['irfs'],
     #             cell_ids=cell_ids['all'], cell_ids_chosen=cell_ids['chosen'], window=window, num_plot=num_traces_plot,
     #             fig_save_path=fig_save_path)
-    am.plot_irm(model_weights=weights['models']['synap']['dirms'], measured_irm=data_irms, model_irm=weights['models']['synap']['irms'],
+    am.plot_irm(model_weights=weights_masked['models']['synap']['dirms'], measured_irm=data_irms, model_irm=weights_masked['models']['synap']['irms'],
                 data_corr=data_corr, cell_ids=cell_ids['all'], cell_ids_chosen=cell_ids['chosen'], fig_save_path=fig_save_path)
 
     # plot model weight similarity to connectome
     plt.figure()
-    y_val = np.array([model_weights_conn, data_corr_conn, data_irm_conn, ])
+    y_val = np.array([model_weights_conn, data_corr_conn, data_irm_conn])
     plot_x = np.arange(y_val.shape[0])
     plt.bar(plot_x, y_val)
     plt.axhline(conn_null, color='k', linestyle='--')
@@ -62,23 +271,23 @@ def figure_1(weights, masks, cell_ids, fig_save_path=None, window=(30, 60), num_
     y_val_ci = np.stack(model_corr_score_ci).T
     plot_x = np.arange(y_val.shape[0])
     plt.subplot(1, 2, 1)
-    plt.bar(plot_x, y_val)
-    plt.errorbar(plot_x, y_val, y_val_ci, fmt='none', color='k')
-    plt.axhline(corr_baseline, color='k', linestyle='--')
-    plt.xticks(plot_x, labels=['model', 'model\n+ scrambled labels', 'model\n+ scrambled anatomy'])
+    plt.plot(num_stim_sweep, corr_baseline, label='explainable correlation')
+    for n, mcs, mcs_ci in zip(model_name, model_corr_score, model_corr_score_ci):
+        plt.errorbar(num_stim_sweep, mcs, mcs_ci, label=n)
+    plt.xlabel('# of stimulation events')
     plt.ylabel('similarity to measured correlation')
     ax = plt.gca()
     for label in ax.get_xticklabels():
         label.set_rotation(45)
 
-    plt.subplot(1, 2, 2)
-    plt.bar(plot_x, y_val / corr_baseline)
-    plt.errorbar(plot_x, y_val / corr_baseline, y_val_ci / corr_baseline, fmt='none', color='k')
-    plt.xticks(plot_x, labels=['model', 'model\n+ scrambled labels', 'model\n+ scrambled anatomy'])
-    plt.ylabel('normalized similarity to measured correlation')
-    ax = plt.gca()
-    for label in ax.get_xticklabels():
-        label.set_rotation(45)
+    # plt.subplot(1, 2, 2)
+    # plt.bar(plot_x, y_val / corr_baseline)
+    # plt.errorbar(plot_x, y_val / corr_baseline, y_val_ci / corr_baseline, fmt='none', color='k')
+    # plt.xticks(plot_x, labels=['model', 'model\n+ scrambled labels', 'model\n+ scrambled anatomy'])
+    # plt.ylabel('normalized similarity to measured correlation')
+    # ax = plt.gca()
+    # for label in ax.get_xticklabels():
+    #     label.set_rotation(45)
 
     plt.tight_layout()
     plt.savefig(fig_save_path / 'sim_to_corr.pdf')
@@ -89,14 +298,16 @@ def figure_1(weights, masks, cell_ids, fig_save_path=None, window=(30, 60), num_
     y_val_ci = np.stack(model_irms_score_ci).T
     plot_x = np.arange(y_val.shape[0])
     plt.subplot(1, 2, 1)
-    plt.bar(plot_x, y_val)
-    plt.errorbar(plot_x, y_val, y_val_ci, fmt='none', color='k')
-    plt.axhline(irms_baseline, color='k', linestyle='--')
-    plt.xticks(plot_x, labels=['model', 'model\n+ scrambled labels', 'model\n+ scrambled anatomy'])
+    plt.plot(num_stim_sweep, irms_baseline, label='explainable correlation')
+    for n, mcs, mcs_ci in zip(model_name, model_irms_score, model_irms_score_ci):
+        plt.errorbar(num_stim_sweep, mcs, mcs_ci, label=n)
+    plt.xlabel('# of stimulation events')
     plt.ylabel('similarity to measured IRMs')
     ax = plt.gca()
     for label in ax.get_xticklabels():
         label.set_rotation(45)
+
+    plt.show()
 
     plt.subplot(1, 2, 2)
     plt.bar(plot_x, y_val / irms_baseline)

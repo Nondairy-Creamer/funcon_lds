@@ -272,7 +272,7 @@ def simple_get_irms(data_in, inputs_in, sample_rate=0.5, required_num_stim=5, wi
 
     irms[num_stim < required_num_stim] = np.nan
 
-    return irms, irfs, irfs_sem
+    return irms, irfs, irfs_sem, num_stim
 
 
 def calculate_irfs(model, duration=60):
@@ -506,6 +506,30 @@ def frac_explainable_var(y_true, y_hat, y_true_std_trials):
     r_er_square = (numerator - numerator_correction) / (denominator - denominator_correction)
 
     return r_er_square
+
+
+def normalize_model(model, posterior=None, init_mean=None, init_cov=None):
+    c_sum = model.emissions_weights.sum(1)
+    c_sum_stacked = np.tile(c_sum, model.dynamics_lags)
+    h = np.diag(c_sum_stacked)
+    h_inv = np.diag(1 / c_sum_stacked)
+
+    model.dynamics_weights = h @ model.dynamics_weights @ h_inv
+    model.dynamics_input_weights = h @ model.dynamics_input_weights
+    model.dynamics_cov = h @ model.dynamics_cov @ h.T
+
+    model.emissions_weights = model.emissions_weights @ h_inv
+
+    if posterior is not None:
+        posterior = [i @ h[:model.dynamics_dim, :model.dynamics_dim].T for i in posterior]
+
+    if init_mean is not None:
+        init_mean = [h @ i for i in init_mean]
+
+    if init_cov is not None:
+        init_cov = [h @ i @ h.T for i in init_cov]
+
+    return model, posterior, init_mean, init_cov
 
 
 def nan_corr_data(data, alpha=0.05):

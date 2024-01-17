@@ -40,6 +40,11 @@ model_sampled = posterior_dict['model_sampled']
 cell_ids = data['cell_ids']
 posterior = posterior_dict['posterior']
 
+model, posterior, init_mean, init_cov \
+    = au.normalize_model(model, posterior=posterior,
+                         init_mean=posterior_dict['init_mean'],
+                         init_cov=posterior_dict['init_cov'])
+
 # get the impulse response functions (IRF)
 measured_irf, measured_irf_sem, measured_irf_all = au.get_impulse_response_function(emissions, inputs, window=window, sub_pre_stim=sub_pre_stim, return_pre=True)
 model_irf, model_irf_sem, model_irf_all = au.get_impulse_response_function(model_sampled, inputs, window=window,
@@ -63,6 +68,7 @@ for ni in range(num_neurons):
         num_obs_when_stim = np.sum(np.mean(~np.isnan(resp_to_stim), axis=1) > 0.5)
         num_stim[nj, ni] += num_obs_when_stim
 
+data_corr = data_corr[0]
 measured_irf_ave[num_stim < run_params['num_stim_cutoff']] = np.nan
 model_irf_ave[num_stim < run_params['num_stim_cutoff']] = np.nan
 data_corr[num_stim < run_params['num_stim_cutoff']] = np.nan
