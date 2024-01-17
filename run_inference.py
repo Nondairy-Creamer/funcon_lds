@@ -307,16 +307,15 @@ def continue_fit(param_name, save_folder, extra_train_steps):
         starting_step = 0
 
     run_fitting(run_params, model_trained, data_train, data_test, save_folder, starting_step=starting_step,
-                emissions_offset_train=emissions_offset_train,
-                init_mean_train=init_mean_train, init_cov_train=init_cov_train,
-                emissions_offset_test=emissions_offset_test,
-                init_mean_test=init_mean_test, init_cov_test=init_cov_test)
+                emissions_offset_train=emissions_offset_train, emissions_offset_test=emissions_offset_test,
+                init_mean_train=init_mean_train, init_mean_test=init_mean_test,
+                init_cov_train=init_cov_train, init_cov_test=init_cov_test)
 
 
 def run_fitting(run_params, model, data_train, data_test, save_folder, model_true=None, starting_step=0,
                 emissions_offset_train=None, emissions_offset_test=None,
-                init_mean_train=None, init_cov_train=None,
-                init_mean_test=None, init_cov_test=None):
+                init_mean_train=None, init_mean_test=None,
+                init_cov_train=None, init_cov_test=None):
     comm = pkl5.Intracomm(MPI.COMM_WORLD)
     size = comm.Get_size()
     cpu_id = comm.Get_rank()
