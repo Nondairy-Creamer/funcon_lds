@@ -678,25 +678,19 @@ class Lgssm:
                 self.emissions_weights = CDnew[:, :nz]  # new A
                 self.emissions_input_weights = CDnew[:, nz:-1]  # new B
             elif self.param_props['update']['emissions_weights']:  # update C only
-                one_vec = np.ones((self.dynamics_dim_full, 1))
                 sm_ind = np.stack([i.sum(0) for i in suff_stats[2]]).T
-                alpha = np.block([[Mz, one_vec], [one_vec.T, np.zeros((1, 1))]])
-                zero_pad = np.zeros((1, sm_ind.shape[1]))
-                beta = np.concatenate((sm_ind, zero_pad), axis=0)
                 delta = np.diag([i.shape[0] for i in emissions_list])
-                feat_mat = np.block([[alpha, beta], [beta.T, delta]])
+                feat_mat = np.block([[Mz, sm_ind], [sm_ind.T, delta]])
                 sum_ys = np.stack([i.sum(0) for i in y]).T
                 sum_us = np.stack([self.emissions_input_weights @ i.sum(0) for i in inputs_list]).T
-                one_vec = np.ones((self.emissions_dim, 1))
-                lin_out = np.block([Mzy.T - self.emissions_input_weights @ Muz, one_vec, sum_ys - sum_us]).T
+                lin_out = np.block([Mzy.T - self.emissions_input_weights @ Muz, sum_ys - sum_us]).T
 
                 em_mask = np.zeros((feat_mat.shape[0], lin_out.shape[1])) == 0
                 em_mask[:self.dynamics_dim_full, :] = self.param_props['mask']['emissions_weights'].T
                 c_lambda_d = iu.solve_masked(feat_mat, lin_out, mask=em_mask)
 
                 self.emissions_weights = c_lambda_d[:self.dynamics_dim_full, :].T
-                ls = c_lambda_d[self.dynamics_dim_full, :]
-                ds = c_lambda_d[self.dynamics_dim_full+1:, :]
+                ds = c_lambda_d[self.dynamics_dim_full:, :]
                 emissions_offset_list = np.split(ds, ds.shape[0], axis=0)
                 emissions_offset_list = [i[0, :] for i in emissions_offset_list]
 
