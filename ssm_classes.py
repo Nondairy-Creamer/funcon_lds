@@ -82,7 +82,10 @@ class Lgssm:
         self.dynamics_input_weights_init = np.zeros((self.dynamics_input_lags, self.dynamics_dim, self.input_dim,))
 
         # initialize emissions weights
-        self.emissions_weights_init = np.tile(np.eye(self.emissions_dim, self.dynamics_dim), (1, self.dynamics_lags)) / self.dynamics_lags
+        if self.param_props['update']['emissions_weights']:
+            self.emissions_weights_init = np.tile(np.eye(self.emissions_dim, self.dynamics_dim), (1, self.dynamics_lags)) / self.dynamics_lags
+        else:
+            self.emissions_weights_init = np.eye(self.emissions_dim, self.dynamics_dim_full)
         self.emissions_input_weights_init = np.zeros((self.emissions_input_lags, self.emissions_dim, self.input_dim))
         self.emissions_cov_init = np.eye(self.emissions_dim)
 
