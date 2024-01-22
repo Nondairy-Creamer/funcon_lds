@@ -814,7 +814,9 @@ class Lgssm:
 
     @staticmethod
     def estimate_emissions_offset(emissions):
-        emissions_offset = [np.nanmean(i, axis=0) for i in emissions]
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', category=RuntimeWarning)
+            emissions_offset = [np.nanmean(i, axis=0) for i in emissions]
 
         for i in range(len(emissions_offset)):
             emissions_offset[i][np.isnan(emissions_offset[i])] = 0

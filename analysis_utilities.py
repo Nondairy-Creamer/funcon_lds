@@ -251,7 +251,7 @@ def compare_matrix_sets(left_side, right_side, positive_weights=False):
     return score, score_ci, left_recon, right_recon
 
 
-def simple_get_irms(data_in, inputs_in, sample_rate=0.5, required_num_stim=5, window=[30, 60], sub_pre_stim=True):
+def simple_get_irms(data_in, inputs_in, sample_rate=0.5, required_num_stim=0, window=[15, 30], sub_pre_stim=True):
     if window[0] < 0 or window[1] < 0 or np.sum(window) <= 0:
         raise Exception('window must be positive and sum to > 0')
 
@@ -262,6 +262,7 @@ def simple_get_irms(data_in, inputs_in, sample_rate=0.5, required_num_stim=5, wi
     irms = np.nanmean(irfs[window[0]:], axis=0)
     irms[np.eye(irms.shape[0], dtype=bool)] = np.nan
 
+    # count the number of stimulation events
     num_neurons = irfs.shape[1]
     num_stim = np.zeros((num_neurons, num_neurons))
     for ni in range(num_neurons):
@@ -322,7 +323,7 @@ def calculate_dirfs(model, duration=60):
                 continue
 
             weights = A[:, (s, r), :][:, :, (s, r)]
-            weights[0, 1] = 0
+            weights[:, 0, 1] = 0
             input_weights = B[:, s]
             activity_history = np.zeros((model.dynamics_lags, 2))
 
@@ -339,6 +340,52 @@ def calculate_dirfs(model, duration=60):
         print(s + 1, '/', model.dynamics_dim)
 
     return dirfs
+
+
+def calculate_eirfs(model, duration=60):
+    # get the direct impulse response function between each pair of neurons
+    A = model.stack_dynamics_weights()
+    num_t = int(duration / model.sample_rate)
+    effective_weights = np.zeros((num_t, model.dynamics_dim, model.dynamics_dim))
+    effective_weights[:, np.eye(model.dynamics_dim, dtype=bool)] = np.nan
+
+    print('Calculating effective weights')
+    # loop through the stimulated neuron
+    for s in range(model.dynamics_dim):
+        # loop through responding neuron
+        for r in range(model.dynamics_dim):
+            if s == r:
+                continue
+
+            weights = A[:, (s, r), :][:, :, (s, r)]
+            weights[:, 0, 1] = 0
+            activity_history = np.zeros((model.dynamics_lags, 2))
+            activity_history[0, 0] = 1
+
+            if np.all(weights[:, 1, 0] == 0):
+                continue
+
+            for t in np.arange(num_t):
+                current_activity = np.sum(weights @ activity_history[:, :, None], axis=0)[:, 0]
+                effective_weights[t, r, s] = current_activity[1]
+                activity_history = np.roll(activity_history, 1, axis=0)
+                activity_history[0, :] = current_activity
+                a=1
+
+        print(s + 1, '/', model.dynamics_dim)
+
+    return effective_weights
+
+
+def accuracy(y_true, y_hat):
+    y_true = y_true.reshape(-1)
+    y_hat = y_hat.reshape(-1)
+
+    nan_loc = np.isnan(y_true) | np.isnan(y_hat)
+    y_true = y_true[~nan_loc]
+    y_hat = y_hat[~nan_loc]
+
+    return np.mean(y_true == y_hat)
 
 
 def precision(y_true, y_hat):
@@ -383,16 +430,77 @@ def f_measure(y_true, y_hat):
     return (2 * p * r) / (p + r)
 
 
-def f_measure_null(y_true, num_sample=100, rng=np.random.default_rng()):
-    y_true = y_true[~np.isnan(y_true)]
-    rand_dist = []
-    rand_prob = np.mean(y_true)
+def mutual_info(y_true, y_hat):
+    y_true = y_true.reshape(-1)
+    y_hat = y_hat.reshape(-1)
 
-    for i in range(num_sample):
-        rand_sample = (rng.uniform(0, 1, size=y_true.shape[0]) < rand_prob).astype(float)
-        rand_dist.append(f_measure(y_true, rand_sample))
+    nan_loc = np.isnan(y_true) | np.isnan(y_hat)
+    y_true = y_true[~nan_loc]
+    y_hat = y_hat[~nan_loc]
 
-    return np.mean(rand_dist)
+    p_y_true = np.array([1 - np.mean(y_true), np.mean(y_true)])
+    p_y_hat = np.array([1 - np.mean(y_hat), np.mean(y_hat)])
+
+    p_joint = np.zeros((2, 2))
+    p_joint[0, 0] = np.mean((y_true == 0) & (y_hat == 0))
+    p_joint[1, 0] = np.mean((y_true == 1) & (y_hat == 0))
+    p_joint[0, 1] = np.mean((y_true == 0) & (y_hat == 1))
+    p_joint[1, 1] = np.mean((y_true == 1) & (y_hat == 1))
+
+    p_outer = p_y_true[:, None] * p_y_hat[None, :]
+
+    mi = 0
+    for i in range(2):
+        for j in range(2):
+            if p_joint[i, j] != 0:
+                mi += p_joint[i, j] * np.log2(p_joint[i, j] / p_outer[i, j])
+
+    return mi
+
+
+def metric_ci(metric, y_true, y_hat, alpha=0.05, n_boot=1000, rng=np.random.default_rng()):
+    y_true = y_true.astype(float)
+    y_hat = y_hat.astype(float)
+
+    y_true = y_true.reshape(-1)
+    y_hat = y_hat.reshape(-1)
+
+    nan_loc = np.isnan(y_true) | np.isnan(y_hat)
+    y_true = y_true[~nan_loc]
+    y_hat = y_hat[~nan_loc]
+
+    mi = metric(y_true, y_hat)
+    booted_mi = np.zeros(n_boot)
+    mi_ci = np.zeros(2)
+
+    for n in range(n_boot):
+        sample_inds = rng.integers(0, high=y_true.shape[0], size=y_true.shape[0])
+        y_true_resampled = y_true[sample_inds]
+        y_hat_resampled = y_hat[sample_inds]
+        booted_mi[n] = metric(y_true_resampled, y_hat_resampled)
+
+    mi_ci[0] = np.percentile(booted_mi, alpha * 100)
+    mi_ci[1] = np.percentile(booted_mi, (1 - alpha) * 100)
+
+    mi_ci = np.abs(mi_ci - mi)
+
+    return mi, mi_ci
+
+
+def metric_null(metric, y_true, n_sample=1000, rng=np.random.default_rng()):
+    y_true = y_true.reshape(-1)
+
+    nan_loc = np.isnan(y_true)
+    y_true = y_true[~nan_loc]
+
+    py = np.mean(y_true)
+    sampled_mi = np.zeros(n_sample)
+
+    for n in range(n_sample):
+        random_example = rng.uniform(0, 1, size=y_true.shape) < py
+        sampled_mi[n] = metric(y_true, random_example)
+
+    return np.mean(sampled_mi)
 
 
 def find_stim_events(inputs, emissions=None, chosen_neuron_ind=None, window_size=1000):
@@ -449,7 +557,7 @@ def nan_r2(y_true, y_hat):
     return r2
 
 
-def nan_corr(y_true, y_hat, mean_sub=True):
+def nan_corr(y_true, y_hat, alpha=0.05, mean_sub=True):
     y_true = y_true.reshape(-1)
     y_hat = y_hat.reshape(-1)
 
@@ -464,10 +572,9 @@ def nan_corr(y_true, y_hat, mean_sub=True):
     y_true_std = np.std(y_true, ddof=1)
     y_hat_std = np.std(y_hat, ddof=1)
 
-    corr = np.mean(y_true * y_hat) / y_true_std / y_hat_std
+    corr = (np.mean(y_true * y_hat) / y_true_std / y_hat_std)
 
     # now estimate the confidence intervals for the correlation
-    alpha = 0.5
     n = y_true.shape[0]
     z_a = scipy.stats.norm.ppf(1 - alpha / 2)
     z_r = np.log((1 + corr) / (1 - corr)) / 2
@@ -475,7 +582,7 @@ def nan_corr(y_true, y_hat, mean_sub=True):
     u = z_r + (z_a / np.sqrt(n - 3))
     ci_l = (np.exp(2 * l) - 1) / (np.exp(2 * l) + 1)
     ci_u = (np.exp(2 * u) - 1) / (np.exp(2 * u) + 1)
-    ci = (np.abs(ci_l - corr), ci_u - corr)
+    ci = [np.abs(ci_l - corr), ci_u - corr]
 
     return corr, ci
 
@@ -533,42 +640,17 @@ def normalize_model(model, posterior=None, init_mean=None, init_cov=None):
 
 
 def nan_corr_data(data, alpha=0.05):
-    num_neurons = data[0].shape[1]
+    data_cat = np.concatenate(data, axis=0)
+    data_corr = np.zeros((data_cat.shape[1], data_cat.shape[1]))
+    data_corr_ci = np.zeros((2, data_cat.shape[1], data_cat.shape[1]))
 
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore', category=RuntimeWarning)
-        # calculate the average cross correlation between neurons
-        emissions_cov = []
+    for i in range(data_cat.shape[1]):
+        for j in range(data_cat.shape[1]):
+            data_corr[i, j], data_corr_ci[:, i, j] = nan_corr(data_cat[:, i], data_cat[:, j], alpha=alpha)
 
-        for i in range(len(data)):
-            emissions_this = data[i]
-            nan_loc = np.isnan(emissions_this)
-            em_z_score = (emissions_this - np.nanmean(emissions_this, axis=0)) / np.nanstd(emissions_this, ddof=1, axis=0)
-            em_z_score[nan_loc] = 0
+        print(i+1, '/', data_cat.shape[1], 'neurons correlated')
 
-            # figure out how many times the two neurons were measured together
-            num_measured = np.zeros((num_neurons, num_neurons))
-            for j1 in range(num_neurons):
-                for j2 in range(num_neurons):
-                    num_measured[j1, j2] = np.sum(~nan_loc[:, j1] & ~nan_loc[:, j2])
-
-            emissions_cov_this = em_z_score.T @ em_z_score / num_measured
-            emissions_cov.append(emissions_cov_this)
-
-        stacked_cov = np.stack(emissions_cov)
-        correlation = np.nanmean(stacked_cov, axis=0)
-        correlation_std = np.nanstd(stacked_cov, axis=0, ddof=1)
-        correlation[np.isnan(correlation_std)] = np.nan
-
-        ci_low = np.zeros_like(correlation)
-        ci_high = np.zeros_like(correlation)
-
-        for i in range(num_neurons):
-            for j in range(num_neurons):
-                ci_low[i, j] = norm.ppf(alpha/2, loc=correlation[i, j], scale=correlation_std[i, j])
-                ci_high[i, j] = norm.ppf(1 - alpha/2, loc=correlation[i, j], scale=correlation_std[i, j])
-
-    return correlation, [ci_low, ci_high]
+    return data_corr, data_corr_ci
 
 
 def nancorrcoef(data):
