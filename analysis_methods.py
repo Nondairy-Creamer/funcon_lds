@@ -697,10 +697,7 @@ def plot_irf(measured_irf, measured_irf_sem, model_irf, cell_ids, cell_ids_chose
     for pi, p in enumerate(plot_inds):
         measured_response_sem_chosen[:, pi] = measured_irf_sem[:, p[0], p[1]]
         measured_response_chosen[:, pi] = measured_irf[:, p[0], p[1]]
-        mi = model_irf[:, p[0], p[1]]
-        z_pad = np.zeros(measured_irf_sem.shape[0] - mi.shape[0])
-        mi = np.concatenate((z_pad, mi))
-        model_sampled_response_chosen[:, pi] = mi
+        model_sampled_response_chosen[:, pi] = model_irf[:, p[0], p[1]]
         plot_label.append((cell_ids_chosen[p[0]], cell_ids_chosen[p[1]]))
 
     ylim = (np.nanpercentile([measured_response_chosen - measured_response_sem_chosen, model_sampled_response_chosen], 1),

@@ -276,11 +276,11 @@ def simple_get_irms(data_in, inputs_in, sample_rate=0.5, required_num_stim=0, wi
     return irms, irfs, irfs_sem, num_stim
 
 
-def calculate_irfs(model, duration=60):
+def calculate_irfs(model, window=(30, 60)):
     # get the direct impulse response function between each pair of neurons
     A = model.stack_dynamics_weights()
     B = model.dynamics_input_weights_diagonal()
-    num_t = int(duration / model.sample_rate)
+    num_t = int(window[1] / model.sample_rate)
     u = np.zeros(num_t + model.dynamics_input_lags)
     u[int(model.dynamics_input_lags)] = 1
     irfs = np.zeros((num_t, model.dynamics_dim, model.dynamics_dim))
@@ -301,14 +301,17 @@ def calculate_irfs(model, duration=60):
 
         print(s + 1, '/', model.dynamics_dim)
 
+    zero_pad = np.zeros((int(window[0] / model.sample_rate), model.dynamics_dim, model.dynamics_dim))
+    irfs = np.concatenate((zero_pad, irfs), axis=0)
+
     return irfs
 
 
-def calculate_dirfs(model, duration=60):
+def calculate_dirfs(model, window=(30, 60)):
     # get the direct impulse response function between each pair of neurons
     A = model.stack_dynamics_weights()
     B = model.dynamics_input_weights_diagonal()
-    num_t = int(duration / model.sample_rate)
+    num_t = int(window[1] / model.sample_rate)
     u = np.zeros(num_t + model.dynamics_input_lags)
     u[int(model.dynamics_input_lags)] = 1
     dirfs = np.zeros((num_t, model.dynamics_dim, model.dynamics_dim))
@@ -339,13 +342,16 @@ def calculate_dirfs(model, duration=60):
 
         print(s + 1, '/', model.dynamics_dim)
 
+    zero_pad = np.zeros((int(window[0] / model.sample_rate), model.dynamics_dim, model.dynamics_dim))
+    dirfs = np.concatenate((zero_pad, dirfs), axis=0)
+
     return dirfs
 
 
-def calculate_eirfs(model, duration=60):
+def calculate_eirfs(model, window=(30, 60)):
     # get the direct impulse response function between each pair of neurons
     A = model.stack_dynamics_weights()
-    num_t = int(duration / model.sample_rate)
+    num_t = int(window[1] / model.sample_rate)
     effective_weights = np.zeros((num_t, model.dynamics_dim, model.dynamics_dim))
     effective_weights[:, np.eye(model.dynamics_dim, dtype=bool)] = np.nan
 
@@ -373,6 +379,9 @@ def calculate_eirfs(model, duration=60):
                 a=1
 
         print(s + 1, '/', model.dynamics_dim)
+
+    zero_pad = np.zeros((int(window[0] / model.sample_rate), model.dynamics_dim, model.dynamics_dim))
+    effective_weights = np.concatenate((zero_pad, effective_weights), axis=0)
 
     return effective_weights
 

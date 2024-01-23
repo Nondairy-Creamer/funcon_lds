@@ -294,6 +294,72 @@ def plot_dirfs(weights, cell_ids, num_plot=10, fig_save_path=None):
     plt.show()
 
 
+def plot_dirm_swaps(weights, masks, cell_ids, num_plot=10, fig_save_path=None):
+    data_irfs = weights['data']['test']['irfs'][:, masks['synap']]
+    model_irfs = weights['models']['synap']['irfs'][:, masks['synap']]
+    model_dirfs = weights['models']['synap']['dirfs'][:, masks['synap']]
+
+    data_irms = weights['data']['test']['irms'][masks['synap']]
+    model_irms = weights['models']['synap']['irms'][masks['synap']]
+    model_dirms = weights['models']['synap']['dirms'][masks['synap']]
+
+    num_neurons = len(cell_ids['all'])
+    post_synaptic = np.empty((num_neurons, num_neurons), dtype=object)
+    pre_synaptic = np.empty((num_neurons, num_neurons), dtype=object)
+    for ci in range(num_neurons):
+        for cj in range(num_neurons):
+            post_synaptic[ci, cj] = cell_ids['all'][ci]
+            pre_synaptic[ci, cj] = cell_ids['all'][cj]
+
+    cell_stim_names = np.stack((post_synaptic[masks['synap']], pre_synaptic[masks['synap']]))
+
+    # get rid of nans
+    # these should all be the same, but for safety and clarity check for nans in all
+    nan_loc = np.isnan(data_irms) | np.isnan(model_irms) | np.isnan(model_dirms)
+
+    data_irfs = data_irfs[:, ~nan_loc]
+    model_irfs = model_irfs[:, ~nan_loc]
+    model_dirfs = model_dirfs[:, ~nan_loc]
+
+    data_irms = data_irms[~nan_loc]
+    model_irms = model_irms[~nan_loc]
+    model_dirms = model_dirms[~nan_loc]
+    cell_ids_no_nan = np.stack((cell_stim_names[0, ~nan_loc], cell_stim_names[1, ~nan_loc]))
+
+    pos_irms = (data_irms > 0) & (model_irms > 0)
+    neg_irms = (data_irms < 0) & (model_irms < 0)
+    dirm_swaps = (pos_irms & (model_dirms < 0)) | (neg_irms & (model_dirms > 0))
+
+    data_irfs_swapped = data_irfs[:, dirm_swaps]
+    model_irfs_swapped = model_irfs[:, dirm_swaps]
+    model_dirfs_swapped = model_dirfs[:, dirm_swaps]
+    data_irms_swapped = data_irms[dirm_swaps]
+    model_irms_swapped = model_irms[dirm_swaps]
+    model_dirms_swapped = model_dirms[dirm_swaps]
+    cell_ids_swapped = cell_ids_no_nan[:, dirm_swaps]
+
+    model_irms_swapped_sort_inds_max = np.argsort(model_irms_swapped)[::-1]
+    model_irms_swapped_sort_inds_min = np.argsort(model_irms_swapped)
+
+    for i in range(num_plot):
+        plt.figure()
+        plot_ind = model_irms_swapped_sort_inds_max[i]
+        plt.plot(data_irfs_swapped[:, plot_ind], label='data irf')
+        plt.plot(model_irfs_swapped[:, plot_ind], label='model irf')
+        plt.plot(model_dirfs_swapped[:, plot_ind], label='model irm')
+        plt.legend()
+
+    for i in range(num_plot):
+        plt.figure()
+        plot_ind = model_irms_swapped_sort_inds_min[i]
+        plt.plot(data_irfs_swapped[:, plot_ind], label='data irf')
+        plt.plot(model_irfs_swapped[:, plot_ind], label='model irf')
+        plt.plot(model_dirfs_swapped[:, plot_ind], label='model irm')
+        plt.legend()
+
+    plt.show()
+
+
 def predict_chem_synapse_sign(weights, masks, cell_ids, metric=au.accuracy, rng=np.random.default_rng(), fig_save_path=None):
     # get the connections associated with chem but not gap junctions
     # and the connections associated with gap but not chemical junctions
@@ -366,21 +432,20 @@ def predict_chem_synapse_sign(weights, masks, cell_ids, metric=au.accuracy, rng=
 def predict_gap_synapse_sign(weights, masks, metric=au.accuracy, rng=np.random.default_rng(), fig_save_path=None):
     # get the connections associated with chem but not gap junctions
     # and the connections associated with gap but not chemical junctions
+    # TODO: when I was just masking based on number of stimulations, but not based on the nans in the data
+    # the fraction of positive gap junctions in the data went down... seems like a bug
     gap_no_chem = masks['gap'] & ~masks['chem']
 
     model_synap_dirms_gap = weights['models']['synap']['eirms'][gap_no_chem]
-    model_uncon_dirms_gap = weights['models']['unconstrained']['eirms'][gap_no_chem]
     data_irms_gap = weights['data']['test']['irms'][gap_no_chem]
 
     # binarize the synapses into greater than / less than 0
     # note that in python 3 > nan is False annoyingly. set it back to nan
     nan_loc_gap = np.isnan(model_synap_dirms_gap)
     model_synap_dirms_gap = (model_synap_dirms_gap > 0).astype(float)
-    model_uncon_dirms_gap = (model_uncon_dirms_gap > 0).astype(float)
     data_irms_gap = (data_irms_gap > 0).astype(float)
 
     model_synap_dirms_gap[nan_loc_gap] = np.nan
-    model_uncon_dirms_gap[nan_loc_gap] = np.nan
     data_irms_gap[nan_loc_gap] = np.nan
 
     # calculate the rate of positive synapses for chemical vs gap junction
