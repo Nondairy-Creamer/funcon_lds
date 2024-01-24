@@ -1,8 +1,7 @@
 from matplotlib import pyplot as plt
-import analysis_utilities as au
 import numpy as np
 import wormneuroatlas as wa
-import metrics as m
+import metrics as met
 
 
 def corr_irm_recon(weights_unmasked, weights, masks, fig_save_path=None):
@@ -39,11 +38,9 @@ def corr_irm_recon(weights_unmasked, weights, masks, fig_save_path=None):
 
     # get the baseline correlation and IRMs. This is the best the model could have done
     # across all data
-    corr_baseline = au.nan_corr(weights['data']['train']['corr'],
-                                weights['data']['test']['corr'])[0]
+    corr_baseline = met.nan_corr(weights['data']['train']['corr'], weights['data']['test']['corr'])[0]
 
-    irms_baseline = au.nan_corr(weights['data']['train']['irms'],
-                                weights['data']['test']['irms'])[0]
+    irms_baseline = met.nan_corr(weights['data']['train']['irms'], weights['data']['test']['irms'])[0]
 
     # sweep across number of stims
     for ni, n in enumerate(n_stim_sweep):
@@ -53,7 +50,7 @@ def corr_irm_recon(weights_unmasked, weights, masks, fig_save_path=None):
         data_train_irms[n_stim_mask[ni]] = np.nan
         data_test_irms[n_stim_mask[ni]] = np.nan
 
-        irms_baseline_sweep[ni], irms_baseline_sweep_ci[:, ni] = au.nan_corr(data_train_irms, data_test_irms)
+        irms_baseline_sweep[ni], irms_baseline_sweep_ci[:, ni] = met.nan_corr(data_train_irms, data_test_irms)
 
     # sweep across number of observations
     for ni, n in enumerate(n_obs_sweep):
@@ -63,19 +60,19 @@ def corr_irm_recon(weights_unmasked, weights, masks, fig_save_path=None):
         data_train_corr[n_obs_mask[ni]] = np.nan
         data_test_corr[n_obs_mask[ni]] = np.nan
 
-        corr_baseline_sweep[ni], corr_baseline_sweep_ci[:, ni] = au.nan_corr(data_train_corr, data_test_corr)
+        corr_baseline_sweep[ni], corr_baseline_sweep_ci[:, ni] = met.nan_corr(data_train_corr, data_test_corr)
 
     # get the comparison between model prediction and data irm/correlation
     for m in weights_unmasked['models']:
         if m in ['synap', 'synap_randC', 'synap_randA']:
             # first, get the correlation for each model using all the data. Then compare with only part of the data
             model_corr_to_measured_corr, model_corr_to_measured_corr_ci = \
-                au.nan_corr(weights['models'][m]['corr'], weights['data']['test']['corr'])
+                met.nan_corr(weights['models'][m]['corr'], weights['data']['test']['corr'])
             model_corr_score.append(model_corr_to_measured_corr)
             model_corr_score_ci.append(model_corr_to_measured_corr_ci)
 
             model_irms_to_measured_irms, model_irms_to_measured_irms_ci = \
-                au.nan_corr(weights['models'][m]['irms'], weights['data']['test']['irms'])
+                met.nan_corr(weights['models'][m]['irms'], weights['data']['test']['irms'])
             model_irms_score.append(model_irms_to_measured_irms)
             model_irms_score_ci.append(model_irms_to_measured_irms_ci)
 
@@ -92,7 +89,7 @@ def corr_irm_recon(weights_unmasked, weights, masks, fig_save_path=None):
                 model_irms[n_stim_mask[ni]] = np.nan
 
                 model_irms_to_measured_irms, model_irms_to_measured_irms_ci = \
-                    au.nan_corr(model_irms, weights_unmasked['data']['test']['irms'])
+                    met.nan_corr(model_irms, weights_unmasked['data']['test']['irms'])
                 model_irms_score_sweep[-1][ni] = model_irms_to_measured_irms
                 model_irms_score_sweep_ci[-1][:, ni] = model_irms_to_measured_irms_ci
 
@@ -102,7 +99,7 @@ def corr_irm_recon(weights_unmasked, weights, masks, fig_save_path=None):
                 model_corr[n_obs_mask[ni]] = np.nan
 
                 model_corr_to_measured_corr, model_corr_to_measured_corr_ci = \
-                    au.nan_corr(model_corr, weights_unmasked['data']['test']['corr'])
+                    met.nan_corr(model_corr, weights_unmasked['data']['test']['corr'])
                 model_corr_score_sweep[-1][ni] = model_corr_to_measured_corr
                 model_corr_score_sweep_ci[-1][:, ni] = model_corr_to_measured_corr_ci
 
@@ -182,11 +179,11 @@ def corr_irm_recon(weights_unmasked, weights, masks, fig_save_path=None):
     plt.show()
 
 
-def weights_vs_connectome(weights, masks, metric=m.f_measure, rng=np.random.default_rng(), fig_save_path=None):
-    model_weights_conn, model_weights_conn_ci = m.metric_ci(metric, masks['synap'], weights['models']['synap']['dirms_binarized'], rng=rng)
-    data_corr_conn, data_corr_conn_ci = m.metric_ci(metric, masks['synap'], weights['data']['train']['corr_binarized'], rng=rng)
-    data_irm_conn, data_irm_conn_ci = m.metric_ci(metric, masks['synap'], weights['data']['train']['q'], rng=rng)
-    conn_null = m.metric_null(metric, masks['synap'])
+def weights_vs_connectome(weights, masks, metric=met.f_measure, rng=np.random.default_rng(), fig_save_path=None):
+    model_weights_conn, model_weights_conn_ci = met.metric_ci(metric, masks['synap'], weights['models']['synap']['dirms_binarized'], rng=rng)
+    data_corr_conn, data_corr_conn_ci = met.metric_ci(metric, masks['synap'], weights['data']['train']['corr_binarized'], rng=rng)
+    data_irm_conn, data_irm_conn_ci = met.metric_ci(metric, masks['synap'], weights['data']['train']['q'], rng=rng)
+    conn_null = met.metric_null(metric, masks['synap'])
 
     # plot model weight similarity to connectome
     plt.figure()
@@ -220,15 +217,15 @@ def unconstrained_vs_constrained_model(weights, fig_save_path=None):
     model_irms_score_ci = []
     for m in weights['models']:
         if m in ['synap', 'unconstrained']:
-            model_corr_to_measured_corr, model_corr_to_measured_corr_ci = au.nan_corr(weights['models'][m]['corr'], data_corr)
+            model_corr_to_measured_corr, model_corr_to_measured_corr_ci = met.nan_corr(weights['models'][m]['corr'], data_corr)
             model_corr_score.append(model_corr_to_measured_corr)
             model_corr_score_ci.append(model_corr_to_measured_corr_ci)
 
-            model_irms_to_measured_irms, model_irms_to_measured_irms_ci = au.nan_corr(weights['models'][m]['irms'], data_irms)
+            model_irms_to_measured_irms, model_irms_to_measured_irms_ci = met.nan_corr(weights['models'][m]['irms'], data_irms)
             model_irms_score.append(model_irms_to_measured_irms)
             model_irms_score_ci.append(model_irms_to_measured_irms_ci)
 
-    irms_baseline = au.nan_corr(weights['data']['train']['irms'], weights['data']['test']['irms'])[0]
+    irms_baseline = met.nan_corr(weights['data']['train']['irms'], weights['data']['test']['irms'])[0]
 
     # plot model reconstruction of IRMs
     plt.figure()
@@ -294,7 +291,7 @@ def plot_dirfs(weights, cell_ids, num_plot=10, fig_save_path=None):
     plt.show()
 
 
-def plot_dirm_diff(weights, masks, cell_ids, num_plot=5, fig_save_path=None):
+def plot_dirm_diff(weights, masks, cell_ids, num_plot=10, fig_save_path=None):
     data_irfs = weights['data']['test']['irfs'][:, masks['synap']]
     model_irfs = weights['models']['synap']['irfs'][:, masks['synap']]
     model_dirfs = weights['models']['synap']['dirfs'][:, masks['synap']]
@@ -407,7 +404,7 @@ def plot_dirm_swaps(weights, masks, cell_ids, num_plot=5, fig_save_path=None):
     plt.show()
 
 
-def predict_chem_synapse_sign(weights, masks, cell_ids, metric=m.accuracy, rng=np.random.default_rng(), fig_save_path=None):
+def predict_chem_synapse_sign(weights, masks, cell_ids, metric=met.accuracy, rng=np.random.default_rng(), fig_save_path=None):
     # get the connections associated with chem but not gap junctions
     # and the connections associated with gap but not chemical junctions
     chem_no_gap = ~masks['gap'] & masks['chem']
@@ -450,10 +447,10 @@ def predict_chem_synapse_sign(weights, masks, cell_ids, metric=m.accuracy, rng=n
     chem_sign = chem_sign[chem_no_gap]
 
     # prediction accuracy
-    chem_sign_predict_model_synap, chem_sign_predict_model_synap_ci = m.metric_ci(metric, chem_sign, model_synap_dirms_chem, rng=rng)
-    chem_sign_predict_model_uncon, chem_sign_predict_model_uncon_ci = m.metric_ci(metric, chem_sign, model_uncon_dirms_chem, rng=rng)
-    chem_sign_predict_data_dirms, chem_sign_predict_data_dirms_ci = m.metric_ci(metric, chem_sign, data_irms_chem, rng=rng)
-    chem_sign_predict_null = m.metric_null(metric, chem_sign)
+    chem_sign_predict_model_synap, chem_sign_predict_model_synap_ci = met.metric_ci(metric, chem_sign, model_synap_dirms_chem, rng=rng)
+    chem_sign_predict_model_uncon, chem_sign_predict_model_uncon_ci = met.metric_ci(metric, chem_sign, model_uncon_dirms_chem, rng=rng)
+    chem_sign_predict_data_dirms, chem_sign_predict_data_dirms_ci = met.metric_ci(metric, chem_sign, data_irms_chem, rng=rng)
+    chem_sign_predict_null = met.metric_null(metric, chem_sign)
 
     plt.figure()
     y_val = np.array([chem_sign_predict_model_synap, chem_sign_predict_model_uncon, chem_sign_predict_data_dirms])
@@ -476,7 +473,7 @@ def predict_chem_synapse_sign(weights, masks, cell_ids, metric=m.accuracy, rng=n
     plt.show()
 
 
-def predict_gap_synapse_sign(weights, masks, metric=m.accuracy, rng=np.random.default_rng(), fig_save_path=None):
+def predict_gap_synapse_sign(weights, masks, metric=met.accuracy, rng=np.random.default_rng(), fig_save_path=None):
     # get the connections associated with chem but not gap junctions
     # and the connections associated with gap but not chemical junctions
     # TODO: when I was just masking based on number of stimulations, but not based on the nans in the data
@@ -496,8 +493,8 @@ def predict_gap_synapse_sign(weights, masks, metric=m.accuracy, rng=np.random.de
     data_irms_gap[nan_loc_gap] = np.nan
 
     # calculate the rate of positive synapses for chemical vs gap junction
-    model_synap_dirms_gap_pr, model_synap_dirms_gap_pr_ci = m.metric_ci(metric, np.ones_like(model_synap_dirms_gap), model_synap_dirms_gap, rng=rng)
-    data_irms_gap_pr, data_irms_gap_pr_ci = m.metric_ci(metric, np.ones_like(data_irms_gap), data_irms_gap, rng=rng)
+    model_synap_dirms_gap_pr, model_synap_dirms_gap_pr_ci = met.metric_ci(metric, np.ones_like(model_synap_dirms_gap), model_synap_dirms_gap, rng=rng)
+    data_irms_gap_pr, data_irms_gap_pr_ci = met.metric_ci(metric, np.ones_like(data_irms_gap), data_irms_gap, rng=rng)
 
     plt.figure()
     y_val = np.array([model_synap_dirms_gap_pr, data_irms_gap_pr])
@@ -520,8 +517,8 @@ def predict_gap_synapse_sign(weights, masks, metric=m.accuracy, rng=np.random.de
 
 
 def unconstrained_model_vs_connectome(weights, masks, fig_save_path=None):
-    model_synap_dirms_conn = m.f_measure(masks['synap'], weights['models']['synap']['dirms_binarized'])
-    model_uncon_dirms_conn = m.f_measure(masks['synap'], weights['models']['unconstrained']['dirms_binarized'])
+    model_synap_dirms_conn = met.f_measure(masks['synap'], weights['models']['synap']['dirms_binarized'])
+    model_uncon_dirms_conn = met.f_measure(masks['synap'], weights['models']['unconstrained']['dirms_binarized'])
     model_synap_dirms = weights['models']['synap']['dirms']
     model_uncon_dirms = weights['models']['unconstrained']['dirms']
 
@@ -545,11 +542,11 @@ def unconstrained_model_vs_connectome(weights, masks, fig_save_path=None):
     weights_to_sc = []
     weights_to_sc_ci = []
 
-    wts, wts_ci = au.nan_corr(anatomy_mat[masks['synap']], model_synap_dirms[masks['synap']])
+    wts, wts_ci = met.nan_corr(anatomy_mat[masks['synap']], model_synap_dirms[masks['synap']])
     weights_to_sc.append(wts)
     weights_to_sc_ci.append(wts_ci)
 
-    wts, wts_ci = au.nan_corr(anatomy_mat[masks['synap']], model_uncon_dirms[masks['synap']])
+    wts, wts_ci = met.nan_corr(anatomy_mat[masks['synap']], model_uncon_dirms[masks['synap']])
     weights_to_sc.append(wts)
     weights_to_sc_ci.append(wts_ci)
 

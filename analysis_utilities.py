@@ -2,7 +2,7 @@ import numpy as np
 import wormneuroatlas as wa
 import pickle
 from pathlib import Path
-import metrics as m
+import metrics as met
 
 
 def auto_select_ids(inputs, cell_ids, num_neurons=10):
@@ -192,7 +192,7 @@ def nan_corr_data(data, alpha=0.05):
 
     for i in range(data_cat.shape[1]):
         for j in range(data_cat.shape[1]):
-            data_corr[i, j], data_corr_ci[:, i, j] = m.nan_corr(data_cat[:, i], data_cat[:, j], alpha=alpha)
+            data_corr[i, j], data_corr_ci[:, i, j] = met.nan_corr(data_cat[:, i], data_cat[:, j], alpha=alpha)
 
         print(i+1, '/', data_cat.shape[1], 'neurons correlated')
 
