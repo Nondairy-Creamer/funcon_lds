@@ -24,7 +24,7 @@ def get_run_params(param_name):
     return params
 
 
-def preprocess_data(emissions, inputs, start_index=0, correct_photobleach=False, filter_size=2):
+def preprocess_data(emissions, inputs, start_index=0, correct_photobleach=False, filter_size=2, upsample_factor=1):
     # remove the beginning of the recording which contains artifacts and mean subtract
     emissions = emissions[start_index:, :]
     inputs = inputs[start_index:, :]
@@ -85,12 +85,23 @@ def preprocess_data(emissions, inputs, start_index=0, correct_photobleach=False,
     # truncate inputs to match emissions after filtering
     inputs = inputs[:emissions_filtered_corrected.shape[0], :]
 
-    return emissions_filtered_corrected, inputs
+    if upsample_factor != 1:
+        emissions_out = np.empty((emissions_filtered_corrected.shape[0] * upsample_factor, emissions_filtered_corrected.shape[1]))
+        emissions_out[:] = np.nan
+        emissions_out[::upsample_factor, :] = emissions_filtered_corrected
+
+        inputs_out = np.zeros((inputs.shape[0] * upsample_factor, inputs.shape[1]))
+        inputs_out[::upsample_factor, :] = inputs
+    else:
+        emissions_out = emissions_filtered_corrected
+        inputs_out = inputs
+
+    return emissions_out, inputs_out
 
 
 def load_and_preprocess_data(data_path, num_data_sets=None, force_preprocess=False, start_index=0, filter_size=2,
                              correct_photobleach=False, interpolate_nans=True, neuron_freq=0.0, held_out_data=[],
-                             hold_out='worm'):
+                             hold_out='worm', upsample_factor=1):
     data_path = Path(data_path)
 
     preprocess_filename = 'funcon_preprocessed_data.pkl'
@@ -98,12 +109,11 @@ def load_and_preprocess_data(data_path, num_data_sets=None, force_preprocess=Fal
     inputs_train = []
     cell_ids_train = []
     path_name = []
-    sample_rate = 0.5 # seconds per sample DEFAULT
+    sample_rate = 0.5 / upsample_factor # seconds per sample DEFAULT
 
     # find all files in the folder that have francesco_green.npy
     for i in sorted(data_path.rglob('francesco_green.npy'))[::-1]:
         path_name.append(i.parts[-2])
-        sample_rate = 0.5  # seconds per sample
 
         # check if a processed version exists
         preprocess_path = i.parent / preprocess_filename
@@ -139,7 +149,7 @@ def load_and_preprocess_data(data_path, num_data_sets=None, force_preprocess=Fal
             start = time.time()
             this_emissions, this_inputs = preprocess_data(this_emissions, this_inputs, start_index=start_index,
                                                           correct_photobleach=correct_photobleach,
-                                                          filter_size=filter_size)
+                                                          filter_size=filter_size, upsample_factor=upsample_factor)
 
             if interpolate_nans:
                 full_nan_loc = np.all(np.isnan(this_emissions), axis=0)

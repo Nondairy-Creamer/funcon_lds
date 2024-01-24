@@ -112,6 +112,11 @@ def fit_experimental(param_name, save_folder):
 
     # cpu_id 0 is the parent node which will send out the data to the children nodes
     if cpu_id == 0:
+        if 'upsample_factor' in run_params:
+            upsample_factor = run_params['upsample_factor']
+        else:
+            upsample_factor = 1
+
         # load in the data for the model and do any preprocessing here
         data_train, data_test = \
             lu.load_and_preprocess_data(run_params['data_path'], num_data_sets=run_params['num_data_sets'],
@@ -122,7 +127,8 @@ def fit_experimental(param_name, save_folder):
                                         held_out_data=run_params['held_out_data'],
                                         neuron_freq=run_params['neuron_freq'],
                                         filter_size=run_params['filter_size'],
-                                        hold_out=run_params['hold_out'])
+                                        hold_out=run_params['hold_out'],
+                                        upsample_factor=upsample_factor)
 
         # initialize the model and set model weights
         num_neurons = data_train['emissions'][0].shape[1]
@@ -348,14 +354,14 @@ def run_fitting(run_params, model, data_train, data_test, save_folder, model_tru
         print('get posterior for the training data')
     posterior_train = iu.parallel_get_post(model, data_train, emissions_offset=emissions_offset_train,
                                            init_mean=init_mean_train, init_cov=init_cov_train,
-                                           max_iter=100, converge_res=1e-2, time_lim=300,
+                                           max_iter=10, converge_res=1e-2, time_lim=300,
                                            memmap_cpu_id=memmap_cpu_id, infer_missing=False)
 
     if cpu_id == 0:
         print('get posterior for the test data')
     posterior_test = iu.parallel_get_post(model, data_test, emissions_offset=emissions_offset_test,
                                           init_mean=init_mean_test, init_cov=init_cov_test,
-                                          max_iter=100, converge_res=1e-2, time_lim=300, memmap_cpu_id=memmap_cpu_id,
+                                          max_iter=10, converge_res=1e-2, time_lim=300, memmap_cpu_id=memmap_cpu_id,
                                           infer_missing=False)
 
     if cpu_id == 0:

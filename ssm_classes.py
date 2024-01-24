@@ -89,8 +89,7 @@ class Lgssm:
         self.emissions_input_weights_init = np.zeros((self.emissions_input_lags, self.emissions_dim, self.input_dim))
         self.emissions_cov_init = np.eye(self.emissions_dim)
 
-        self._pad_init_for_lags()
-        # convert to tensors
+        self.pad_init_for_lags()
         self.set_to_init()
 
         # set up masks to constrain which parameters can be fit
@@ -184,7 +183,7 @@ class Lgssm:
             self.emissions_cov_init = rng.standard_normal((self.emissions_dim, self.emissions_dim))
             self.emissions_cov_init = noise_std * (self.emissions_cov_init.T @ self.emissions_cov_init / self.emissions_dim + np.eye(self.emissions_dim))
 
-        self._pad_init_for_lags()
+        self.pad_init_for_lags()
         self.set_to_init()
 
     def set_to_init(self):
@@ -218,7 +217,7 @@ class Lgssm:
 
     def sample(self, num_time=100, emissions_offset=None, init_mean=None, init_cov=None, num_data_sets=1,
                input_time_scale=0, inputs_list=None, scattered_nan_freq=0.0, lost_emission_freq=0.0,
-               rng=np.random.default_rng(), add_noise=True,):
+               rng=np.random.default_rng(), add_noise=True):
         latents_list = []
         emissions_list = []
         #TODO it looks like we make a list for init_mean, pull it out of the list, and put it back in wth is going on
@@ -227,7 +226,7 @@ class Lgssm:
         init_cov_list = []
 
         if emissions_offset is None:
-            emissions_offset = [rng.standard_normal(self.emissions_dim) for i in range(num_data_sets)]
+            emissions_offset = [np.zeros(self.emissions_dim) for i in range(num_data_sets)]
 
         if init_mean is None:
             init_mean = [np.zeros(self.dynamics_dim_full) for i in range(num_data_sets)]
@@ -268,7 +267,7 @@ class Lgssm:
             dynamics_inputs = (self.dynamics_input_weights @ dynamics_inputs[:, :, None])[:, :, 0]
             emissions_inputs = (self.emissions_input_weights @ emissions_inputs[:, :, None])[:, :, 0]
 
-            latents[0, :] = rng.multivariate_normal(init_mean_this, init_cov_this)
+            latents[0, :] = rng.multivariate_normal(init_mean_this, add_noise * init_cov_this)
 
             emissions[0, :] = self.emissions_weights @ latents[0, :] + \
                               emissions_inputs[0, :] + \
@@ -277,14 +276,14 @@ class Lgssm:
 
             # loop through time and generate the latents and emissions
             for t in range(1, num_time):
-                latents[t, :] = (self.dynamics_weights @ latents[t-1, :]) + \
-                                 dynamics_inputs[t, :] + \
-                                 dynamics_noise[t, :]
+                latents[t, :] = self.dynamics_weights @ latents[t-1, :] + \
+                                dynamics_inputs[t, :] + \
+                                dynamics_noise[t, :]
 
-                emissions[t, :] = (self.emissions_weights @ latents[t, :]) + \
-                                   emissions_inputs[t, :] + \
-                                   emissions_offset_this + \
-                                   emissions_noise[t, :]
+                emissions[t, :] = self.emissions_weights @ latents[t, :] + \
+                                  emissions_inputs[t, :] + \
+                                  emissions_offset_this + \
+                                  emissions_noise[t, :]
 
             latents_list.append(latents[:, :self.dynamics_dim])
             emissions_list.append(emissions)
@@ -537,6 +536,14 @@ class Lgssm:
     def dynamics_input_weights_diagonal(self):
         weights = self.dynamics_input_weights[:self.dynamics_dim, :]
         weights = np.split(weights, self.dynamics_input_lags, axis=1)
+        weights = [i.diagonal() for i in weights]
+        weights = np.stack(weights)
+
+        return weights
+
+    def emissions_weights_diagonal(self):
+        weights = self.emissions_weights[:self.dynamics_dim, :]
+        weights = np.split(weights, self.dynamics_lags, axis=1)
         weights = [i.diagonal() for i in weights]
         weights = np.stack(weights)
 
@@ -803,7 +810,7 @@ class Lgssm:
 
         return ll, suff_stats, smoothed_means, first_cov
 
-    def _pad_init_for_lags(self):
+    def pad_init_for_lags(self):
         self.dynamics_weights_init = self._get_lagged_weights(self.dynamics_weights_init, self.dynamics_lags, fill='eye')
         self.dynamics_input_weights_init = self._get_lagged_weights(self.dynamics_input_weights_init, self.dynamics_lags, fill='zeros')
         dci_block = self.dynamics_cov_init
