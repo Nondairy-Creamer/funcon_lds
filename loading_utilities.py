@@ -1,16 +1,11 @@
 import numpy as np
-import itertools as it
-import scipy.signal as ssig
-import scipy.special as ss
 from pathlib import Path
 import yaml
 import pickle
 import tmac.preprocessing as tp
-import time
 import analysis_utilities as au
 import warnings
 import os
-import scipy.io as sio
 
 
 # utilities for loading and saving the data
@@ -99,9 +94,8 @@ def preprocess_data(emissions, inputs, start_index=0, correct_photobleach=False,
     return emissions_out, inputs_out
 
 
-def load_and_preprocess_data(data_path, num_data_sets=None, force_preprocess=False, start_index=0, filter_size=2,
-                             correct_photobleach=False, interpolate_nans=True, neuron_freq=0.0, held_out_data=[],
-                             hold_out='worm', upsample_factor=1):
+def load_data(data_path, num_data_sets=None, neuron_freq=0.0, held_out_data=[],
+              hold_out='worm', upsample_factor=1):
     data_path = Path(data_path)
 
     preprocess_filename = 'funcon_preprocessed_data.pkl'
@@ -109,7 +103,7 @@ def load_and_preprocess_data(data_path, num_data_sets=None, force_preprocess=Fal
     inputs_train = []
     cell_ids_train = []
     path_name = []
-    sample_rate = 0.5 / upsample_factor # seconds per sample DEFAULT
+    sample_rate = 0.5 / upsample_factor  # seconds per sample DEFAULT
 
     # find all files in the folder that have francesco_green.npy
     for i in sorted(data_path.rglob('francesco_green.npy'))[::-1]:
@@ -118,117 +112,13 @@ def load_and_preprocess_data(data_path, num_data_sets=None, force_preprocess=Fal
         # check if a processed version exists
         preprocess_path = i.parent / preprocess_filename
 
-        if not force_preprocess and preprocess_path.exists():
-            data_file = open(preprocess_path, 'rb')
-            preprocessed_data = pickle.load(data_file)
-            data_file.close()
+        data_file = open(preprocess_path, 'rb')
+        preprocessed_data = pickle.load(data_file)
+        data_file.close()
 
-            this_emissions = preprocessed_data['emissions']
-            this_inputs = preprocessed_data['inputs']
-            this_cell_ids = preprocessed_data['cell_ids']
-
-        else:
-            this_emissions = np.load(str(i))
-
-            if not interpolate_nans:
-                this_nan_mask = np.load(str(i.parent / 'nan_mask.npy'))
-                this_emissions[this_nan_mask] = np.nan
-
-            this_cell_ids = list(np.load(str(i.parent / 'labels.npy')))
-
-            # load stimulation data
-            this_stim_cell_ids = np.load(str(i.parent / 'stim_recording_cell_inds.npy'), allow_pickle=True)
-            this_stim_volume_inds = np.load(str(i.parent / 'stim_volumes_inds.npy'), allow_pickle=True)
-
-            this_inputs = np.zeros_like(this_emissions)
-            nonnegative_inds = (this_stim_cell_ids != -1) & (this_stim_cell_ids != -2) & (this_stim_cell_ids != -3)
-            this_stim_volume_inds = this_stim_volume_inds[nonnegative_inds]
-            this_stim_cell_ids = this_stim_cell_ids[nonnegative_inds]
-            this_inputs[this_stim_volume_inds, this_stim_cell_ids] = 1
-
-            start = time.time()
-            this_emissions, this_inputs = preprocess_data(this_emissions, this_inputs, start_index=start_index,
-                                                          correct_photobleach=correct_photobleach,
-                                                          filter_size=filter_size, upsample_factor=upsample_factor)
-
-            if interpolate_nans:
-                full_nan_loc = np.all(np.isnan(this_emissions), axis=0)
-                interp_emissions = tp.interpolate_over_nans(this_emissions[:, ~full_nan_loc])[0]
-                this_emissions[:, ~full_nan_loc] = interp_emissions
-
-            preprocessed_file = open(preprocess_path, 'wb')
-            pickle.dump({'emissions': this_emissions, 'inputs': this_inputs, 'cell_ids': this_cell_ids}, preprocessed_file)
-            preprocessed_file.close()
-
-            print('Data set', i.parent, 'preprocessed')
-            print('Took', time.time() - start, 's')
-
-        emissions_train.append(this_emissions)
-        inputs_train.append(this_inputs)
-        cell_ids_train.append(this_cell_ids)
-
-    # find all files in the folder that have calcium_to_multicolor_alignment.mat
-    for i in sorted(data_path.rglob('calcium_to_multicolor_alignment.mat'))[::-1]:
-        path_name.append(i.parts[-2])
-        sample_rate = 1 / 6  # samples per second
-
-        # check if a processed version exists
-        preprocess_path = i.parent / preprocess_filename
-
-        if not force_preprocess and preprocess_path.exists():
-            data_file = open(preprocess_path, 'rb')
-            preprocessed_data = pickle.load(data_file)
-            data_file.close()
-
-            this_emissions = preprocessed_data['emissions']
-            this_inputs = preprocessed_data['inputs']
-            this_cell_ids = preprocessed_data['cell_ids']
-
-        else:
-            c2m_align = sio.loadmat(str(i.parent / 'calcium_to_multicolor_alignment.mat'))
-            this_emissions = c2m_align['calcium_data'][0, 0]['gRaw'].T
-            this_inputs = np.zeros_like(this_emissions)
-            this_cell_ids = []
-
-            # downsample from 6hz to 2hz
-            filter_shape = np.ones((3, 1)) / 3
-            this_emissions = ssig.convolve2d(this_emissions, filter_shape, mode='same')
-            this_emissions = this_emissions[::3, :]
-            this_inputs = this_inputs[::3, :]
-
-            for j in c2m_align['labels'][0, 0]['tracked_human_labels']:
-                if len(j[0]) > 0:
-                    this_cell_ids.append(str(j[0][0]))
-                else:
-                    this_cell_ids.append('')
-
-            start = time.time()
-            this_emissions, this_inputs = preprocess_data(this_emissions, this_inputs, start_index=start_index,
-                                                          correct_photobleach=correct_photobleach,
-                                                          filter_size=filter_size)
-
-            if interpolate_nans:
-                full_nan_loc = np.all(np.isnan(this_emissions), axis=0)
-                interp_emissions = tp.interpolate_over_nans(this_emissions[:, ~full_nan_loc])[0]
-                this_emissions[:, ~full_nan_loc] = interp_emissions
-
-            preprocessed_file = open(preprocess_path, 'wb')
-            pickle.dump({'emissions': this_emissions, 'inputs': this_inputs, 'cell_ids': this_cell_ids},
-                        preprocessed_file)
-            preprocessed_file.close()
-
-            print('Data set', i.parent, 'preprocessed')
-            print('Took', time.time() - start, 's')
-
-        # get rid of non neural cells
-        bad_cells = ['AMSOL', 'AMSOR']
-
-        for b in bad_cells:
-            if b in this_cell_ids:
-                del_index = this_cell_ids.index(b)
-                np.delete(this_emissions, del_index, 1)
-                np.delete(this_inputs, del_index, 1)
-                this_cell_ids.pop(del_index)
+        this_emissions = preprocessed_data['emissions']
+        this_inputs = preprocessed_data['inputs']
+        this_cell_ids = preprocessed_data['cell_ids']
 
         emissions_train.append(this_emissions)
         inputs_train.append(this_inputs)
@@ -385,61 +275,6 @@ def align_data_cell_ids(emissions, inputs, cell_ids, cell_ids_unique=None):
 
     return emissions_aligned, inputs_aligned, cell_ids_unique
 
-
-def max_set(a, cell_id_frac_cutoff=1.0, num_rep=1e6) -> (np.ndarray, int, float):
-    """ Finds the largest sub matrix of a that is all ones
-    :param a: matrix with entires of 1 or 0
-    :param num_rep: number of sub matricies to test
-    :param cell_id_frac_cutoff: The fraction of datasets which must contain the neuron for it to be included. If 1,
-    then every one of the subset of datasets returned will contain every neuron.
-    :return: the row and column indicies of the sub matrix
-    """
-
-    num_rep = int(num_rep)
-    max_val = 0
-    best_rows = []
-    best_cols = []
-    rng = np.random.default_rng()
-    rows_list = np.arange(a.shape[0])
-
-    # loop through the number of rows
-    for r in range(1, a.shape[0] + 1):
-        print('trying number of rows = ' + str(r+1) + '/' + str(a.shape[0]))
-        total_comb = ss.comb(a.shape[0], r)
-
-        # if num_rep is high enough, test all possible sets
-        if total_comb < num_rep*10:
-            all_possible = list(it.combinations(np.arange(a.shape[0]), r))
-
-            for rows_to_test in all_possible:
-                score, cols_to_test = get_matrix_best_score(a[rows_to_test, :], cell_id_frac_cutoff)
-
-                if score > max_val:
-                    max_val = score
-                    best_rows = rows_to_test
-                    best_cols = cols_to_test
-
-        # if num_rep isn't high enough, randomly sample the space and return the best you can find.
-        else:
-            for n in range(num_rep):
-                rows_to_test = rng.choice(rows_list, size=r, replace=False)
-
-                score, cols_to_test = get_matrix_best_score(a[rows_to_test, :], cell_id_frac_cutoff)
-
-                if score > max_val:
-                    max_val = score
-                    best_rows = rows_to_test
-                    best_cols = cols_to_test
-
-    return max_val, best_rows, best_cols
-
-
-def get_matrix_best_score(a, coverage) -> (np.ndarray, float):
-    cols_to_test = np.arange(a.shape[1])
-    cols_to_test = cols_to_test[np.mean(a, axis=0) >= coverage]
-
-    score = a.shape[0] * len(cols_to_test)
-    return score, cols_to_test
 
 
 

@@ -119,16 +119,11 @@ def fit_experimental(param_name, save_folder):
 
         # load in the data for the model and do any preprocessing here
         data_train, data_test = \
-            lu.load_and_preprocess_data(run_params['data_path'], num_data_sets=run_params['num_data_sets'],
-                                        start_index=run_params['start_index'],
-                                        force_preprocess=run_params['force_preprocess'],
-                                        correct_photobleach=run_params['correct_photobleach'],
-                                        interpolate_nans=run_params['interpolate_nans'],
-                                        held_out_data=run_params['held_out_data'],
-                                        neuron_freq=run_params['neuron_freq'],
-                                        filter_size=run_params['filter_size'],
-                                        hold_out=run_params['hold_out'],
-                                        upsample_factor=upsample_factor)
+            lu.load_data(run_params['data_path'], num_data_sets=run_params['num_data_sets'],
+                         held_out_data=run_params['held_out_data'],
+                         neuron_freq=run_params['neuron_freq'],
+                         hold_out=run_params['hold_out'],
+                         upsample_factor=upsample_factor)
 
         # initialize the model and set model weights
         num_neurons = data_train['emissions'][0].shape[1]
