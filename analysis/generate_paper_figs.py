@@ -2,6 +2,7 @@ from pathlib import Path
 
 import scipy.signal as ss
 import analysis_utilities as au
+import class_utilities as cu
 import analysis_methods as am
 import numpy as np
 import pickle
@@ -98,10 +99,10 @@ data_test['emissions'] = [ss.convolve2d(i, filt_shape[:, None], mode='full')[:-f
 
 # get data IRMs
 data_irms_train, data_irfs_train, data_irfs_sem_train, _ = \
-    au.simple_get_irms(data_train['emissions'], data_train['inputs'], window=window, sub_pre_stim=sub_pre_stim)
+    cu.simple_get_irms(data_train['emissions'], data_train['inputs'], window=window, sub_pre_stim=sub_pre_stim)
 
 data_irms_test, data_irfs_test, data_irfs_sem_test, num_stim = \
-    au.simple_get_irms(data_test['emissions'], data_test['inputs'], window=window, sub_pre_stim=sub_pre_stim)
+    cu.simple_get_irms(data_test['emissions'], data_test['inputs'], window=window, sub_pre_stim=sub_pre_stim)
 
 # for each data set determihne whether a neuron was measured
 obs_train = np.stack([np.mean(np.isnan(i), axis=0) < run_params['obs_threshold'] for i in data_train['emissions']])
@@ -149,22 +150,23 @@ weights_unmasked['models'] = {}
 # get the IRMs of the models and data
 std_factor = 100
 for m in models:
-    window_size = (np.sum(np.array(window) / models[m].sample_rate)).astype(int)
+    sample_rate = models[m].sample_rate
+    window_size = (np.sum(np.array(window) / sample_rate)).astype(int)
     if 'irfs' not in posterior_dicts[m] or posterior_dicts[m]['irfs'].shape[0] != window_size:
-        posterior_dicts[m]['irfs'] = au.calculate_irfs(models[m], window=window)
+        posterior_dicts[m]['irfs'] = cu.calculate_irfs(models[m], window=window)
 
     if 'dirfs' not in posterior_dicts[m] or posterior_dicts[m]['dirfs'].shape[0] != window_size:
-        posterior_dicts[m]['dirfs'] = au.calculate_dirfs(models[m], window=window)
+        posterior_dicts[m]['dirfs'] = cu.calculate_dirfs(models[m], window=window)
 
     if 'eirfs' not in posterior_dicts[m] or posterior_dicts[m]['eirfs'].shape[0] != window_size:
-        posterior_dicts[m]['eirfs'] = au.calculate_eirfs(models[m], window=window)
+        posterior_dicts[m]['eirfs'] = cu.calculate_eirfs(models[m], window=window)
 
     weights_unmasked['models'][m] = {'irfs': posterior_dicts[m]['irfs'],
-                                     'irms': np.sum(posterior_dicts[m]['irfs'], axis=0),
+                                     'irms': np.sum(posterior_dicts[m]['irfs'], axis=0) * sample_rate,
                                      'dirfs': posterior_dicts[m]['dirfs'],
-                                     'dirms': np.sum(posterior_dicts[m]['dirfs'], axis=0),
+                                     'dirms': np.sum(posterior_dicts[m]['dirfs'], axis=0) * sample_rate,
                                      'eirfs': posterior_dicts[m]['eirfs'],
-                                     'eirms': np.sum(posterior_dicts[m]['eirfs'], axis=0),
+                                     'eirms': np.sum(posterior_dicts[m]['eirfs'], axis=0) * sample_rate,
                                      }
 
     abs_dirms = np.abs(weights_unmasked['models'][m]['dirms'])
