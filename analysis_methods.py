@@ -4,10 +4,12 @@ import matplotlib as mpl
 from matplotlib import pyplot as plt
 import pickle
 from pathlib import Path
+import metrics as m
+
 colormap = mpl.colormaps['coolwarm']
 plot_percent = 95
-score_fun = au.nan_corr
-# score_fun = au.nan_r2
+score_fun = m.nan_corr
+# score_fun = m.nan_r2
 
 
 def get_best_model(model_folders, sorting_param, use_test_data=True, plot_figs=True, best_model_ind=None):
@@ -371,7 +373,7 @@ def plot_missing_neuron(data, posterior_dict, sample_rate=0.5, fig_save_path=Non
     for ei, pi in zip(range(len(emissions)), range(len(posterior_missing))):
         for n in range(emissions[ei].shape[1]):
             if np.mean(~np.isnan(emissions[ei][:, n])) > 0.5:
-                missing_corr[ei, n] = au.nan_corr(emissions[ei][:, n], posterior_missing[ei][:, n])[0]
+                missing_corr[ei, n] = m.nan_corr(emissions[ei][:, n], posterior_missing[ei][:, n])[0]
             else:
                 missing_corr[ei, n] = np.nan
 
@@ -652,7 +654,7 @@ def compare_measured_and_model_irm(model_weights, model_corr, measured_irm, mode
     plt.ylabel('data correlation')
     plt.tight_layout()
 
-    data_corr_score, data_corr_score_ci = au.nan_corr(model_corr, data_corr)
+    data_corr_score, data_corr_score_ci = m.nan_corr(model_corr, data_corr)
 
     plt.figure()
     plt.subplot(1, 2, 1)
@@ -813,14 +815,14 @@ def unmeasured_neuron(posterior, posterior_ids, emissions, emissions_ids, missin
     true_rmdvr = [i[:, rmdvr_index_true] for i in emissions]
 
     # measure similarities between estimated and true RMDVR activity
-    score = np.nanmean([au.nan_corr(i, j)[0] for i, j in zip(true_rmdvr, estimated_rmdvr)])
+    score = np.nanmean([m.nan_corr(i, j)[0] for i, j in zip(true_rmdvr, estimated_rmdvr)])
 
     null = []
     # make a null distribution
     for n in range(len(emissions_ids)):
         if n != rmdvr_index_true:
             random_neuron = [i[:, n] for i in emissions]
-            score_for_random_neuron = [au.nan_corr(i, j)[0] for i, j in zip(random_neuron, estimated_rmdvr)]
+            score_for_random_neuron = [m.nan_corr(i, j)[0] for i, j in zip(random_neuron, estimated_rmdvr)]
             null.append(np.nanmean(score_for_random_neuron))
 
     p_value = np.mean(score < null)

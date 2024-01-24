@@ -1,9 +1,8 @@
 import numpy as np
 import wormneuroatlas as wa
-import scipy
 import pickle
 from pathlib import Path
-from scipy.stats import norm
+import metrics as m
 
 
 def auto_select_ids(inputs, cell_ids, num_neurons=10):
@@ -116,185 +115,12 @@ def get_anatomical_data(cell_ids):
     return chem_conn, gap_conn, pep_conn
 
 
-def compare_matrix_sets(left_side, right_side, positive_weights=False):
-    if type(left_side) is not list:
-        left_side = [left_side]
-
-    if type(right_side) is not list:
-        right_side = [right_side]
-
-    # find the best linear combination to make the sum of the matricies on the left side equal to the ones on the right
-    num_left = len(left_side)
-    num_right = len(right_side)
-    left_side_col = np.stack([i.reshape(-1) for i in left_side]).T
-    right_side_col = np.stack([i.reshape(-1) for i in right_side]).T
-
-    # if num_left > 1 or num_right > 1:
-    x0 = np.zeros(num_left + num_right - 1) + (not positive_weights)
-
-    def obj_fun(x):
-        if positive_weights:
-            x = np.exp(x)
-        left_weights = np.concatenate((np.ones(1), x[:num_left-1]), axis=0)
-        right_weights = x[num_left-1:]
-
-        left_val = left_side_col @ left_weights
-        right_val = right_side_col @ right_weights
-
-        return -nan_corr(left_val, right_val)[0]
-
-    x_hat = scipy.optimize.minimize(obj_fun, x0).x
-
-    if positive_weights:
-        x_hat = np.exp(x_hat)
-
-    left_weights_hat = np.concatenate((np.ones(1), x_hat[:num_left - 1]), axis=0)
-    right_weights_hat = x_hat[num_left - 1:]
-
-    if positive_weights:
-        left_weights_hat /= np.sum(left_weights_hat)
-        right_weights_hat /= np.sum(right_weights_hat)
-
-    left_recon = (left_side_col @ left_weights_hat).reshape(left_side[0].shape)
-    right_recon = (right_side_col @ right_weights_hat).reshape(right_side[0].shape)
-
-    score, score_ci = nan_corr(left_recon, right_recon)
-
-    return score, score_ci, left_recon, right_recon
-
-
 def interleave(a, b):
     c = np.empty(a.size + b.size, dtype=a.dtype)
     c[0::2] = a
     c[1::2] = b
 
     return c
-
-
-def accuracy(y_true, y_hat):
-    y_true = y_true.reshape(-1)
-    y_hat = y_hat.reshape(-1)
-
-    nan_loc = np.isnan(y_true) | np.isnan(y_hat)
-    y_true = y_true[~nan_loc]
-    y_hat = y_hat[~nan_loc]
-
-    return np.mean(y_true == y_hat)
-
-
-def precision(y_true, y_hat):
-    y_true = y_true.reshape(-1)
-    y_hat = y_hat.reshape(-1)
-
-    nan_loc = np.isnan(y_true) | np.isnan(y_hat)
-    y_true = y_true[~nan_loc]
-    y_hat = y_hat[~nan_loc]
-
-    true_positives = np.sum((y_true == 1) & (y_hat == 1))
-    false_positives = np.sum((y_true == 0) & (y_hat == 1))
-
-    return true_positives / (true_positives + false_positives)
-
-
-def recall(y_true, y_hat):
-    y_true = y_true.reshape(-1)
-    y_hat = y_hat.reshape(-1)
-
-    nan_loc = np.isnan(y_true) | np.isnan(y_hat)
-    y_true = y_true[~nan_loc]
-    y_hat = y_hat[~nan_loc]
-
-    true_positives = np.sum((y_true == 1) & (y_hat == 1))
-    false_negatives = np.sum((y_true == 1) & (y_hat == 0))
-
-    return true_positives / (true_positives + false_negatives)
-
-
-def f_measure(y_true, y_hat):
-    y_true = y_true.reshape(-1)
-    y_hat = y_hat.reshape(-1)
-
-    nan_loc = np.isnan(y_true) | np.isnan(y_hat)
-    y_true = y_true[~nan_loc]
-    y_hat = y_hat[~nan_loc]
-
-    p = precision(y_true, y_hat)
-    r = recall(y_true, y_hat)
-
-    return (2 * p * r) / (p + r)
-
-
-def mutual_info(y_true, y_hat):
-    y_true = y_true.reshape(-1)
-    y_hat = y_hat.reshape(-1)
-
-    nan_loc = np.isnan(y_true) | np.isnan(y_hat)
-    y_true = y_true[~nan_loc]
-    y_hat = y_hat[~nan_loc]
-
-    p_y_true = np.array([1 - np.mean(y_true), np.mean(y_true)])
-    p_y_hat = np.array([1 - np.mean(y_hat), np.mean(y_hat)])
-
-    p_joint = np.zeros((2, 2))
-    p_joint[0, 0] = np.mean((y_true == 0) & (y_hat == 0))
-    p_joint[1, 0] = np.mean((y_true == 1) & (y_hat == 0))
-    p_joint[0, 1] = np.mean((y_true == 0) & (y_hat == 1))
-    p_joint[1, 1] = np.mean((y_true == 1) & (y_hat == 1))
-
-    p_outer = p_y_true[:, None] * p_y_hat[None, :]
-
-    mi = 0
-    for i in range(2):
-        for j in range(2):
-            if p_joint[i, j] != 0:
-                mi += p_joint[i, j] * np.log2(p_joint[i, j] / p_outer[i, j])
-
-    return mi
-
-
-def metric_ci(metric, y_true, y_hat, alpha=0.05, n_boot=1000, rng=np.random.default_rng()):
-    y_true = y_true.astype(float)
-    y_hat = y_hat.astype(float)
-
-    y_true = y_true.reshape(-1)
-    y_hat = y_hat.reshape(-1)
-
-    nan_loc = np.isnan(y_true) | np.isnan(y_hat)
-    y_true = y_true[~nan_loc]
-    y_hat = y_hat[~nan_loc]
-
-    mi = metric(y_true, y_hat)
-    booted_mi = np.zeros(n_boot)
-    mi_ci = np.zeros(2)
-
-    for n in range(n_boot):
-        sample_inds = rng.integers(0, high=y_true.shape[0], size=y_true.shape[0])
-        y_true_resampled = y_true[sample_inds]
-        y_hat_resampled = y_hat[sample_inds]
-        booted_mi[n] = metric(y_true_resampled, y_hat_resampled)
-
-    mi_ci[0] = np.percentile(booted_mi, alpha * 100)
-    mi_ci[1] = np.percentile(booted_mi, (1 - alpha) * 100)
-
-    mi_ci = np.abs(mi_ci - mi)
-
-    return mi, mi_ci
-
-
-def metric_null(metric, y_true, n_sample=1000, rng=np.random.default_rng()):
-    y_true = y_true.reshape(-1)
-
-    nan_loc = np.isnan(y_true)
-    y_true = y_true[~nan_loc]
-
-    py = np.mean(y_true)
-    sampled_mi = np.zeros(n_sample)
-
-    for n in range(n_sample):
-        random_example = rng.uniform(0, 1, size=y_true.shape) < py
-        sampled_mi[n] = metric(y_true, random_example)
-
-    return np.mean(sampled_mi)
 
 
 def find_stim_events(inputs, emissions=None, chosen_neuron_ind=None, window_size=1000):
@@ -335,80 +161,6 @@ def find_stim_events(inputs, emissions=None, chosen_neuron_ind=None, window_size
     return max_data_set, time_window
 
 
-def nan_r2(y_true, y_hat):
-    y_true = y_true.reshape(-1)
-    y_hat = y_hat.reshape(-1)
-
-    mask = ~np.isnan(y_true) & ~np.isnan(y_hat)
-    y_true = y_true[mask]
-    y_hat = y_hat[mask]
-
-    ss_res = np.sum((y_true - y_hat) ** 2)
-    ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)
-
-    r2 = 1 - ss_res / ss_tot
-
-    return r2
-
-
-def nan_corr(y_true, y_hat, alpha=0.05, mean_sub=True):
-    y_true = y_true.reshape(-1)
-    y_hat = y_hat.reshape(-1)
-
-    mask = ~np.isnan(y_true) & ~np.isnan(y_hat)
-    y_true = y_true[mask]
-    y_hat = y_hat[mask]
-
-    if mean_sub:
-        y_true = y_true - np.mean(y_true)
-        y_hat = y_hat - np.mean(y_hat)
-
-    y_true_std = np.std(y_true, ddof=1)
-    y_hat_std = np.std(y_hat, ddof=1)
-
-    corr = (np.mean(y_true * y_hat) / y_true_std / y_hat_std)
-
-    # now estimate the confidence intervals for the correlation
-    n = y_true.shape[0]
-    z_a = scipy.stats.norm.ppf(1 - alpha / 2)
-    z_r = np.log((1 + corr) / (1 - corr)) / 2
-    l = z_r - (z_a / np.sqrt(n - 3))
-    u = z_r + (z_a / np.sqrt(n - 3))
-    ci_l = (np.exp(2 * l) - 1) / (np.exp(2 * l) + 1)
-    ci_u = (np.exp(2 * u) - 1) / (np.exp(2 * u) + 1)
-    ci = [np.abs(ci_l - corr), ci_u - corr]
-
-    return corr, ci
-
-
-def frac_explainable_var(y_true, y_hat, y_true_std_trials):
-    y_true = y_true.reshape(-1)
-    y_hat = y_hat.reshape(-1)
-    y_true_std_trials = y_true_std_trials.reshape(-1)
-
-    non_nan = ~np.isnan(y_true_std_trials)
-
-    y_true = y_true[non_nan]
-    y_hat = y_hat[non_nan]
-    y_true_std_trials = y_true_std_trials[non_nan]
-
-    m = y_true.shape[0]
-    y_true = y_true - np.mean(y_true)
-    y_hat = y_hat - np.mean(y_hat)
-
-    y_true_var_trials = y_true_std_trials**2
-    y_true_var_trials_mean = np.mean(y_true_var_trials)
-
-    numerator = np.dot(y_true, y_hat)**2
-    denominator = np.sum(y_true**2) * np.sum(y_hat**2)
-    numerator_correction = y_true_var_trials_mean * np.sum(y_hat**2)
-    denominator_correction = (m - 1) * y_true_var_trials_mean * np.sum(y_hat**2)
-
-    r_er_square = (numerator - numerator_correction) / (denominator - denominator_correction)
-
-    return r_er_square
-
-
 def normalize_model(model, posterior=None, init_mean=None, init_cov=None):
     c_sum = model.emissions_weights.sum(1)
     c_sum_stacked = np.tile(c_sum, model.dynamics_lags)
@@ -440,28 +192,9 @@ def nan_corr_data(data, alpha=0.05):
 
     for i in range(data_cat.shape[1]):
         for j in range(data_cat.shape[1]):
-            data_corr[i, j], data_corr_ci[:, i, j] = nan_corr(data_cat[:, i], data_cat[:, j], alpha=alpha)
+            data_corr[i, j], data_corr_ci[:, i, j] = m.nan_corr(data_cat[:, i], data_cat[:, j], alpha=alpha)
 
         print(i+1, '/', data_cat.shape[1], 'neurons correlated')
 
     return data_corr, data_corr_ci
-
-
-def nancorrcoef(data):
-    num_data = len(data)
-    corr_coef = np.zeros((num_data, num_data))
-
-    for ii, i in enumerate(data):
-        for ji, j in enumerate(data):
-            # columnize everything in data
-            i = i.reshape(-1)
-            j = j.reshape(-1)
-
-            i = (i - np.nanmean(i, axis=0)) / np.nanstd(i, ddof=1)
-            j = (j - np.nanmean(j, axis=0)) / np.nanstd(j, ddof=1)
-
-            corr_coef[ii, ji] = np.nanmean(i * j)
-
-    return corr_coef
-
 

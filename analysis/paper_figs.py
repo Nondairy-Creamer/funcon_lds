@@ -1,8 +1,8 @@
 from matplotlib import pyplot as plt
 import analysis_utilities as au
-import analysis_methods as am
 import numpy as np
 import wormneuroatlas as wa
+import metrics as m
 
 
 def corr_irm_recon(weights_unmasked, weights, masks, fig_save_path=None):
@@ -182,11 +182,11 @@ def corr_irm_recon(weights_unmasked, weights, masks, fig_save_path=None):
     plt.show()
 
 
-def weights_vs_connectome(weights, masks, metric=au.f_measure, rng=np.random.default_rng(), fig_save_path=None):
-    model_weights_conn, model_weights_conn_ci = au.metric_ci(metric, masks['synap'], weights['models']['synap']['dirms_binarized'], rng=rng)
-    data_corr_conn, data_corr_conn_ci = au.metric_ci(metric, masks['synap'], weights['data']['train']['corr_binarized'], rng=rng)
-    data_irm_conn, data_irm_conn_ci = au.metric_ci(metric, masks['synap'], weights['data']['train']['q'], rng=rng)
-    conn_null = au.metric_null(metric, masks['synap'])
+def weights_vs_connectome(weights, masks, metric=m.f_measure, rng=np.random.default_rng(), fig_save_path=None):
+    model_weights_conn, model_weights_conn_ci = m.metric_ci(metric, masks['synap'], weights['models']['synap']['dirms_binarized'], rng=rng)
+    data_corr_conn, data_corr_conn_ci = m.metric_ci(metric, masks['synap'], weights['data']['train']['corr_binarized'], rng=rng)
+    data_irm_conn, data_irm_conn_ci = m.metric_ci(metric, masks['synap'], weights['data']['train']['q'], rng=rng)
+    conn_null = m.metric_null(metric, masks['synap'])
 
     # plot model weight similarity to connectome
     plt.figure()
@@ -407,7 +407,7 @@ def plot_dirm_swaps(weights, masks, cell_ids, num_plot=5, fig_save_path=None):
     plt.show()
 
 
-def predict_chem_synapse_sign(weights, masks, cell_ids, metric=au.accuracy, rng=np.random.default_rng(), fig_save_path=None):
+def predict_chem_synapse_sign(weights, masks, cell_ids, metric=m.accuracy, rng=np.random.default_rng(), fig_save_path=None):
     # get the connections associated with chem but not gap junctions
     # and the connections associated with gap but not chemical junctions
     chem_no_gap = ~masks['gap'] & masks['chem']
@@ -450,10 +450,10 @@ def predict_chem_synapse_sign(weights, masks, cell_ids, metric=au.accuracy, rng=
     chem_sign = chem_sign[chem_no_gap]
 
     # prediction accuracy
-    chem_sign_predict_model_synap, chem_sign_predict_model_synap_ci = au.metric_ci(metric, chem_sign, model_synap_dirms_chem, rng=rng)
-    chem_sign_predict_model_uncon, chem_sign_predict_model_uncon_ci = au.metric_ci(metric, chem_sign, model_uncon_dirms_chem, rng=rng)
-    chem_sign_predict_data_dirms, chem_sign_predict_data_dirms_ci = au.metric_ci(metric, chem_sign, data_irms_chem, rng=rng)
-    chem_sign_predict_null = au.metric_null(metric, chem_sign)
+    chem_sign_predict_model_synap, chem_sign_predict_model_synap_ci = m.metric_ci(metric, chem_sign, model_synap_dirms_chem, rng=rng)
+    chem_sign_predict_model_uncon, chem_sign_predict_model_uncon_ci = m.metric_ci(metric, chem_sign, model_uncon_dirms_chem, rng=rng)
+    chem_sign_predict_data_dirms, chem_sign_predict_data_dirms_ci = m.metric_ci(metric, chem_sign, data_irms_chem, rng=rng)
+    chem_sign_predict_null = m.metric_null(metric, chem_sign)
 
     plt.figure()
     y_val = np.array([chem_sign_predict_model_synap, chem_sign_predict_model_uncon, chem_sign_predict_data_dirms])
@@ -476,7 +476,7 @@ def predict_chem_synapse_sign(weights, masks, cell_ids, metric=au.accuracy, rng=
     plt.show()
 
 
-def predict_gap_synapse_sign(weights, masks, metric=au.accuracy, rng=np.random.default_rng(), fig_save_path=None):
+def predict_gap_synapse_sign(weights, masks, metric=m.accuracy, rng=np.random.default_rng(), fig_save_path=None):
     # get the connections associated with chem but not gap junctions
     # and the connections associated with gap but not chemical junctions
     # TODO: when I was just masking based on number of stimulations, but not based on the nans in the data
@@ -496,8 +496,8 @@ def predict_gap_synapse_sign(weights, masks, metric=au.accuracy, rng=np.random.d
     data_irms_gap[nan_loc_gap] = np.nan
 
     # calculate the rate of positive synapses for chemical vs gap junction
-    model_synap_dirms_gap_pr, model_synap_dirms_gap_pr_ci = au.metric_ci(metric, np.ones_like(model_synap_dirms_gap), model_synap_dirms_gap, rng=rng)
-    data_irms_gap_pr, data_irms_gap_pr_ci = au.metric_ci(metric, np.ones_like(data_irms_gap), data_irms_gap, rng=rng)
+    model_synap_dirms_gap_pr, model_synap_dirms_gap_pr_ci = m.metric_ci(metric, np.ones_like(model_synap_dirms_gap), model_synap_dirms_gap, rng=rng)
+    data_irms_gap_pr, data_irms_gap_pr_ci = m.metric_ci(metric, np.ones_like(data_irms_gap), data_irms_gap, rng=rng)
 
     plt.figure()
     y_val = np.array([model_synap_dirms_gap_pr, data_irms_gap_pr])
@@ -520,8 +520,8 @@ def predict_gap_synapse_sign(weights, masks, metric=au.accuracy, rng=np.random.d
 
 
 def unconstrained_model_vs_connectome(weights, masks, fig_save_path=None):
-    model_synap_dirms_conn = au.f_measure(masks['synap'], weights['models']['synap']['dirms_binarized'])
-    model_uncon_dirms_conn = au.f_measure(masks['synap'], weights['models']['unconstrained']['dirms_binarized'])
+    model_synap_dirms_conn = m.f_measure(masks['synap'], weights['models']['synap']['dirms_binarized'])
+    model_uncon_dirms_conn = m.f_measure(masks['synap'], weights['models']['unconstrained']['dirms_binarized'])
     model_synap_dirms = weights['models']['synap']['dirms']
     model_uncon_dirms = weights['models']['unconstrained']['dirms']
 

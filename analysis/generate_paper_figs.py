@@ -1,9 +1,7 @@
 from pathlib import Path
-
-import scipy.signal as ss
 import analysis_utilities as au
 import class_utilities as cu
-import analysis_methods as am
+import metrics as m
 import numpy as np
 import pickle
 import loading_utilities as lu
@@ -32,7 +30,7 @@ cell_ids_chosen = run_params['cell_ids_chosen']
 num_stim_sweep_params = run_params['num_stim_sweep_params']
 num_obs_sweep_params = run_params['num_obs_sweep_params']
 rng = np.random.default_rng(run_params['random_seed'])
-metric = getattr(au, run_params['metric'])
+metric = getattr(m, run_params['metric'])
 filter_tau = run_params['filter_tau']
 
 # get the models
