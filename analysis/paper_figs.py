@@ -354,7 +354,7 @@ def plot_dirm_swaps(weights, masks, cell_ids, num_plot=10, fig_save_path=None):
         plot_ind = model_irms_swapped_sort_inds_min[i]
         plt.plot(data_irfs_swapped[:, plot_ind], label='data irf')
         plt.plot(model_irfs_swapped[:, plot_ind], label='model irf')
-        plt.plot(model_dirfs_swapped[:, plot_ind], label='model irm')
+        plt.plot(model_dirfs_swapped[:, plot_ind], label='model dirf')
         plt.legend()
 
     plt.show()

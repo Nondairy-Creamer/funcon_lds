@@ -5,6 +5,7 @@ import scipy
 import pickle
 from pathlib import Path
 from scipy.stats import norm
+from ssm_classes import Lgssm
 
 
 def auto_select_ids(inputs, cell_ids, num_neurons=10):
@@ -276,114 +277,126 @@ def simple_get_irms(data_in, inputs_in, sample_rate=0.5, required_num_stim=0, wi
     return irms, irfs, irfs_sem, num_stim
 
 
-def calculate_irfs(model, window=(30, 60)):
-    # get the direct impulse response function between each pair of neurons
-    A = model.stack_dynamics_weights()
-    B = model.dynamics_input_weights_diagonal()
+def calculate_irfs(model, rng=np.random.default_rng(), window=(30, 60)):
     num_t = int(window[1] / model.sample_rate)
-    u = np.zeros(num_t + model.dynamics_input_lags)
-    u[int(model.dynamics_input_lags)] = 1
-    irfs = np.zeros((num_t, model.dynamics_dim, model.dynamics_dim))
+    num_n = model.dynamics_dim
+    irfs = np.zeros((num_t, num_n, num_n))
 
-    print('Calculating IRFs')
-    # loop through the stimulated neuron
     for s in range(model.dynamics_dim):
-        # loop through responding neuron
-        input_weights = B[:, s]
-        activity_history = np.zeros((model.dynamics_lags, model.dynamics_dim))
+        inputs = np.zeros((num_t, num_n))
+        inputs[0, s] = 1
+        irfs[:, :, s] = model.sample(num_time=num_t, inputs_list=[inputs], rng=rng, add_noise=False)['emissions'][0]
+        print(s + 1, '/', num_n)
 
-        for t in np.arange(num_t):
-            current_activity = np.sum(A @ activity_history[:, :, None], axis=0)[:, 0]
-            current_activity[s] += input_weights @ u[t:t + model.dynamics_input_lags]
-            irfs[t, :, s] = current_activity
-            activity_history = np.roll(activity_history, 1, axis=0)
-            activity_history[0, :] = current_activity
-
-        print(s + 1, '/', model.dynamics_dim)
-
-    zero_pad = np.zeros((int(window[0] / model.sample_rate), model.dynamics_dim, model.dynamics_dim))
+    zero_pad = np.zeros((int(window[0] / model.sample_rate), num_n, num_n))
     irfs = np.concatenate((zero_pad, irfs), axis=0)
 
     return irfs
 
 
-def calculate_dirfs(model, window=(30, 60)):
-    # get the direct impulse response function between each pair of neurons
-    A = model.stack_dynamics_weights()
-    B = model.dynamics_input_weights_diagonal()
+def calculate_dirfs(model, rng=np.random.default_rng(), window=(30, 60)):
     num_t = int(window[1] / model.sample_rate)
-    u = np.zeros(num_t + model.dynamics_input_lags)
-    u[int(model.dynamics_input_lags)] = 1
-    dirfs = np.zeros((num_t, model.dynamics_dim, model.dynamics_dim))
-    dirfs[:, np.eye(model.dynamics_dim, dtype=bool)] = np.nan
+    num_n = model.dynamics_dim
+    dirfs = np.empty((num_t, num_n, num_n))
+    dirfs[:] = np.nan
+    num_in_circuit = 2
+    inputs = np.zeros((num_t, num_in_circuit))
+    inputs[0, 0] = 1
 
-    print('Calculating dIRFs')
-    # loop through the stimulated neuron
     for s in range(model.dynamics_dim):
-        # loop through responding neuron
         for r in range(model.dynamics_dim):
             if s == r:
                 continue
 
-            weights = A[:, (s, r), :][:, :, (s, r)]
-            weights[:, 0, 1] = 0
-            input_weights = B[:, s]
-            activity_history = np.zeros((model.dynamics_lags, 2))
+            sub_model = get_sub_model(model, s, r)
+            dirfs[:, r, s] = sub_model.sample(num_time=num_t, inputs_list=[inputs], rng=rng, add_noise=False)['emissions'][0][:, 1]
 
-            if np.all(weights[:, 1, 0] == 0):
-                continue
+        print(s + 1, '/', num_n)
 
-            for t in np.arange(num_t):
-                current_activity = np.sum(weights @ activity_history[:, :, None], axis=0)[:, 0]
-                current_activity[0] += input_weights @ u[t:t + model.dynamics_input_lags]
-                dirfs[t, r, s] = current_activity[1]
-                activity_history = np.roll(activity_history, 1, axis=0)
-                activity_history[0, :] = current_activity
-
-        print(s + 1, '/', model.dynamics_dim)
-
-    zero_pad = np.zeros((int(window[0] / model.sample_rate), model.dynamics_dim, model.dynamics_dim))
+    zero_pad = np.zeros((int(window[0] / model.sample_rate), num_n, num_n))
     dirfs = np.concatenate((zero_pad, dirfs), axis=0)
 
     return dirfs
 
 
-def calculate_eirfs(model, window=(30, 60)):
-    # get the direct impulse response function between each pair of neurons
-    A = model.stack_dynamics_weights()
+def calculate_eirfs(model, rng=np.random.default_rng(), window=(30, 60)):
     num_t = int(window[1] / model.sample_rate)
-    effective_weights = np.zeros((num_t, model.dynamics_dim, model.dynamics_dim))
-    effective_weights[:, np.eye(model.dynamics_dim, dtype=bool)] = np.nan
+    num_n = model.dynamics_dim
+    eirfs = np.empty((num_t, num_n, num_n))
+    eirfs[:] = np.nan
+    num_in_circuit = 2
+    init_mean = np.zeros(num_in_circuit * model.dynamics_lags)
+    init_mean[0] = 1
+    inputs = np.zeros((num_t, num_in_circuit))
 
-    print('Calculating effective weights')
-    # loop through the stimulated neuron
     for s in range(model.dynamics_dim):
-        # loop through responding neuron
         for r in range(model.dynamics_dim):
             if s == r:
                 continue
 
-            weights = A[:, (s, r), :][:, :, (s, r)]
-            weights[:, 0, 1] = 0
-            activity_history = np.zeros((model.dynamics_lags, 2))
-            activity_history[0, 0] = 1
+            sub_model = get_sub_model(model, s, r)
+            eirfs[:, r, s] = sub_model.sample(num_time=num_t, init_mean=[init_mean], inputs_list=[inputs],
+                                              rng=rng, add_noise=False)['latents'][0][:, 1]
 
-            if np.all(weights[:, 1, 0] == 0):
-                continue
+        print(s + 1, '/', num_n)
 
-            for t in np.arange(num_t):
-                current_activity = np.sum(weights @ activity_history[:, :, None], axis=0)[:, 0]
-                effective_weights[t, r, s] = current_activity[1]
-                activity_history = np.roll(activity_history, 1, axis=0)
-                activity_history[0, :] = current_activity
-                a=1
+    zero_pad = np.zeros((int(window[0] / model.sample_rate), num_n, num_n))
+    eirfs = np.concatenate((zero_pad, eirfs), axis=0)
 
-        print(s + 1, '/', model.dynamics_dim)
+    return eirfs
 
-    zero_pad = np.zeros((int(window[0] / model.sample_rate), model.dynamics_dim, model.dynamics_dim))
-    effective_weights = np.concatenate((zero_pad, effective_weights), axis=0)
 
-    return effective_weights
+def get_sub_model(model, s, r):
+    # get a subset of model that includes only the stimulated neuron and the responding neuron
+    num_in_circuit = 2
+    # set up a new model that just has the dynamics of the neurons involved
+    sub_model = Lgssm(num_in_circuit, num_in_circuit, num_in_circuit,
+                      dynamics_lags=model.dynamics_lags, dynamics_input_lags=model.dynamics_input_lags,
+                      emissions_input_lags=model.emissions_input_lags)
+
+    dynamics_inds_s = np.arange(s, model.dynamics_dim_full, model.dynamics_dim)
+    dynamics_inds_r = np.arange(r, model.dynamics_dim_full, model.dynamics_dim)
+    dynamics_inputs_inds_s = np.arange(s, model.dynamics_input_dim_full, model.input_dim)
+    dynamics_inputs_inds_r = np.arange(r, model.dynamics_input_dim_full, model.input_dim)
+    emissions_inputs_inds_s = np.arange(s, model.emissions_input_dim_full, model.input_dim)
+    emissions_inputs_inds_r = np.arange(r, model.emissions_input_dim_full, model.input_dim)
+
+    dynamics_weights_inds = np.ix_((s, r), interleave(dynamics_inds_s, dynamics_inds_r))
+    dynamics_input_weights_inds = np.ix_((s, r), interleave(dynamics_inputs_inds_s, dynamics_inputs_inds_r))
+    cov_inds = np.ix_((s, r), (s, r))
+    emissions_weights_inds = np.ix_((s, r), interleave(dynamics_inds_s, dynamics_inds_r))
+    emissions_input_weights_inds = np.ix_((s, r), interleave(emissions_inputs_inds_s, emissions_inputs_inds_r))
+
+    # get the chosen neurons. Then stack them so they can be padded for the delay embedding
+    sub_model.dynamics_weights_init = model.dynamics_weights[dynamics_weights_inds]
+    sub_model.dynamics_input_weights_init = model.dynamics_input_weights[dynamics_input_weights_inds]
+    sub_model.dynamics_cov_init = model.dynamics_cov[cov_inds]
+
+    sub_model.emissions_weights_init = model.emissions_weights[emissions_weights_inds]
+    sub_model.emissions_input_weights_init = model.emissions_input_weights[emissions_input_weights_inds]
+    sub_model.emissions_cov_init = model.emissions_cov[cov_inds]
+
+    sub_model.dynamics_weights_init = stack_weights(sub_model.dynamics_weights_init, model.dynamics_lags, axis=1)
+    sub_model.dynamics_input_weights_init = stack_weights(sub_model.dynamics_input_weights_init,
+                                                          model.dynamics_input_lags, axis=1)
+    sub_model.emissions_input_weights_init = stack_weights(sub_model.emissions_input_weights_init,
+                                                           model.emissions_input_lags, axis=1)
+
+    # set the backward weight from postsynaptic neuron to presynaptic to 0
+    sub_model.dynamics_weights_init[:, 0, 1] = 0
+
+    sub_model.pad_init_for_lags()
+    sub_model.set_to_init()
+
+    return sub_model
+
+
+def interleave(a, b):
+    c = np.empty(a.size + b.size, dtype=a.dtype)
+    c[0::2] = a
+    c[1::2] = b
+
+    return c
 
 
 def accuracy(y_true, y_hat):

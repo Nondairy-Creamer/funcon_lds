@@ -1,4 +1,6 @@
 from pathlib import Path
+
+import scipy.signal as ss
 import analysis_utilities as au
 import analysis_methods as am
 import numpy as np
@@ -51,7 +53,7 @@ data_train_file = open(saved_run_folder / data_folder / 'data_train.pkl', 'rb')
 data_train = pickle.load(data_train_file)
 data_train_file.close()
 
-if 'data_corr' in data_train:
+if 'data_corr_ci' in data_train:
     data_corr_train = data_train['data_corr']
     data_corr_train_ci = data_train['data_corr_ci']
 else:
@@ -82,6 +84,17 @@ else:
     data_test_file.close()
 
 cell_ids = {'all': data_test['cell_ids'], 'chosen': cell_ids_chosen}
+
+# make a causal filter to smooth the data with
+sample_rate = models['synap'].sample_rate
+filter_tau = 1  # s
+max_time = filter_tau * 3
+filter_x = np.arange(0, max_time, sample_rate)
+filt_shape = np.exp(-filter_x / filter_tau)
+filt_shape = filt_shape / np.sum(filt_shape)
+
+data_train['emissions'] = [ss.convolve2d(i, filt_shape[:, None], mode='full')[:-filt_shape.size+1] for i in data_train['emissions']]
+data_test['emissions'] = [ss.convolve2d(i, filt_shape[:, None], mode='full')[:-filt_shape.size+1] for i in data_test['emissions']]
 
 # get data IRMs
 data_irms_train, data_irfs_train, data_irfs_sem_train, _ = \
@@ -253,7 +266,7 @@ am.plot_irf(measured_irf=weights['data']['test']['irfs'], measured_irf_sem=weigh
 
 # Figure 2
 pf.plot_dirfs(weights, cell_ids, fig_save_path=fig_save_path)
-pf.plot_dirm_swaps(weights, masks, cell_ids, fig_save_path=fig_save_path)
+# pf.plot_dirm_swaps(weights, masks, cell_ids, fig_save_path=fig_save_path)
 
 # Figure 3
 # pf.predict_chem_synapse_sign(weights, masks, cell_ids, metric=metric, rng=rng, fig_save_path=fig_save_path)
