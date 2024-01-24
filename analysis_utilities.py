@@ -38,7 +38,11 @@ def nan_convolve(data, filter, mode='valid'):
     nan_count = np.convolve(~nan_loc, filter / np.sum(filter), mode=mode)
     nan_count[nan_count == 0] = 1
     data_nan_conv = data_filtered / nan_count
-    data_nan_conv[nan_loc[:data_filtered.shape[0]]] = np.nan
+
+    nan_loc_pad = np.zeros(filter.size - 1) == 0
+    nan_loc = np.concatenate((nan_loc, nan_loc_pad))
+    nan_loc = nan_loc[:data_filtered.shape[0]]
+    data_nan_conv[nan_loc] = np.nan
 
     return data_nan_conv
 

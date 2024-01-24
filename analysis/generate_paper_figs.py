@@ -33,6 +33,7 @@ num_stim_sweep_params = run_params['num_stim_sweep_params']
 num_obs_sweep_params = run_params['num_obs_sweep_params']
 rng = np.random.default_rng(run_params['random_seed'])
 metric = getattr(au, run_params['metric'])
+filter_tau = run_params['filter_tau']
 
 # get the models
 models = {}
@@ -85,24 +86,42 @@ else:
     data_test_file.close()
 
 cell_ids = {'all': data_test['cell_ids'], 'chosen': cell_ids_chosen}
+sample_rate = models['synap'].sample_rate
 
 # make a causal filter to smooth the data with
-sample_rate = models['synap'].sample_rate
-filter_tau = 1  # s
-max_time = filter_tau * 3
-filter_x = np.arange(0, max_time, sample_rate)
-filt_shape = np.exp(-filter_x / filter_tau)
-filt_shape = filt_shape / np.sum(filt_shape)
+if filter_tau > 0:
+    max_time = filter_tau * 3
+    filter_x = np.arange(0, max_time, sample_rate)
+    filt_shape = np.exp(-filter_x / filter_tau)
+    filt_shape = filt_shape / np.sum(filt_shape)
 
-data_train['emissions'] = [ss.convolve2d(i, filt_shape[:, None], mode='full')[:-filt_shape.size+1] for i in data_train['emissions']]
-data_test['emissions'] = [ss.convolve2d(i, filt_shape[:, None], mode='full')[:-filt_shape.size+1] for i in data_test['emissions']]
+    for di, d in enumerate(data_train['emissions']):
+        for ni in range(d.shape[1]):
+            data_train['emissions'][di][:, ni] = au.nan_convolve(d[:, ni], filt_shape, mode='full')[:-filt_shape.size+1]
+
+    for di, d in enumerate(data_test['emissions']):
+        for ni in range(d.shape[1]):
+            data_test['emissions'][di][:, ni] = au.nan_convolve(d[:, ni], filt_shape, mode='full')[:-filt_shape.size+1]
 
 # get data IRMs
-data_irms_train, data_irfs_train, data_irfs_sem_train, _ = \
-    cu.simple_get_irms(data_train['emissions'], data_train['inputs'], window=window, sub_pre_stim=sub_pre_stim)
+data_irfs_train, data_irfs_sem_train = \
+    cu.get_impulse_response_functions(data_train['emissions'], data_train['inputs'],
+                                      sample_rate=sample_rate, window=window, sub_pre_stim=sub_pre_stim)[:2]
+data_irms_train = np.nansum(data_irfs_train[window[0]:], axis=0) * sample_rate
 
-data_irms_test, data_irfs_test, data_irfs_sem_test, num_stim = \
-    cu.simple_get_irms(data_test['emissions'], data_test['inputs'], window=window, sub_pre_stim=sub_pre_stim)
+data_irfs_test, data_irfs_sem_test, data_irfs_test_all = \
+    cu.get_impulse_response_functions(data_test['emissions'], data_test['inputs'],
+                                      sample_rate=sample_rate, window=window, sub_pre_stim=sub_pre_stim)
+data_irms_test = np.nansum(data_irfs_test[window[0]:], axis=0) * sample_rate
+
+# count the number of stimulation events
+num_neurons = data_irfs_test.shape[1]
+num_stim = np.zeros((num_neurons, num_neurons))
+for ni in range(num_neurons):
+    for nj in range(num_neurons):
+        resp_to_stim = data_irfs_test_all[ni][:, window[0]:, nj]
+        num_obs_when_stim = np.sum(np.mean(~np.isnan(resp_to_stim), axis=1) >= 0.5)
+        num_stim[nj, ni] += num_obs_when_stim
 
 # for each data set determihne whether a neuron was measured
 obs_train = np.stack([np.mean(np.isnan(i), axis=0) < run_params['obs_threshold'] for i in data_train['emissions']])
@@ -253,10 +272,10 @@ for i in weights:
                 raise Exception('Weights shape not recognized')
 
 # Figure 1
-am.plot_irf(measured_irf=weights['data']['test']['irfs'], measured_irf_sem=weights['data']['test']['irfs_sem'],
-            model_irf=weights['models']['synap']['irfs'],
-            cell_ids=cell_ids['all'], cell_ids_chosen=cell_ids['chosen'], window=window, num_plot=5,
-            fig_save_path=fig_save_path)
+# am.plot_irf(measured_irf=weights['data']['test']['irfs'], measured_irf_sem=weights['data']['test']['irfs_sem'],
+#             model_irf=weights['models']['synap']['irfs'],
+#             cell_ids=cell_ids['all'], cell_ids_chosen=cell_ids['chosen'], window=window, num_plot=5,
+#             fig_save_path=fig_save_path)
 # am.plot_irm(model_weights=weights['models']['synap']['dirms'],
 #             measured_irm=weights['data']['test']['irms'],
 #             model_irm=weights['models']['synap']['irms'],
@@ -267,7 +286,8 @@ am.plot_irf(measured_irf=weights['data']['test']['irfs'], measured_irf_sem=weigh
 # pf.weights_vs_connectome(weights, masks, metric=metric, fig_save_path=fig_save_path)
 
 # Figure 2
-pf.plot_dirfs(weights, cell_ids, fig_save_path=fig_save_path)
+# pf.plot_dirfs(weights, cell_ids, fig_save_path=fig_save_path)
+pf.plot_dirm_diff(weights, masks, cell_ids, fig_save_path=fig_save_path)
 # pf.plot_dirm_swaps(weights, masks, cell_ids, fig_save_path=fig_save_path)
 
 # Figure 3

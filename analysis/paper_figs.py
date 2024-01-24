@@ -294,7 +294,54 @@ def plot_dirfs(weights, cell_ids, num_plot=10, fig_save_path=None):
     plt.show()
 
 
-def plot_dirm_swaps(weights, masks, cell_ids, num_plot=10, fig_save_path=None):
+def plot_dirm_diff(weights, masks, cell_ids, num_plot=5, fig_save_path=None):
+    data_irfs = weights['data']['test']['irfs'][:, masks['synap']]
+    model_irfs = weights['models']['synap']['irfs'][:, masks['synap']]
+    model_dirfs = weights['models']['synap']['dirfs'][:, masks['synap']]
+
+    data_irms = weights['data']['test']['irms'][masks['synap']]
+    model_irms = weights['models']['synap']['irms'][masks['synap']]
+    model_dirms = weights['models']['synap']['dirms'][masks['synap']]
+
+    num_neurons = len(cell_ids['all'])
+    post_synaptic = np.empty((num_neurons, num_neurons), dtype=object)
+    pre_synaptic = np.empty((num_neurons, num_neurons), dtype=object)
+    for ci in range(num_neurons):
+        for cj in range(num_neurons):
+            post_synaptic[ci, cj] = cell_ids['all'][ci]
+            pre_synaptic[ci, cj] = cell_ids['all'][cj]
+
+    cell_stim_names = np.stack((post_synaptic[masks['synap']], pre_synaptic[masks['synap']]))
+
+    # get rid of nans
+    # these should all be the same, but for safety and clarity check for nans in all
+    nan_loc = np.isnan(data_irms) | np.isnan(model_irms) | np.isnan(model_dirms)
+
+    data_irfs = data_irfs[:, ~nan_loc]
+    model_irfs = model_irfs[:, ~nan_loc]
+    model_dirfs = model_dirfs[:, ~nan_loc]
+
+    data_irms = data_irms[~nan_loc]
+    model_irms = model_irms[~nan_loc]
+    model_dirms = model_dirms[~nan_loc]
+    cell_ids_no_nan = np.stack((cell_stim_names[0, ~nan_loc], cell_stim_names[1, ~nan_loc]))
+
+    # get the highest model dirm vs model irm diff
+    irm_dirm_diff = np.abs(model_irms - model_dirms)
+    irm_dirm_diff_inds = np.argsort(irm_dirm_diff)[::-1]
+
+    for i in range(num_plot):
+        plt.figure()
+        plot_ind = irm_dirm_diff_inds[i]
+        plt.plot(data_irfs[:, plot_ind], label='data irf')
+        plt.plot(model_irfs[:, plot_ind], label='model irf')
+        plt.plot(model_dirfs[:, plot_ind], label='model dirf')
+        plt.legend()
+
+    plt.show()
+
+
+def plot_dirm_swaps(weights, masks, cell_ids, num_plot=5, fig_save_path=None):
     data_irfs = weights['data']['test']['irfs'][:, masks['synap']]
     model_irfs = weights['models']['synap']['irfs'][:, masks['synap']]
     model_dirfs = weights['models']['synap']['dirfs'][:, masks['synap']]
@@ -346,7 +393,7 @@ def plot_dirm_swaps(weights, masks, cell_ids, num_plot=10, fig_save_path=None):
         plot_ind = model_irms_swapped_sort_inds_max[i]
         plt.plot(data_irfs_swapped[:, plot_ind], label='data irf')
         plt.plot(model_irfs_swapped[:, plot_ind], label='model irf')
-        plt.plot(model_dirfs_swapped[:, plot_ind], label='model irm')
+        plt.plot(model_dirfs_swapped[:, plot_ind], label='model dirf')
         plt.legend()
 
     for i in range(num_plot):
