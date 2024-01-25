@@ -1,6 +1,8 @@
 from pathlib import Path
 import analysis_utilities as au
 import lgssm_utilities as ssmu
+import tmac.preprocessing as tp
+import scipy.signal as ss
 import metrics as met
 import numpy as np
 import pickle
@@ -86,6 +88,26 @@ else:
 cell_ids = {'all': data_test['cell_ids'], 'chosen': cell_ids_chosen}
 sample_rate = models['synap'].sample_rate
 
+# count the number of stimulation events before interpolation
+data_irfs_test, data_irfs_sem_test, data_irfs_test_all = \
+    ssmu.get_impulse_response_functions(data_test['emissions'], data_test['inputs'],
+                                        sample_rate=sample_rate, window=window, sub_pre_stim=sub_pre_stim)
+
+num_neurons = data_irfs_test.shape[1]
+num_stim_test = np.zeros((num_neurons, num_neurons))
+for ni in range(num_neurons):
+    for nj in range(num_neurons):
+        resp_to_stim = data_irfs_test_all[ni][:, window[0]:, nj]
+        num_obs_when_stim = np.sum(np.mean(~np.isnan(resp_to_stim), axis=1) >= 0.5)
+        num_stim_test[nj, ni] += num_obs_when_stim
+
+# interpolate nans in data for viewing
+for di, d in enumerate(data_train['emissions']):
+    data_train['emissions'][di] = tp.interpolate_over_nans(d)[0]
+
+for di, d in enumerate(data_test['emissions']):
+    data_test['emissions'][di] = tp.interpolate_over_nans(d)[0]
+
 # make a causal filter to smooth the data with
 if filter_tau > 0:
     max_time = filter_tau * 3
@@ -94,14 +116,12 @@ if filter_tau > 0:
     filt_shape = filt_shape / np.sum(filt_shape)
 
     for di, d in enumerate(data_train['emissions']):
-        for ni in range(d.shape[1]):
-            data_train['emissions'][di][:, ni] = au.nan_convolve(d[:, ni], filt_shape, mode='full')[:-filt_shape.size+1]
+        data_train['emissions'][di] = ss.convolve2d(d, filt_shape[:, None], mode='full')[:-filt_shape.size+1, :]
 
     for di, d in enumerate(data_test['emissions']):
-        for ni in range(d.shape[1]):
-            data_test['emissions'][di][:, ni] = au.nan_convolve(d[:, ni], filt_shape, mode='full')[:-filt_shape.size+1]
+        data_test['emissions'][di] = ss.convolve2d(d, filt_shape[:, None], mode='full')[:-filt_shape.size+1, :]
 
-# get data IRMs
+# get data IRFs and IRMs after interpolation
 data_irfs_train, data_irfs_sem_train = \
     ssmu.get_impulse_response_functions(data_train['emissions'], data_train['inputs'],
                                         sample_rate=sample_rate, window=window, sub_pre_stim=sub_pre_stim)[:2]
@@ -115,15 +135,6 @@ data_irfs_test, data_irfs_sem_test, data_irfs_test_all = \
 nan_loc = np.all(np.isnan(data_irfs_test), axis=0)
 data_irms_test = np.nansum(data_irfs_test[window[0]:], axis=0) * sample_rate
 data_irms_test[nan_loc] = np.nan
-
-# count the number of stimulation events
-num_neurons = data_irfs_test.shape[1]
-num_stim_test = np.zeros((num_neurons, num_neurons))
-for ni in range(num_neurons):
-    for nj in range(num_neurons):
-        resp_to_stim = data_irfs_test_all[ni][:, window[0]:, nj]
-        num_obs_when_stim = np.sum(np.mean(~np.isnan(resp_to_stim), axis=1) >= 0.5)
-        num_stim_test[nj, ni] += num_obs_when_stim
 
 # for each data set determihne whether a neuron was measured
 obs_train = np.stack([np.mean(np.isnan(i), axis=0) < run_params['obs_threshold'] for i in data_train['emissions']])
@@ -215,6 +226,8 @@ data_nan = np.isnan(weights_unmasked['data']['test']['irms']) | np.isnan(weights
 n_stim_mask = []
 n_stim_sweep = np.arange(num_stim_sweep_params[0], num_stim_sweep_params[1], num_stim_sweep_params[2])
 diag_mask = np.eye(num_neurons, dtype=bool)
+minimum_nan_mask = data_nan | diag_mask
+
 for ni, n in enumerate(n_stim_sweep):
     # loop through number of stimulations and include all pairs which were stimulated
     # within num_stim_sweep_params[2] of n
@@ -222,7 +235,7 @@ for ni, n in enumerate(n_stim_sweep):
     for i in range(1, num_stim_sweep_params[2]):
         stim_sweep_mask &= num_stim_test != (n + i)
 
-    n_stim_mask.append(stim_sweep_mask | data_nan | diag_mask)
+    n_stim_mask.append(stim_sweep_mask | minimum_nan_mask)
 
 # get mask based on number of observations
 n_obs_mask = []
@@ -234,20 +247,18 @@ for ni, n in enumerate(n_obs_sweep):
     for i in range(1, num_obs_sweep_params[2]):
         obs_sweep_mask &= num_obs_test != (n + i)
 
-    n_obs_mask.append(obs_sweep_mask | data_nan | diag_mask)
+    n_obs_mask.append(obs_sweep_mask | minimum_nan_mask)
 
 # put all the masks in a dictionary
 masks = {'diagonal': np.eye(data_irms_train.shape[0], dtype=bool),
          'synap': (weights_unmasked['anatomy']['chem_conn'] + weights_unmasked['anatomy']['gap_conn']) > 0,
          'chem': weights_unmasked['anatomy']['chem_conn'] > 0,
          'gap': weights_unmasked['anatomy']['gap_conn'] > 0,
-         'nan': (num_stim_test < required_num_stim) | data_nan | diag_mask,
+         'nan': (num_stim_test < required_num_stim) | minimum_nan_mask,
          'n_stim_mask': n_stim_mask,
          'n_stim_sweep': n_stim_sweep,
          'n_obs_mask': n_obs_mask,
          'n_obs_sweep': n_obs_sweep}
-
-minimum_nan_mask = data_nan | diag_mask
 
 # set all the weights to nan with the nan mask
 weights = copy.deepcopy(weights_unmasked)
@@ -291,10 +302,6 @@ for i in weights_unmasked:
                 raise Exception('Weights shape not recognized')
 
 # Figure 1
-# am.plot_irf(measured_irf=weights['data']['test']['irfs'], measured_irf_sem=weights['data']['test']['irfs_sem'],
-#             model_irf=weights['models']['synap']['irfs'],
-#             cell_ids=cell_ids['all'], cell_ids_chosen=cell_ids['chosen'], window=window, num_plot=5,
-#             fig_save_path=fig_save_path)
 # am.plot_irm(model_weights=weights['models']['synap']['dirms'],
 #             measured_irm=weights['data']['test']['irms'],
 #             model_irm=weights['models']['synap']['irms'],
@@ -304,12 +311,12 @@ for i in weights_unmasked:
 
 # pf.plot_irfs(weights, cell_ids, window, num_plot=10, fig_save_path=None)
 
-pf.corr_irm_recon(weights_unmasked, masks, fig_save_path=fig_save_path)
+# pf.corr_irm_recon(weights_unmasked, masks, fig_save_path=fig_save_path)
 # pf.weights_vs_connectome(weights, masks, metric=metric, fig_save_path=fig_save_path)
 
 # Figure 2
 # pf.plot_dirfs(weights, masks, cell_ids, window, fig_save_path=fig_save_path)
-# pf.plot_dirm_diff(weights, masks, cell_ids, window, fig_save_path=fig_save_path)
+pf.plot_dirm_diff(weights, masks, cell_ids, window, num_plot=20, fig_save_path=fig_save_path)
 
 # Figure 3
 # pf.predict_chem_synapse_sign(weights, masks, cell_ids, metric=metric, rng=rng, fig_save_path=fig_save_path)

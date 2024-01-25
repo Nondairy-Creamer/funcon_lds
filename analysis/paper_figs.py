@@ -287,6 +287,10 @@ def plot_irfs(weights, cell_ids, window, num_plot=10, fig_save_path=None):
         plt.plot(plot_x, model_irfs[:, plot_ind], label='model irf')
         plt.title(cell_ids[1, plot_ind] + ' -> ' + cell_ids[0, plot_ind])
         plt.legend()
+        plt.axvline(0, color='k', linestyle='--')
+        plt.axhline(0, color='k', linestyle='--')
+        plt.xlabel('time (s)')
+        plt.ylabel('cell activity')
 
     plt.show()
 
@@ -322,6 +326,10 @@ def plot_dirfs(weights, masks, cell_ids, window, num_plot=10, fig_save_path=None
         plt.plot(plot_x, model_eirfs[:, plot_ind], label='model eirf')
         plt.title(cell_ids[1, plot_ind] + ' -> ' + cell_ids[0, plot_ind])
         plt.legend()
+        plt.axvline(0, color='k', linestyle='--')
+        plt.axhline(0, color='k', linestyle='--')
+        plt.xlabel('time (s)')
+        plt.ylabel('cell activity')
 
     plt.show()
 
@@ -358,6 +366,10 @@ def plot_dirm_diff(weights, masks, cell_ids, window, num_plot=10, fig_save_path=
         plt.plot(plot_x, model_eirfs[:, plot_ind], label='model eirf')
         plt.title(cell_ids[1, plot_ind] + ' -> ' + cell_ids[0, plot_ind])
         plt.legend()
+        plt.axvline(0, color='k', linestyle='--')
+        plt.axhline(0, color='k', linestyle='--')
+        plt.xlabel('time (s)')
+        plt.ylabel('cell activity')
 
     plt.show()
 
