@@ -1,6 +1,6 @@
 from pathlib import Path
 import analysis_utilities as au
-import class_utilities as cu
+import lgssm_utilities as ssmu
 import metrics as met
 import numpy as np
 import pickle
@@ -103,15 +103,15 @@ if filter_tau > 0:
 
 # get data IRMs
 data_irfs_train, data_irfs_sem_train = \
-    cu.get_impulse_response_functions(data_train['emissions'], data_train['inputs'],
-                                      sample_rate=sample_rate, window=window, sub_pre_stim=sub_pre_stim)[:2]
+    ssmu.get_impulse_response_functions(data_train['emissions'], data_train['inputs'],
+                                        sample_rate=sample_rate, window=window, sub_pre_stim=sub_pre_stim)[:2]
 nan_loc = np.all(np.isnan(data_irfs_train), axis=0)
 data_irms_train = np.nansum(data_irfs_train[window[0]:], axis=0) * sample_rate
 data_irms_train[nan_loc] = np.nan
 
 data_irfs_test, data_irfs_sem_test, data_irfs_test_all = \
-    cu.get_impulse_response_functions(data_test['emissions'], data_test['inputs'],
-                                      sample_rate=sample_rate, window=window, sub_pre_stim=sub_pre_stim)
+    ssmu.get_impulse_response_functions(data_test['emissions'], data_test['inputs'],
+                                        sample_rate=sample_rate, window=window, sub_pre_stim=sub_pre_stim)
 nan_loc = np.all(np.isnan(data_irfs_test), axis=0)
 data_irms_test = np.nansum(data_irfs_test[window[0]:], axis=0) * sample_rate
 data_irms_test[nan_loc] = np.nan
@@ -170,29 +170,29 @@ weights_unmasked['anatomy'] = au.load_anatomical_data(cell_ids=cell_ids['all'])
 weights_unmasked['models'] = {}
 # get the IRMs of the models and data
 std_factor = 100
-for met in models:
-    sample_rate = models[met].sample_rate
+for m in models:
+    sample_rate = models[m].sample_rate
     window_size = (np.sum(np.array(window) / sample_rate)).astype(int)
-    if 'irfs' not in posterior_dicts[met] or posterior_dicts[met]['irfs'].shape[0] != window_size:
-        posterior_dicts[met]['irfs'] = cu.calculate_irfs(models[met], window=window)
+    if 'irfs' not in posterior_dicts[m] or posterior_dicts[m]['irfs'].shape[0] != window_size:
+        posterior_dicts[m]['irfs'] = ssmu.calculate_irfs(models[m], window=window)
 
-    if 'dirfs' not in posterior_dicts[met] or posterior_dicts[met]['dirfs'].shape[0] != window_size:
-        posterior_dicts[met]['dirfs'] = cu.calculate_dirfs(models[met], window=window)
+    if 'dirfs' not in posterior_dicts[m] or posterior_dicts[m]['dirfs'].shape[0] != window_size:
+        posterior_dicts[m]['dirfs'] = ssmu.calculate_dirfs(models[m], window=window)
 
-    if 'eirfs' not in posterior_dicts[met] or posterior_dicts[met]['eirfs'].shape[0] != window_size:
-        posterior_dicts[met]['eirfs'] = cu.calculate_eirfs(models[met], window=window)
+    if 'eirfs' not in posterior_dicts[m] or posterior_dicts[m]['eirfs'].shape[0] != window_size:
+        posterior_dicts[m]['eirfs'] = ssmu.calculate_eirfs(models[m], window=window)
 
-    weights_unmasked['models'][met] = {'irfs': posterior_dicts[met]['irfs'],
-                                       'irms': np.sum(posterior_dicts[met]['irfs'], axis=0) * sample_rate,
-                                       'dirfs': posterior_dicts[met]['dirfs'],
-                                       'dirms': np.sum(posterior_dicts[met]['dirfs'], axis=0) * sample_rate,
-                                       'eirfs': posterior_dicts[met]['eirfs'],
-                                       'eirms': np.sum(posterior_dicts[met]['eirfs'], axis=0) * sample_rate,
-                                       }
+    weights_unmasked['models'][m] = {'irfs': posterior_dicts[m]['irfs'],
+                                       'irms': np.sum(posterior_dicts[m]['irfs'], axis=0) * sample_rate,
+                                       'dirfs': posterior_dicts[m]['dirfs'],
+                                       'dirms': np.sum(posterior_dicts[m]['dirfs'], axis=0) * sample_rate,
+                                       'eirfs': posterior_dicts[m]['eirfs'],
+                                       'eirms': np.sum(posterior_dicts[m]['eirfs'], axis=0) * sample_rate,
+                                     }
 
-    abs_dirms = np.abs(weights_unmasked['models'][met]['dirms'])
+    abs_dirms = np.abs(weights_unmasked['models'][m]['dirms'])
     dirms_binarized = abs_dirms > (np.nanstd(abs_dirms) / std_factor)
-    weights_unmasked['models'][met]['dirms_binarized'] = dirms_binarized.astype(float)
+    weights_unmasked['models'][m]['dirms_binarized'] = dirms_binarized.astype(float)
 
 # save the posterior dicts so the irfs and dirfs are saved
 for mf in model_folders:
@@ -201,13 +201,13 @@ for mf in model_folders:
     post_file.close()
 
 # model correlation
-for met in models:
-    model_corr = models[met].dynamics_weights @ models[met].dynamics_weights.T + models[met].dynamics_cov
+for m in models:
+    model_corr = models[m].dynamics_weights @ models[m].dynamics_weights.T + models[m].dynamics_cov
     for i in range(100):
-        model_corr = models[met].dynamics_weights @ model_corr @ models[met].dynamics_weights.T + models[met].dynamics_cov
-    model_corr = model_corr[:models[met].dynamics_dim, :models[met].dynamics_dim]
+        model_corr = models[m].dynamics_weights @ model_corr @ models[m].dynamics_weights.T + models[m].dynamics_cov
+    model_corr = model_corr[:models[m].dynamics_dim, :models[m].dynamics_dim]
 
-    weights_unmasked['models'][met]['corr'] = model_corr
+    weights_unmasked['models'][m]['corr'] = model_corr
 
 # set up the masks
 data_nan = np.isnan(weights_unmasked['data']['test']['irms']) | np.isnan(weights_unmasked['data']['test']['corr'])
@@ -247,6 +247,8 @@ masks = {'diagonal': np.eye(data_irms_train.shape[0], dtype=bool),
          'n_obs_mask': n_obs_mask,
          'n_obs_sweep': n_obs_sweep}
 
+minimum_nan_mask = data_nan | diag_mask
+
 # set all the weights to nan with the nan mask
 weights = copy.deepcopy(weights_unmasked)
 for i in weights:
@@ -268,6 +270,26 @@ for i in weights:
             else:
                 raise Exception('Weights shape not recognized')
 
+# mask the unmasked weights with the minimum mask
+for i in weights_unmasked:
+    for j in weights_unmasked[i]:
+        if isinstance(weights_unmasked[i][j], dict):
+            for k in weights_unmasked[i][j]:
+                if weights_unmasked[i][j][k].ndim == 2:
+                    weights_unmasked[i][j][k][minimum_nan_mask] = np.nan
+                elif weights_unmasked[i][j][k].ndim == 3:
+                    weights_unmasked[i][j][k][:, minimum_nan_mask] = np.nan
+                else:
+                    raise Exception('Weights shape not recognized')
+
+        else:
+            if weights_unmasked[i][j].ndim == 2:
+                weights_unmasked[i][j][minimum_nan_mask] = np.nan
+            elif weights_unmasked[i][j].ndim == 3:
+                weights_unmasked[i][j][:, minimum_nan_mask] = np.nan
+            else:
+                raise Exception('Weights shape not recognized')
+
 # Figure 1
 # am.plot_irf(measured_irf=weights['data']['test']['irfs'], measured_irf_sem=weights['data']['test']['irfs_sem'],
 #             model_irf=weights['models']['synap']['irfs'],
@@ -279,13 +301,15 @@ for i in weights:
 #             data_corr=weights['data']['train']['corr'],
 #             cell_ids=cell_ids['all'], cell_ids_chosen=cell_ids['chosen'],
 #             fig_save_path=fig_save_path)
-pf.corr_irm_recon(weights_unmasked, weights, masks, fig_save_path=fig_save_path)
+
+# pf.plot_irfs(weights, cell_ids, window, num_plot=10, fig_save_path=None)
+
+pf.corr_irm_recon(weights_unmasked, masks, fig_save_path=fig_save_path)
 # pf.weights_vs_connectome(weights, masks, metric=metric, fig_save_path=fig_save_path)
 
 # Figure 2
-# pf.plot_dirfs(weights, cell_ids, fig_save_path=fig_save_path)
-pf.plot_dirm_diff(weights, masks, cell_ids, fig_save_path=fig_save_path)
-# pf.plot_dirm_swaps(weights, masks, cell_ids, fig_save_path=fig_save_path)
+# pf.plot_dirfs(weights, masks, cell_ids, window, fig_save_path=fig_save_path)
+# pf.plot_dirm_diff(weights, masks, cell_ids, window, fig_save_path=fig_save_path)
 
 # Figure 3
 # pf.predict_chem_synapse_sign(weights, masks, cell_ids, metric=metric, rng=rng, fig_save_path=fig_save_path)

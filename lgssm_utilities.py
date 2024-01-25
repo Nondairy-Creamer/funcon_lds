@@ -4,6 +4,57 @@ from ssm_classes import Lgssm
 import warnings
 
 
+def remove_nan_irfs(weights, cell_ids, chosen_mask=None):
+    if chosen_mask is None:
+        chosen_mask = np.zeros_like(weights['data']['test']['irms']) == 0
+
+    data_irfs = weights['data']['test']['irfs'][:, chosen_mask]
+    data_irfs_sem = weights['data']['test']['irfs_sem'][:, chosen_mask]
+    model_irfs = weights['models']['synap']['irfs'][:, chosen_mask]
+    model_dirfs = weights['models']['synap']['dirfs'][:, chosen_mask]
+    model_eirfs = weights['models']['synap']['eirfs'][:, chosen_mask]
+
+    data_irms = weights['data']['test']['irms'][chosen_mask]
+    model_irms = weights['models']['synap']['irms'][chosen_mask]
+    model_dirms = weights['models']['synap']['dirms'][chosen_mask]
+
+    num_neurons = len(cell_ids['all'])
+    post_synaptic = np.empty((num_neurons, num_neurons), dtype=object)
+    pre_synaptic = np.empty((num_neurons, num_neurons), dtype=object)
+    for ci in range(num_neurons):
+        for cj in range(num_neurons):
+            post_synaptic[ci, cj] = cell_ids['all'][ci]
+            pre_synaptic[ci, cj] = cell_ids['all'][cj]
+
+    cell_stim_names = np.stack((post_synaptic[chosen_mask], pre_synaptic[chosen_mask]))
+
+    # get rid of nans
+    # these should all be the same, but for safety and clarity check for nans in all
+    nan_loc = np.isnan(data_irms) | np.isnan(model_irms) | np.isnan(model_dirms)
+
+    data_irfs = data_irfs[:, ~nan_loc]
+    data_irfs_sem = data_irfs_sem[:, ~nan_loc]
+    model_irfs = model_irfs[:, ~nan_loc]
+    model_dirfs = model_dirfs[:, ~nan_loc]
+    model_eirfs = model_eirfs[:, ~nan_loc]
+
+    model_irms = model_irms[~nan_loc]
+    model_dirms = model_dirms[~nan_loc]
+    cell_ids_no_nan = np.stack((cell_stim_names[0, ~nan_loc], cell_stim_names[1, ~nan_loc]))
+
+    selected_irfs = {'data_irfs': data_irfs,
+                     'data_irfs_sem': data_irfs_sem,
+                     'model_irfs': model_irfs,
+                     'model_dirfs': model_dirfs,
+                     'model_eirfs': model_eirfs,
+                     'model_irms': model_irms,
+                     'model_dirms': model_dirms,
+                     'cell_ids': cell_ids_no_nan,
+                     }
+
+    return selected_irfs
+
+
 def get_impulse_response_functions(data, inputs, sample_rate=0.5, window=(15, 30), sub_pre_stim=True):
     # get IRFs from data
     if window[0] < 0 or window[1] < 0 or np.sum(window) <= 0:

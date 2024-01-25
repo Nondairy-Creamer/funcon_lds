@@ -3,7 +3,7 @@ import analysis_methods as am
 import analysis_utilities as au
 import loading_utilities as lu
 from pathlib import Path
-import class_utilities as cu
+import lgssm_utilities as ssmu
 
 run_params = lu.get_run_params(param_name='analysis_params/ana_test.yml')
 # run_params = lu.get_run_params(param_name='analysis_params/ana_exp_synap.yml')
@@ -47,9 +47,9 @@ model, posterior, init_mean, init_cov \
 
 # get the impulse response functions (IRF)
 measured_irf, measured_irf_sem, measured_irf_all = \
-    cu.get_impulse_response_functions(emissions, inputs, window=window, sub_pre_stim=sub_pre_stim)
+    ssmu.get_impulse_response_functions(emissions, inputs, window=window, sub_pre_stim=sub_pre_stim)
 model_irf, model_irf_sem, model_irf_all = \
-    cu.get_impulse_response_functions(model_sampled, inputs, window=window, sub_pre_stim=sub_pre_stim)
+    ssmu.get_impulse_response_functions(model_sampled, inputs, window=window, sub_pre_stim=sub_pre_stim)
 
 model_weights = model.dynamics_weights
 model_weights = au.stack_weights(model_weights[:model.dynamics_dim, :], model.dynamics_lags, axis=1)

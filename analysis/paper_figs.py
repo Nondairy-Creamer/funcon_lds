@@ -2,9 +2,10 @@ from matplotlib import pyplot as plt
 import numpy as np
 import wormneuroatlas as wa
 import metrics as met
+import lgssm_utilities as ssmu
 
 
-def corr_irm_recon(weights_unmasked, weights, masks, fig_save_path=None):
+def corr_irm_recon(weights, masks, fig_save_path=None):
     # this figure will demonstrate that the model can reconstruct the observed data correlation and IRMs
     # first we will sweep across the data and restrict to neuron pairs where a stimulation event was recorded N times
     # we will demonstrate that ratio between the best possible correlation and our model correlation remains constant
@@ -44,8 +45,8 @@ def corr_irm_recon(weights_unmasked, weights, masks, fig_save_path=None):
 
     # sweep across number of stims
     for ni, n in enumerate(n_stim_sweep):
-        data_train_irms = weights_unmasked['data']['train']['irms'].copy()
-        data_test_irms = weights_unmasked['data']['test']['irms'].copy()
+        data_train_irms = weights['data']['train']['irms'].copy()
+        data_test_irms = weights['data']['test']['irms'].copy()
 
         data_train_irms[n_stim_mask[ni]] = np.nan
         data_test_irms[n_stim_mask[ni]] = np.nan
@@ -54,8 +55,8 @@ def corr_irm_recon(weights_unmasked, weights, masks, fig_save_path=None):
 
     # sweep across number of observations
     for ni, n in enumerate(n_obs_sweep):
-        data_train_corr = weights_unmasked['data']['train']['corr'].copy()
-        data_test_corr = weights_unmasked['data']['test']['corr'].copy()
+        data_train_corr = weights['data']['train']['corr'].copy()
+        data_test_corr = weights['data']['test']['corr'].copy()
 
         data_train_corr[n_obs_mask[ni]] = np.nan
         data_test_corr[n_obs_mask[ni]] = np.nan
@@ -63,7 +64,7 @@ def corr_irm_recon(weights_unmasked, weights, masks, fig_save_path=None):
         corr_baseline_sweep[ni], corr_baseline_sweep_ci[:, ni] = met.nan_corr(data_train_corr, data_test_corr)
 
     # get the comparison between model prediction and data irm/correlation
-    for m in weights_unmasked['models']:
+    for m in weights['models']:
         if m in ['synap', 'synap_randC', 'synap_randA']:
             # first, get the correlation for each model using all the data. Then compare with only part of the data
             model_corr_to_measured_corr, model_corr_to_measured_corr_ci = \
@@ -85,21 +86,21 @@ def corr_irm_recon(weights_unmasked, weights, masks, fig_save_path=None):
 
             for ni, n in enumerate(n_stim_sweep):
                 # mask the model predicted correlations and IRMs based on how many stimulation events were observed
-                model_irms = weights_unmasked['models'][m]['irms'].copy()
+                model_irms = weights['models'][m]['irms'].copy()
                 model_irms[n_stim_mask[ni]] = np.nan
 
                 model_irms_to_measured_irms, model_irms_to_measured_irms_ci = \
-                    met.nan_corr(model_irms, weights_unmasked['data']['test']['irms'])
+                    met.nan_corr(model_irms, weights['data']['test']['irms'])
                 model_irms_score_sweep[-1][ni] = model_irms_to_measured_irms
                 model_irms_score_sweep_ci[-1][:, ni] = model_irms_to_measured_irms_ci
 
             for ni, n in enumerate(n_obs_sweep):
                 # mask the model predicted correlations and IRMs based on how many stimulation events were observed
-                model_corr = weights_unmasked['models'][m]['corr'].copy()
+                model_corr = weights['models'][m]['corr'].copy()
                 model_corr[n_obs_mask[ni]] = np.nan
 
                 model_corr_to_measured_corr, model_corr_to_measured_corr_ci = \
-                    met.nan_corr(model_corr, weights_unmasked['data']['test']['corr'])
+                    met.nan_corr(model_corr, weights['data']['test']['corr'])
                 model_corr_score_sweep[-1][ni] = model_corr_to_measured_corr
                 model_corr_score_sweep_ci[-1][:, ni] = model_corr_to_measured_corr_ci
 
@@ -258,147 +259,104 @@ def unconstrained_vs_constrained_model(weights, fig_save_path=None):
     plt.show()
 
 
-def plot_dirfs(weights, cell_ids, num_plot=10, fig_save_path=None):
-    chosen_cell_inds = [cell_ids['all'].index(i) for i in cell_ids['chosen']]
+def plot_irfs(weights, cell_ids, window, num_plot=10, fig_save_path=None):
+    no_nan_irfs = ssmu.remove_nan_irfs(weights, cell_ids, chosen_mask=None)
 
-    chosen_irfs = weights['models']['synap']['irfs'][:, chosen_cell_inds, :][:, :, chosen_cell_inds]
-    chosen_dirfs = weights['models']['synap']['dirfs'][:, chosen_cell_inds, :][:, :, chosen_cell_inds]
-    chosen_eirfs = weights['models']['synap']['eirfs'][:, chosen_cell_inds, :][:, :, chosen_cell_inds]
-
-    chosen_dirms = weights['models']['synap']['dirms'][chosen_cell_inds, :][:, chosen_cell_inds]
-    chosen_dirms_linear = chosen_dirms.reshape(-1)
-    dirm_inds = np.arange(len(chosen_cell_inds)**2)
-
-    nan_ind = np.isnan(chosen_dirms.reshape(-1))
-    chosen_dirms_linear = chosen_dirms_linear[~nan_ind]
-    dirm_inds = dirm_inds[~nan_ind]
-
-    least_to_greatest = np.argsort(np.abs(chosen_dirms_linear))
-    greatest_dirm_inds = dirm_inds[least_to_greatest][-num_plot:][::-1]
-
-    for gdi, gd in enumerate(greatest_dirm_inds):
-        plt.figure()
-        mat_ind = np.unravel_index(gd, chosen_dirms.shape)
-        plt.plot(chosen_irfs[:, mat_ind[0], mat_ind[1]], label='irf')
-        plt.plot(chosen_dirfs[:, mat_ind[0], mat_ind[1]], label='dirf')
-        plt.plot(chosen_eirfs[:, mat_ind[0], mat_ind[1]], label='eirf')
-        plt.title(cell_ids['chosen'][mat_ind[1]] + ' -> ' + cell_ids['chosen'][mat_ind[0]])
-        plt.legend()
-
-        if fig_save_path is not None:
-            plt.savefig(fig_save_path / ('dirf_' + str(gdi) + '.pdf'))
-
-    plt.show()
-
-
-def plot_dirm_diff(weights, masks, cell_ids, num_plot=10, fig_save_path=None):
-    data_irfs = weights['data']['test']['irfs'][:, masks['synap']]
-    model_irfs = weights['models']['synap']['irfs'][:, masks['synap']]
-    model_dirfs = weights['models']['synap']['dirfs'][:, masks['synap']]
-
-    data_irms = weights['data']['test']['irms'][masks['synap']]
-    model_irms = weights['models']['synap']['irms'][masks['synap']]
-    model_dirms = weights['models']['synap']['dirms'][masks['synap']]
-
-    num_neurons = len(cell_ids['all'])
-    post_synaptic = np.empty((num_neurons, num_neurons), dtype=object)
-    pre_synaptic = np.empty((num_neurons, num_neurons), dtype=object)
-    for ci in range(num_neurons):
-        for cj in range(num_neurons):
-            post_synaptic[ci, cj] = cell_ids['all'][ci]
-            pre_synaptic[ci, cj] = cell_ids['all'][cj]
-
-    cell_stim_names = np.stack((post_synaptic[masks['synap']], pre_synaptic[masks['synap']]))
-
-    # get rid of nans
-    # these should all be the same, but for safety and clarity check for nans in all
-    nan_loc = np.isnan(data_irms) | np.isnan(model_irms) | np.isnan(model_dirms)
-
-    data_irfs = data_irfs[:, ~nan_loc]
-    model_irfs = model_irfs[:, ~nan_loc]
-    model_dirfs = model_dirfs[:, ~nan_loc]
-
-    data_irms = data_irms[~nan_loc]
-    model_irms = model_irms[~nan_loc]
-    model_dirms = model_dirms[~nan_loc]
-    cell_ids_no_nan = np.stack((cell_stim_names[0, ~nan_loc], cell_stim_names[1, ~nan_loc]))
+    data_irfs = no_nan_irfs['data_irfs']
+    data_irfs_sem = no_nan_irfs['data_irfs_sem']
+    model_irfs = no_nan_irfs['model_irfs']
+    model_dirfs = no_nan_irfs['model_dirfs']
+    model_irms = no_nan_irfs['model_irms']
+    cell_ids = no_nan_irfs['cell_ids']
 
     # get the highest model dirm vs model irm diff
-    irm_dirm_diff = np.abs(model_irms - model_dirms)
-    irm_dirm_diff_inds = np.argsort(irm_dirm_diff)[::-1]
+    irm_dirm_mag = np.abs(model_irms)
+    irm_dirm_mag_inds = np.argsort(irm_dirm_mag)[::-1]
+
+    plot_x = np.linspace(-window[0], window[1], data_irfs.shape[0])
 
     for i in range(num_plot):
         plt.figure()
-        plot_ind = irm_dirm_diff_inds[i]
-        plt.plot(data_irfs[:, plot_ind], label='data irf')
-        plt.plot(model_irfs[:, plot_ind], label='model irf')
-        plt.plot(model_dirfs[:, plot_ind], label='model dirf')
+        plot_ind = irm_dirm_mag_inds[i]
+        this_irf = data_irfs[:, plot_ind]
+        this_irf_sem = data_irfs_sem[:, plot_ind]
+
+        plt.plot(plot_x, this_irf, label='data irf')
+        plt.fill_between(plot_x, this_irf - this_irf_sem, this_irf + this_irf_sem, alpha=0.4)
+
+        plt.plot(plot_x, model_irfs[:, plot_ind], label='model irf')
+        plt.title(cell_ids[1, plot_ind] + ' -> ' + cell_ids[0, plot_ind])
         plt.legend()
 
     plt.show()
 
 
-def plot_dirm_swaps(weights, masks, cell_ids, num_plot=5, fig_save_path=None):
-    data_irfs = weights['data']['test']['irfs'][:, masks['synap']]
-    model_irfs = weights['models']['synap']['irfs'][:, masks['synap']]
-    model_dirfs = weights['models']['synap']['dirfs'][:, masks['synap']]
+def plot_dirfs(weights, masks, cell_ids, window, num_plot=10, fig_save_path=None):
+    no_nan_irfs = ssmu.remove_nan_irfs(weights, cell_ids, chosen_mask=masks['synap'])
 
-    data_irms = weights['data']['test']['irms'][masks['synap']]
-    model_irms = weights['models']['synap']['irms'][masks['synap']]
-    model_dirms = weights['models']['synap']['dirms'][masks['synap']]
+    data_irfs = no_nan_irfs['data_irfs']
+    data_irfs_sem = no_nan_irfs['data_irfs_sem']
+    model_irfs = no_nan_irfs['model_irfs']
+    model_dirfs = no_nan_irfs['model_dirfs']
+    model_eirfs = no_nan_irfs['model_eirfs']
+    model_irms = no_nan_irfs['model_irms']
+    cell_ids = no_nan_irfs['cell_ids']
 
-    num_neurons = len(cell_ids['all'])
-    post_synaptic = np.empty((num_neurons, num_neurons), dtype=object)
-    pre_synaptic = np.empty((num_neurons, num_neurons), dtype=object)
-    for ci in range(num_neurons):
-        for cj in range(num_neurons):
-            post_synaptic[ci, cj] = cell_ids['all'][ci]
-            pre_synaptic[ci, cj] = cell_ids['all'][cj]
+    # get the highest model dirm vs model irm diff
+    irm_dirm_mag = np.abs(model_irms)
+    irm_dirm_mag_inds = np.argsort(irm_dirm_mag)[::-1]
 
-    cell_stim_names = np.stack((post_synaptic[masks['synap']], pre_synaptic[masks['synap']]))
-
-    # get rid of nans
-    # these should all be the same, but for safety and clarity check for nans in all
-    nan_loc = np.isnan(data_irms) | np.isnan(model_irms) | np.isnan(model_dirms)
-
-    data_irfs = data_irfs[:, ~nan_loc]
-    model_irfs = model_irfs[:, ~nan_loc]
-    model_dirfs = model_dirfs[:, ~nan_loc]
-
-    data_irms = data_irms[~nan_loc]
-    model_irms = model_irms[~nan_loc]
-    model_dirms = model_dirms[~nan_loc]
-    cell_ids_no_nan = np.stack((cell_stim_names[0, ~nan_loc], cell_stim_names[1, ~nan_loc]))
-
-    pos_irms = (data_irms > 0) & (model_irms > 0)
-    neg_irms = (data_irms < 0) & (model_irms < 0)
-    dirm_swaps = (pos_irms & (model_dirms < 0)) | (neg_irms & (model_dirms > 0))
-
-    data_irfs_swapped = data_irfs[:, dirm_swaps]
-    model_irfs_swapped = model_irfs[:, dirm_swaps]
-    model_dirfs_swapped = model_dirfs[:, dirm_swaps]
-    data_irms_swapped = data_irms[dirm_swaps]
-    model_irms_swapped = model_irms[dirm_swaps]
-    model_dirms_swapped = model_dirms[dirm_swaps]
-    cell_ids_swapped = cell_ids_no_nan[:, dirm_swaps]
-
-    model_irms_swapped_sort_inds_max = np.argsort(model_irms_swapped)[::-1]
-    model_irms_swapped_sort_inds_min = np.argsort(model_irms_swapped)
+    plot_x = np.linspace(-window[0], window[1], data_irfs.shape[0])
 
     for i in range(num_plot):
         plt.figure()
-        plot_ind = model_irms_swapped_sort_inds_max[i]
-        plt.plot(data_irfs_swapped[:, plot_ind], label='data irf')
-        plt.plot(model_irfs_swapped[:, plot_ind], label='model irf')
-        plt.plot(model_dirfs_swapped[:, plot_ind], label='model dirf')
+        plot_ind = irm_dirm_mag_inds[i]
+        this_irf = data_irfs[:, plot_ind]
+        this_irf_sem = data_irfs_sem[:, plot_ind]
+
+        plt.plot(plot_x, this_irf, label='data irf')
+        plt.fill_between(plot_x, this_irf - this_irf_sem, this_irf + this_irf_sem, alpha=0.4)
+
+        plt.plot(plot_x, model_irfs[:, plot_ind], label='model irf')
+        plt.plot(plot_x, model_dirfs[:, plot_ind], label='model dirf')
+        plt.plot(plot_x, model_eirfs[:, plot_ind], label='model eirf')
+        plt.title(cell_ids[1, plot_ind] + ' -> ' + cell_ids[0, plot_ind])
         plt.legend()
 
+    plt.show()
+
+
+def plot_dirm_diff(weights, masks, cell_ids, window, num_plot=10, fig_save_path=None):
+    no_nan_irfs = ssmu.remove_nan_irfs(weights, cell_ids, chosen_mask=masks['synap'])
+
+    data_irfs = no_nan_irfs['data_irfs']
+    data_irfs_sem = no_nan_irfs['data_irfs_sem']
+    model_irfs = no_nan_irfs['model_irfs']
+    model_dirfs = no_nan_irfs['model_dirfs']
+    model_eirfs = no_nan_irfs['model_eirfs']
+    model_irms = no_nan_irfs['model_irms']
+    model_dirms = no_nan_irfs['model_dirms']
+    cell_ids = no_nan_irfs['cell_ids']
+
+    # get the highest model dirm vs model irm diff
+    irm_dirm_mag = np.abs(model_irms - model_dirms)
+    irm_dirm_mag_inds = np.argsort(irm_dirm_mag)[::-1]
+
+    plot_x = np.linspace(-window[0], window[1], data_irfs.shape[0])
+
     for i in range(num_plot):
         plt.figure()
-        plot_ind = model_irms_swapped_sort_inds_min[i]
-        plt.plot(data_irfs_swapped[:, plot_ind], label='data irf')
-        plt.plot(model_irfs_swapped[:, plot_ind], label='model irf')
-        plt.plot(model_dirfs_swapped[:, plot_ind], label='model dirf')
+        plot_ind = irm_dirm_mag_inds[i]
+        this_irf = data_irfs[:, plot_ind]
+        this_irf_sem = data_irfs_sem[:, plot_ind]
+
+        plt.plot(plot_x, this_irf, label='data irf')
+        plt.fill_between(plot_x, this_irf - this_irf_sem, this_irf + this_irf_sem, alpha=0.4)
+
+        plt.plot(plot_x, model_irfs[:, plot_ind], label='model irf')
+        plt.plot(plot_x, model_dirfs[:, plot_ind], label='model dirf')
+        plt.plot(plot_x, model_eirfs[:, plot_ind], label='model eirf')
+        plt.title(cell_ids[1, plot_ind] + ' -> ' + cell_ids[0, plot_ind])
         plt.legend()
 
     plt.show()
