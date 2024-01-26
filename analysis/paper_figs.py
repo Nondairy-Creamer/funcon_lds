@@ -11,6 +11,84 @@ def corr_irm_recon(weights, masks, fig_save_path=None):
     # we will demonstrate that ratio between the best possible correlation and our model correlation remains constant
     # this suggests that this ratio is independent of number of data
 
+    # compare model corr to measured corr and compare model IRMs to measured IRMs
+    model_corr_score = []
+    model_corr_score_ci = []
+    model_irms_score = []
+    model_irms_score_ci = []
+
+    # get the baseline correlation and IRMs. This is the best the model could have done
+    # across all data
+    corr_baseline = met.nan_corr(weights['data']['train']['corr'], weights['data']['test']['corr'])[0]
+
+    irms_baseline = met.nan_corr(weights['data']['train']['irms'], weights['data']['test']['irms'])[0]
+
+    model_corr_to_measured_corr_train, model_corr_to_measured_corr_train_ci = \
+        met.nan_corr(weights['models']['synap']['corr'], weights['data']['train']['corr'])
+    model_corr_score.append(model_corr_to_measured_corr_train)
+    model_corr_score_ci.append(model_corr_to_measured_corr_train_ci)
+
+    model_irms_to_measured_irms_train, model_irms_to_measured_irms_train_ci = \
+        met.nan_corr(weights['models']['synap']['irms'], weights['data']['train']['irms'])
+    model_irms_score.append(model_irms_to_measured_irms_train)
+    model_irms_score_ci.append(model_irms_to_measured_irms_train_ci)
+
+    # get the comparison between model prediction and data irm/correlation
+    for m in weights['models']:
+        if m in ['synap', 'synap_randC', 'synap_randA']:
+            # first, get the correlation for each model using all the data. Then compare with only part of the data
+            model_corr_to_measured_corr_test, model_corr_to_measured_corr_test_ci = \
+                met.nan_corr(weights['models'][m]['corr'], weights['data']['test']['corr'])
+            model_corr_score.append(model_corr_to_measured_corr_test)
+            model_corr_score_ci.append(model_corr_to_measured_corr_test_ci)
+
+            model_irms_to_measured_irms_test, model_irms_to_measured_irms_test_ci = \
+                met.nan_corr(weights['models'][m]['irms'], weights['data']['test']['irms'])
+            model_irms_score.append(model_irms_to_measured_irms_test)
+            model_irms_score_ci.append(model_irms_to_measured_irms_test_ci)
+
+
+
+    # plot average reconstruction over all data
+    plt.figure()
+    y_val = np.array(model_corr_score)
+    y_val_ci = np.stack(model_corr_score_ci).T
+    plot_x = np.arange(y_val.shape[0])
+    plt.bar(plot_x, y_val / corr_baseline)
+    plt.errorbar(plot_x, y_val / corr_baseline, y_val_ci / corr_baseline, fmt='none', color='k')
+    plt.xticks(plot_x, labels=['model (train)', 'model (test)', 'model\n+ scrambled labels', 'model\n+ scrambled anatomy'])
+    plt.ylabel('explainable correlation to data correlation')
+    ax = plt.gca()
+    for label in ax.get_xticklabels():
+        label.set_rotation(45)
+    plt.tight_layout()
+
+    plt.savefig(fig_save_path / 'measured_vs_model_corr.pdf')
+
+    # plot average reconstruction over all data
+    plt.figure()
+    y_val = np.array(model_irms_score)
+    y_val_ci = np.stack(model_irms_score_ci).T
+    plot_x = np.arange(y_val.shape[0])
+    plt.bar(plot_x, y_val / irms_baseline)
+    plt.errorbar(plot_x, y_val / irms_baseline, y_val_ci / irms_baseline, fmt='none', color='k')
+    plt.xticks(plot_x, labels=['model (train)', 'model', 'model\n+ scrambled labels', 'model\n+ scrambled anatomy'])
+    plt.ylabel('explainable correlation to measured IRMs')
+    ax = plt.gca()
+    for label in ax.get_xticklabels():
+        label.set_rotation(45)
+    plt.savefig(fig_save_path / 'measured_vs_model_irms.pdf')
+    plt.tight_layout()
+
+    plt.show()
+
+
+def corr_irm_recon_sweep(weights, masks, fig_save_path=None):
+    # this figure will demonstrate that the model can reconstruct the observed data correlation and IRMs
+    # first we will sweep across the data and restrict to neuron pairs where a stimulation event was recorded N times
+    # we will demonstrate that ratio between the best possible correlation and our model correlation remains constant
+    # this suggests that this ratio is independent of number of data
+
     # compare data corr and data IRM to connectome
     n_stim_mask = masks['n_stim_mask']
     n_stim_sweep = masks['n_stim_sweep']
@@ -19,11 +97,6 @@ def corr_irm_recon(weights, masks, fig_save_path=None):
 
     # compare model corr to measured corr and compare model IRMs to measured IRMs
     model_name = []
-
-    model_corr_score = []
-    model_corr_score_ci = []
-    model_irms_score = []
-    model_irms_score_ci = []
 
     model_corr_score_sweep = []
     model_corr_score_sweep_ci = []
@@ -37,13 +110,7 @@ def corr_irm_recon(weights, masks, fig_save_path=None):
     irms_baseline_sweep = np.zeros(n_stim_sweep.shape[0])
     irms_baseline_sweep_ci = np.zeros((2, n_stim_sweep.shape[0]))
 
-    # get the baseline correlation and IRMs. This is the best the model could have done
-    # across all data
-    corr_baseline = met.nan_corr(weights['data']['train']['corr'], weights['data']['test']['corr'])[0]
-
-    irms_baseline = met.nan_corr(weights['data']['train']['irms'], weights['data']['test']['irms'])[0]
-
-    # sweep across number of stims
+    # sweep across number of stims, for the IRF data
     for ni, n in enumerate(n_stim_sweep):
         data_train_irms = weights['data']['train']['irms'].copy()
         data_test_irms = weights['data']['test']['irms'].copy()
@@ -53,7 +120,7 @@ def corr_irm_recon(weights, masks, fig_save_path=None):
 
         irms_baseline_sweep[ni], irms_baseline_sweep_ci[:, ni] = met.nan_corr(data_train_irms, data_test_irms)
 
-    # sweep across number of observations
+    # sweep across number of observations, for the correlation data
     for ni, n in enumerate(n_obs_sweep):
         data_train_corr = weights['data']['train']['corr'].copy()
         data_test_corr = weights['data']['test']['corr'].copy()
@@ -66,17 +133,6 @@ def corr_irm_recon(weights, masks, fig_save_path=None):
     # get the comparison between model prediction and data irm/correlation
     for m in weights['models']:
         if m in ['synap', 'synap_randC', 'synap_randA']:
-            # first, get the correlation for each model using all the data. Then compare with only part of the data
-            model_corr_to_measured_corr, model_corr_to_measured_corr_ci = \
-                met.nan_corr(weights['models'][m]['corr'], weights['data']['test']['corr'])
-            model_corr_score.append(model_corr_to_measured_corr)
-            model_corr_score_ci.append(model_corr_to_measured_corr_ci)
-
-            model_irms_to_measured_irms, model_irms_to_measured_irms_ci = \
-                met.nan_corr(weights['models'][m]['irms'], weights['data']['test']['irms'])
-            model_irms_score.append(model_irms_to_measured_irms)
-            model_irms_score_ci.append(model_irms_to_measured_irms_ci)
-
             # for each model, calculate its score for both corr and IRM reconstruction across the n stim sweep
             model_name.append(m)
             model_corr_score_sweep.append(np.zeros(n_obs_sweep.shape[0]))
@@ -125,22 +181,6 @@ def corr_irm_recon(weights, masks, fig_save_path=None):
     plt.tight_layout()
     plt.savefig(fig_save_path / 'measured_vs_model_corr_over_n.pdf')
 
-    # plot average reconstruction over all data
-    plt.figure()
-    y_val = np.array(model_corr_score)
-    y_val_ci = np.stack(model_corr_score_ci).T
-    plot_x = np.arange(y_val.shape[0])
-    plt.bar(plot_x, y_val / corr_baseline)
-    plt.errorbar(plot_x, y_val / corr_baseline, y_val_ci / corr_baseline, fmt='none', color='k')
-    plt.xticks(plot_x, labels=['model', 'model\n+ scrambled labels', 'model\n+ scrambled anatomy'])
-    plt.ylabel('normalized similarity to measured correlation')
-    ax = plt.gca()
-    for label in ax.get_xticklabels():
-        label.set_rotation(45)
-    plt.tight_layout()
-
-    plt.savefig(fig_save_path / 'measured_vs_model_corr.pdf')
-
     # plot model reconstruction of IRMs
     plt.figure()
     plt.subplot(1, 2, 1)
@@ -161,21 +201,6 @@ def corr_irm_recon(weights, masks, fig_save_path=None):
     plt.ylabel('similarity to measured IRMs')
     plt.tight_layout()
     plt.savefig(fig_save_path / 'measured_vs_model_irms_over_n.pdf')
-
-    # plot average reconstruction over all data
-    plt.figure()
-    y_val = np.array(model_irms_score)
-    y_val_ci = np.stack(model_irms_score_ci).T
-    plot_x = np.arange(y_val.shape[0])
-    plt.bar(plot_x, y_val / irms_baseline)
-    plt.errorbar(plot_x, y_val / irms_baseline, y_val_ci / irms_baseline, fmt='none', color='k')
-    plt.xticks(plot_x, labels=['model', 'model\n+ scrambled labels', 'model\n+ scrambled anatomy'])
-    plt.ylabel('normalized similarity to measured IRMs')
-    ax = plt.gca()
-    for label in ax.get_xticklabels():
-        label.set_rotation(45)
-    plt.savefig(fig_save_path / 'measured_vs_model_irms.pdf')
-    plt.tight_layout()
 
     plt.show()
 
@@ -295,6 +320,59 @@ def plot_irfs(weights, cell_ids, window, num_plot=10, fig_save_path=None):
     plt.show()
 
 
+def plot_irfs_train_test(weights, cell_ids, window, chosen_mask=None, num_plot=10, fig_save_path=None):
+    no_nan_irfs_train = ssmu.remove_nan_irfs(weights, cell_ids, data_type='train', chosen_mask=chosen_mask)
+    no_nan_irfs_test = ssmu.remove_nan_irfs(weights, cell_ids, data_type='test', chosen_mask=chosen_mask)
+
+    data_irfs_train = no_nan_irfs_train['data_irfs']
+    data_irfs_sem_train = no_nan_irfs_test['data_irfs_sem']
+    data_irfs_test = no_nan_irfs_test['data_irfs']
+    data_irfs_sem_test = no_nan_irfs_test['data_irfs_sem']
+    model_irfs = no_nan_irfs_test['model_irfs']
+    model_irms = no_nan_irfs_test['model_irms']
+    cell_ids = no_nan_irfs_test['cell_ids']
+
+    # get the highest model dirm vs model irm diff
+    irm_dirm_mag = np.abs(model_irms)
+    irm_dirm_mag_inds = np.argsort(irm_dirm_mag)[::-1]
+
+    plot_x = np.linspace(-window[0], window[1], data_irfs_test.shape[0])
+
+    for i in range(num_plot):
+        plot_ind = irm_dirm_mag_inds[i]
+
+        plt.figure()
+        plt.subplot(2, 1, 1)
+        this_irf = data_irfs_train[:, plot_ind]
+        this_irf_sem = data_irfs_sem_train[:, plot_ind]
+
+        plt.plot(plot_x, this_irf, label='data irf')
+        plt.fill_between(plot_x, this_irf - this_irf_sem, this_irf + this_irf_sem, alpha=0.4)
+
+        plt.plot(plot_x, model_irfs[:, plot_ind], label='model irf')
+        plt.title(cell_ids[1, plot_ind] + ' -> ' + cell_ids[0, plot_ind])
+        plt.legend()
+        plt.axvline(0, color='k', linestyle='--')
+        plt.axhline(0, color='k', linestyle='--')
+        plt.ylabel('cell activity (train set)')
+
+        plt.subplot(2, 1, 2)
+        this_irf = data_irfs_test[:, plot_ind]
+        this_irf_sem = data_irfs_sem_test[:, plot_ind]
+
+        plt.plot(plot_x, this_irf, label='data irf')
+        plt.fill_between(plot_x, this_irf - this_irf_sem, this_irf + this_irf_sem, alpha=0.4)
+
+        plt.plot(plot_x, model_irfs[:, plot_ind], label='model irf')
+        plt.legend()
+        plt.axvline(0, color='k', linestyle='--')
+        plt.axhline(0, color='k', linestyle='--')
+        plt.xlabel('time (s)')
+        plt.ylabel('cell activity (test set)')
+
+    plt.show()
+
+
 def plot_dirfs(weights, masks, cell_ids, window, num_plot=10, fig_save_path=None):
     no_nan_irfs = ssmu.remove_nan_irfs(weights, cell_ids, chosen_mask=masks['synap'])
 
@@ -330,6 +408,68 @@ def plot_dirfs(weights, masks, cell_ids, window, num_plot=10, fig_save_path=None
         plt.axhline(0, color='k', linestyle='--')
         plt.xlabel('time (s)')
         plt.ylabel('cell activity')
+
+    plt.show()
+
+
+def plot_dirfs_train_test(weights, cell_ids, window, chosen_mask=None, num_plot=10, fig_save_path=None):
+    no_nan_irfs_train = ssmu.remove_nan_irfs(weights, cell_ids, data_type='train', chosen_mask=chosen_mask)
+    no_nan_irfs_test = ssmu.remove_nan_irfs(weights, cell_ids, data_type='test', chosen_mask=chosen_mask)
+
+    data_irfs_train = no_nan_irfs_train['data_irfs']
+    data_irfs_sem_train = no_nan_irfs_test['data_irfs_sem']
+    data_irfs_test = no_nan_irfs_test['data_irfs']
+    data_irfs_sem_test = no_nan_irfs_test['data_irfs_sem']
+    model_irfs = no_nan_irfs_test['model_irfs']
+    model_dirfs = no_nan_irfs_test['model_dirfs']
+    model_rdirfs = no_nan_irfs_test['model_rdirfs']
+    model_eirfs = no_nan_irfs_test['model_eirfs']
+    model_irms = no_nan_irfs_test['model_irms']
+    cell_ids = no_nan_irfs_test['cell_ids']
+
+    # get the highest model dirm vs model irm diff
+    irm_dirm_mag = np.abs(model_irms)
+    irm_dirm_mag_inds = np.argsort(irm_dirm_mag)[::-1]
+
+    plot_x = np.linspace(-window[0], window[1], data_irfs_test.shape[0])
+
+    for i in range(num_plot):
+        plot_ind = irm_dirm_mag_inds[i]
+
+        plt.figure()
+        plt.subplot(2, 1, 1)
+        this_irf = data_irfs_train[:, plot_ind]
+        this_irf_sem = data_irfs_sem_train[:, plot_ind]
+
+        plt.plot(plot_x, this_irf, label='data irf')
+        plt.fill_between(plot_x, this_irf - this_irf_sem, this_irf + this_irf_sem, alpha=0.4)
+
+        plt.plot(plot_x, model_irfs[:, plot_ind], label='model irf')
+        plt.plot(plot_x, model_dirfs[:, plot_ind], label='model dirf')
+        plt.plot(plot_x, model_rdirfs[:, plot_ind], label='model rdirf')
+        plt.plot(plot_x, model_eirfs[:, plot_ind], label='model eirf')
+        plt.title(cell_ids[1, plot_ind] + ' -> ' + cell_ids[0, plot_ind])
+        plt.legend()
+        plt.axvline(0, color='k', linestyle='--')
+        plt.axhline(0, color='k', linestyle='--')
+        plt.ylabel('cell activity (train set)')
+
+        plt.subplot(2, 1, 2)
+        this_irf = data_irfs_test[:, plot_ind]
+        this_irf_sem = data_irfs_sem_test[:, plot_ind]
+
+        plt.plot(plot_x, this_irf, label='data irf')
+        plt.fill_between(plot_x, this_irf - this_irf_sem, this_irf + this_irf_sem, alpha=0.4)
+
+        plt.plot(plot_x, model_irfs[:, plot_ind], label='model irf')
+        plt.plot(plot_x, model_dirfs[:, plot_ind], label='model dirf')
+        plt.plot(plot_x, model_rdirfs[:, plot_ind], label='model rdirf')
+        plt.plot(plot_x, model_eirfs[:, plot_ind], label='model eirf')
+        plt.legend()
+        plt.axvline(0, color='k', linestyle='--')
+        plt.axhline(0, color='k', linestyle='--')
+        plt.xlabel('time (s)')
+        plt.ylabel('cell activity (test set)')
 
     plt.show()
 
