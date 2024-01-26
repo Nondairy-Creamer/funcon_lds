@@ -27,10 +27,13 @@ def fit_synthetic(param_name, save_folder):
                            dynamics_lags=run_params['dynamics_lags'], dynamics_input_lags=run_params['dynamics_input_lags'],
                            emissions_input_lags=run_params['emissions_input_lags'], param_props=run_params['param_props'],)
         model_true.randomize_weights(rng=rng)
-        emission_weights_values = rng.uniform(size=(model_true.emissions_dim, model_true.dynamics_lags))
-        emission_weights_values = emission_weights_values / np.sum(emission_weights_values, axis=1, keepdims=True)
-        emissions_weights_list = [np.diag(emission_weights_values[:, i]) for i in range(emission_weights_values.shape[1])]
-        model_true.emissions_weights_init = np.concatenate(emissions_weights_list, axis=1)
+        if model_true.param_props['update']['emissions_weights']:
+            emission_weights_values = rng.uniform(size=(model_true.emissions_dim, model_true.dynamics_lags))
+            emission_weights_values = emission_weights_values / np.sum(emission_weights_values, axis=1, keepdims=True)
+            emissions_weights_list = [np.diag(emission_weights_values[:, i]) for i in range(emission_weights_values.shape[1])]
+            model_true.emissions_weights_init = np.concatenate(emissions_weights_list, axis=1)
+        else:
+            model_true.emissions_weights_init = np.eye(model_true.emissions_dim, model_true.dynamics_dim_full)
         model_true.emissions_input_weights_init = np.zeros(model_true.emissions_input_weights_init.shape)
         model_true.set_to_init()
 
