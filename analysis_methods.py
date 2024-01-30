@@ -225,10 +225,7 @@ def plot_matrix(param_trained, param_true=None, labels_x=None, labels_y=None, ab
         plt.colorbar()
 
     if labels_x is not None:
-        plt.xticks(np.arange(param_trained.shape[1]), labels_x)
-        ax = plt.gca()
-        for label in ax.get_xticklabels():
-            label.set_rotation(90)
+        plt.xticks(np.arange(param_trained.shape[1]), labels_x, rotation=90)
 
     if labels_y is not None:
         plt.yticks(np.arange(param_trained.shape[0]), labels_y)
@@ -241,10 +238,7 @@ def plot_matrix(param_trained, param_true=None, labels_x=None, labels_y=None, ab
         plt.colorbar()
 
         if labels_x is not None:
-            plt.xticks(np.arange(param_trained.shape[1]), labels_x)
-            ax = plt.gca()
-            for label in ax.get_xticklabels():
-                label.set_rotation(90)
+            plt.xticks(np.arange(param_trained.shape[1]), labels_x, rotation=90)
 
         if labels_y is not None:
             plt.yticks(np.arange(param_trained.shape[0]), labels_y)
@@ -256,10 +250,7 @@ def plot_matrix(param_trained, param_true=None, labels_x=None, labels_y=None, ab
         plt.colorbar()
 
         if labels_x is not None:
-            plt.xticks(np.arange(param_trained.shape[1]), labels_x)
-            ax = plt.gca()
-            for label in ax.get_xticklabels():
-                label.set_rotation(90)
+            plt.xticks(np.arange(param_trained.shape[1]), labels_x, rotation=90)
 
         if labels_y is not None:
             plt.yticks(np.arange(param_trained.shape[0]), labels_y)
@@ -447,40 +438,32 @@ def plot_irm(model_weights, measured_irm, model_irm, data_corr, cell_ids, cell_i
     plt.figure()
     plot_x = np.arange(len(chosen_neuron_inds))
 
-    ax = plt.subplot(2, 2, 1)
+    plt.subplot(2, 2, 1)
     plt.imshow(measured_irm, interpolation='nearest', cmap=colormap)
     plt.title('measured response')
-    plt.xticks(plot_x, cell_ids_chosen)
+    plt.xticks(plot_x, cell_ids_chosen, rotation=90)
     plt.yticks(plot_x, cell_ids_chosen)
-    for label in ax.get_xticklabels():
-        label.set_rotation(90)
     plt.clim((-1, 1))
 
-    ax = plt.subplot(2, 2, 2)
+    plt.subplot(2, 2, 2)
     plt.imshow(model_irm, interpolation='nearest', cmap=colormap)
     plt.title('model IRMs')
-    plt.xticks(plot_x, cell_ids_chosen)
+    plt.xticks(plot_x, cell_ids_chosen, rotation=90)
     plt.yticks(plot_x, cell_ids_chosen)
-    for label in ax.get_xticklabels():
-        label.set_rotation(90)
     plt.clim((-1, 1))
 
-    ax = plt.subplot(2, 2, 3)
+    plt.subplot(2, 2, 3)
     plt.imshow(data_corr, interpolation='nearest', cmap=colormap)
     plt.title('correlation')
-    plt.xticks(plot_x, cell_ids_chosen)
+    plt.xticks(plot_x, cell_ids_chosen, rotation=90)
     plt.yticks(plot_x, cell_ids_chosen)
-    for label in ax.get_xticklabels():
-        label.set_rotation(90)
     plt.clim((-1, 1))
 
-    ax = plt.subplot(2, 2, 4)
+    plt.subplot(2, 2, 4)
     plt.imshow(model_weights_norm, interpolation='nearest', cmap=colormap)
     plt.title('model weights')
-    plt.xticks(plot_x, cell_ids_chosen)
+    plt.xticks(plot_x, cell_ids_chosen, rotation=90)
     plt.yticks(plot_x, cell_ids_chosen)
-    for label in ax.get_xticklabels():
-        label.set_rotation(90)
     plt.clim((-1, 1))
 
     plt.tight_layout()
@@ -523,61 +506,51 @@ def compare_irm_w_anatomy(model_weights, measured_irm, model_irm, data_corr, cel
     i = np.ix_(chosen_neuron_inds, chosen_neuron_inds)
     plot_x = np.arange(len(cell_ids_chosen))
     plt.figure()
-    ax = plt.subplot(2, 2, 1)
+    plt.subplot(2, 2, 1)
     plt.title('chemical synapses')
     plt.imshow(anatomy_list[0][i], cmap=colormap)
     cmax = np.max(np.abs(anatomy_list[0][i])).astype(float)
     plt.clim((-cmax, cmax))
-    plt.xticks(plot_x, cell_ids_chosen)
+    plt.xticks(plot_x, cell_ids_chosen, rotation=90)
     plt.yticks(plot_x, cell_ids_chosen)
-    for label in ax.get_xticklabels():
-        label.set_rotation(90)
 
-    ax = plt.subplot(2, 2, 2)
+    plt.subplot(2, 2, 2)
     plt.title('gap junctions')
     plt.imshow(anatomy_list[1][i], cmap=colormap)
     cmax = np.max(np.abs(anatomy_list[1][i]))
     plt.clim((-cmax, cmax))
-    plt.xticks(plot_x, cell_ids_chosen)
+    plt.xticks(plot_x, cell_ids_chosen, rotation=90)
     plt.yticks(plot_x, cell_ids_chosen)
-    for label in ax.get_xticklabels():
-        label.set_rotation(90)
 
-    ax = plt.subplot(2, 2, 3)
+    plt.subplot(2, 2, 3)
     plt.title('neuropeptide connectome')
     plt.imshow(anatomy_list[2][i], cmap=colormap)
     cmax = np.max(np.abs(anatomy_list[2][i]))
     plt.clim((-cmax, cmax))
     plt.tight_layout()
-    plt.xticks(plot_x, cell_ids_chosen)
+    plt.xticks(plot_x, cell_ids_chosen, rotation=90)
     plt.yticks(plot_x, cell_ids_chosen)
-    for label in ax.get_xticklabels():
-        label.set_rotation(90)
 
     for i in range(len(anatomy_combined)):
         plot_x = np.arange(len(cell_ids_chosen))
         plt.figure()
-        ax = plt.subplot(1, 2, 1)
+        plt.subplot(1, 2, 1)
         plt.imshow(anatomy_combined[i] / np.nanmax(anatomy_combined[i]), cmap=colormap)
         plt.clim((-1, 1))
         plt.xlabel('presynaptic')
         plt.ylabel('postsynaptic')
         plt.title('anatomy')
-        plt.xticks(plot_x, cell_ids_chosen)
+        plt.xticks(plot_x, cell_ids_chosen, rotation=90)
         plt.yticks(plot_x, cell_ids_chosen)
-        for label in ax.get_xticklabels():
-            label.set_rotation(90)
 
-        ax = plt.subplot(1, 2, 2)
+        plt.subplot(1, 2, 2)
         plt.imshow(weights_combined[i] / np.nanmax(weights_combined[i]), cmap=colormap)
         plt.clim((-1, 1))
         plt.title(name[i])
         plt.xlabel('presynaptic')
         plt.ylabel('postsynaptic')
-        plt.xticks(plot_x, cell_ids_chosen)
+        plt.xticks(plot_x, cell_ids_chosen, rotation=90)
         plt.yticks(plot_x, cell_ids_chosen)
-        for label in ax.get_xticklabels():
-            label.set_rotation(90)
 
         plt.tight_layout()
 

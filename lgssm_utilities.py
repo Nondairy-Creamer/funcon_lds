@@ -222,3 +222,17 @@ def get_sub_model(model, s, r, add_recipricol=False):
 
     return sub_model
 
+
+def predict_model_cov(model, num_iter=100):
+    # model correlation
+    model_corr = model.dynamics_weights @ model.dynamics_weights.T + model.dynamics_cov
+    for i in range(num_iter):
+        model_corr = model.dynamics_weights @ model_corr @ model.dynamics_weights.T + model.dynamics_cov
+    model_corr = model_corr[:model.dynamics_dim, :model.dynamics_dim]
+
+    neuron_std = np.sqrt(model_corr.diagonal())
+    neuron_std_out = neuron_std[:, None] * neuron_std[None, :]
+    model_corr /= neuron_std_out
+
+    return model_corr
+

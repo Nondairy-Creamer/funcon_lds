@@ -227,11 +227,7 @@ for mf in model_folders:
 
 # model correlation
 for m in models:
-    model_corr = models[m].dynamics_weights @ models[m].dynamics_weights.T + models[m].dynamics_cov
-    for i in range(100):
-        model_corr = models[m].dynamics_weights @ model_corr @ models[m].dynamics_weights.T + models[m].dynamics_cov
-    model_corr = model_corr[:models[m].dynamics_dim, :models[m].dynamics_dim]
-
+    model_corr = ssmu.predict_model_cov(models[m])
     weights_unmasked['models'][m]['corr'] = model_corr
 
 # set up the masks
@@ -257,11 +253,11 @@ n_obs_sweep = np.arange(num_obs_sweep_params[0], num_obs_sweep_params[1], num_ob
 for ni, n in enumerate(n_obs_sweep):
     # loop through number of observations and include all pairs which were observed
     # within num_obs_sweep_params[2] of n
-    obs_sweep_mask = num_obs_test != n
+    obs_sweep_mask_test = num_obs_test != n
     for i in range(1, num_obs_sweep_params[2]):
-        obs_sweep_mask &= num_obs_test != (n + i)
+        obs_sweep_mask_test &= num_obs_test != (n + i)
 
-    n_obs_mask.append(obs_sweep_mask | minimum_nan_mask)
+    n_obs_mask.append(obs_sweep_mask_test | minimum_nan_mask)
 
 # put all the masks in a dictionary
 masks = {'diagonal': np.eye(data_irms_train.shape[0], dtype=bool),
@@ -333,13 +329,19 @@ for i in weights_unmasked:
 
 # Figure 2
 # pf.plot_dirfs(weights, masks, cell_ids, window, fig_save_path=fig_save_path)
-pf.plot_dirfs_train_test(weights, cell_ids, window, chosen_mask=masks['synap'], num_plot=10, fig_save_path=fig_save_path)
-pf.plot_dirfs_train_test(weights, cell_ids, window, chosen_mask=masks['unconnected'], num_plot=10, fig_save_path=fig_save_path)
-# pf.plot_dirm_diff(weights, masks, cell_ids, window, num_plot=20, fig_save_path=fig_save_path)
+# pf.plot_dirfs_train_test(weights, cell_ids, window, chosen_mask=masks['synap'], num_plot=10, fig_save_path=fig_save_path)
+# pf.plot_dirfs_train_test(weights, cell_ids, window, chosen_mask=masks['unconnected'], num_plot=10, fig_save_path=fig_save_path)
+# pf.plot_dirm_diff(weights, masks, cell_ids, window, num_plot=10, fig_save_path=fig_save_path)
+# pf.plot_dirfs_train_test_swap(weights, cell_ids, window, chosen_mask=masks['synap'], num_plot=10, fig_save_path=fig_save_path)
+# pf.plot_dirfs_gt_irfs(weights, cell_ids, window, chosen_mask=masks['synap'], num_plot=10, fig_save_path=fig_save_path)
+# pf.irm_vs_dirm(weights, cell_ids)
 
 # Figure 3
 # pf.predict_chem_synapse_sign(weights, masks, cell_ids, metric=metric, rng=rng, fig_save_path=fig_save_path)
 # pf.predict_gap_synapse_sign(weights, masks, metric=metric, rng=rng, fig_save_path=fig_save_path)
 # pf.unconstrained_vs_constrained_model(weights, fig_save_path=fig_save_path)
 # pf.unconstrained_model_vs_connectome(weights, masks, fig_save_path=fig_save_path)
+
+# Figure 4
+pf.corr_zimmer_paper(weights_unmasked, models, cell_ids)
 
