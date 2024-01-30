@@ -7,13 +7,13 @@ import metrics as met
 import numpy as np
 import pickle
 import loading_utilities as lu
-import analysis.paper_figs as pf
+import analysis.paper_figures as pf
 import copy
 
 run_params = lu.get_run_params(param_name='../analysis_params/paper_figures.yml')
 
 # this analysis requires 4 models
-# synap: a model constrained to have weights only between neurons that have synapses in the connectome
+ # synap: a model constrained to have weights only between neurons that have synapses in the connectome
 # synap_randC: a model with randomized cell ids for every animal
 # synap_randA: a model constrained to have weights between neurons with a randomized version of the connectome
 # unconstrained: a model with unconstrained dynamics matrix
@@ -72,7 +72,7 @@ data_test_file = open(saved_run_folder / data_folder / 'data_test.pkl', 'rb')
 data_test = pickle.load(data_test_file)
 data_test_file.close()
 
-if 'data_corr' in data_test:
+if 'data_corr_ci' in data_test:
     data_corr_test = data_test['data_corr']
     data_corr_test_ci = data_test['data_corr_ci']
 else:
@@ -227,7 +227,7 @@ for mf in model_folders:
 
 # model correlation
 for m in models:
-    model_corr = ssmu.predict_model_cov(models[m])
+    model_corr = ssmu.predict_model_corr_coef(models[m])
     weights_unmasked['models'][m]['corr'] = model_corr
 
 # set up the masks
@@ -323,8 +323,15 @@ for i in weights_unmasked:
 # pf.plot_irfs(weights, cell_ids, window, num_plot=20, fig_save_path=None)
 # pf.plot_irfs_train_test(weights, cell_ids, window, num_plot=20, fig_save_path=None)
 
-# pf.corr_irm_recon(weights_unmasked, masks, fig_save_path=fig_save_path)
-# pf.corr_irm_recon_sweep(weights_unmasked, masks, fig_save_path=fig_save_path)
+pf.weight_prediction(weights_unmasked, 'irms', fig_save_path=fig_save_path)
+pf.weight_prediction_sweep(weights_unmasked, masks, 'irms', fig_save_path=fig_save_path)
+pf.weight_prediction(weights_unmasked, 'corr', fig_save_path=fig_save_path)
+pf.weight_prediction_sweep(weights_unmasked, masks, 'corr', fig_save_path=fig_save_path)
+
+# pf.irm_prediction(weights_unmasked, fig_save_path=fig_save_path)
+# pf.irm_prediction_sweep(weights_unmasked, masks, fig_save_path=fig_save_path)
+# pf.corr_prediction(weights_unmasked, fig_save_path=fig_save_path)
+# pf.corr_prediction_sweep(weights_unmasked, masks, fig_save_path=fig_save_path)
 # pf.weights_vs_connectome(weights, masks, metric=metric, fig_save_path=fig_save_path)
 
 # Figure 2
@@ -343,5 +350,5 @@ for i in weights_unmasked:
 # pf.unconstrained_model_vs_connectome(weights, masks, fig_save_path=fig_save_path)
 
 # Figure 4
-pf.corr_zimmer_paper(weights_unmasked, models, cell_ids)
+# pf.corr_zimmer_paper(weights_unmasked, models, cell_ids)
 

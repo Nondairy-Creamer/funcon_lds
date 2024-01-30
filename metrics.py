@@ -30,8 +30,8 @@ def nan_corr(y_true, y_hat, alpha=0.05, mean_sub=True):
         y_true = y_true - np.mean(y_true)
         y_hat = y_hat - np.mean(y_hat)
 
-    y_true_std = np.std(y_true, ddof=1)
-    y_hat_std = np.std(y_hat, ddof=1)
+    y_true_std = np.std(y_true, ddof=0)
+    y_hat_std = np.std(y_hat, ddof=0)
 
     corr = (np.mean(y_true * y_hat) / y_true_std / y_hat_std)
 

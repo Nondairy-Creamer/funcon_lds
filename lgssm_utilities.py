@@ -1,7 +1,7 @@
 import numpy as np
 import analysis_utilities as au
-from ssm_classes import Lgssm
 import warnings
+import copy
 
 
 def remove_nan_irfs(weights, cell_ids, data_type='test', chosen_mask=None):
@@ -56,6 +56,23 @@ def remove_nan_irfs(weights, cell_ids, data_type='test', chosen_mask=None):
                      }
 
     return selected_irfs
+
+
+def get_silenced_model(model_original, neurons_to_silence):
+    if type(neurons_to_silence) is not list:
+        neurons_to_silence = [neurons_to_silence]
+    model_silenced = copy.deepcopy(model_original)
+
+    # silence the neurons
+    for ns in neurons_to_silence:
+        ns_ind = model_silenced.cell_ids.index(ns)
+        silence_inds = np.arange(ns_ind, model_silenced.dynamics_dim_full, model_silenced.dynamics_dim)
+
+        y_vals = np.arange(model_silenced.dynamics_dim)
+        y_vals = np.delete(y_vals, ns_ind)
+        model_silenced.dynamics_weights[np.ix_(y_vals, silence_inds)] = 0
+
+    return model_silenced
 
 
 def get_impulse_response_functions(data, inputs, sample_rate=0.5, window=(15, 30), sub_pre_stim=True):
@@ -177,20 +194,16 @@ def calculate_eirfs(model, rng=np.random.default_rng(), window=(30, 60)):
     return eirfs
 
 
-def get_sub_model(model, s, r, add_recipricol=False):
+def get_sub_model(model_original, s, r, add_recipricol=False):
     # get a subset of model that includes only the stimulated neuron and the responding neuron
-    num_in_circuit = 2
-    # set up a new model that just has the dynamics of the neurons involved
-    sub_model = Lgssm(num_in_circuit, num_in_circuit, num_in_circuit,
-                      dynamics_lags=model.dynamics_lags, dynamics_input_lags=model.dynamics_input_lags,
-                      emissions_input_lags=model.emissions_input_lags)
+    model_new = copy.deepcopy(model_original)
 
-    dynamics_inds_s = np.arange(s, model.dynamics_dim_full, model.dynamics_dim)
-    dynamics_inds_r = np.arange(r, model.dynamics_dim_full, model.dynamics_dim)
-    dynamics_inputs_inds_s = np.arange(s, model.dynamics_input_dim_full, model.input_dim)
-    dynamics_inputs_inds_r = np.arange(r, model.dynamics_input_dim_full, model.input_dim)
-    emissions_inputs_inds_s = np.arange(s, model.emissions_input_dim_full, model.input_dim)
-    emissions_inputs_inds_r = np.arange(r, model.emissions_input_dim_full, model.input_dim)
+    dynamics_inds_s = np.arange(s, model_new.dynamics_dim_full, model_new.dynamics_dim)
+    dynamics_inds_r = np.arange(r, model_new.dynamics_dim_full, model_new.dynamics_dim)
+    dynamics_inputs_inds_s = np.arange(s, model_new.dynamics_input_dim_full, model_new.input_dim)
+    dynamics_inputs_inds_r = np.arange(r, model_new.dynamics_input_dim_full, model_new.input_dim)
+    emissions_inputs_inds_s = np.arange(s, model_new.emissions_input_dim_full, model_new.input_dim)
+    emissions_inputs_inds_r = np.arange(r, model_new.emissions_input_dim_full, model_new.input_dim)
 
     dynamics_weights_inds = np.ix_((s, r), au.interleave(dynamics_inds_s, dynamics_inds_r))
     dynamics_input_weights_inds = np.ix_((s, r), au.interleave(dynamics_inputs_inds_s, dynamics_inputs_inds_r))
@@ -199,31 +212,31 @@ def get_sub_model(model, s, r, add_recipricol=False):
     emissions_input_weights_inds = np.ix_((s, r), au.interleave(emissions_inputs_inds_s, emissions_inputs_inds_r))
 
     # get the chosen neurons. Then stack them so they can be padded for the delay embedding
-    sub_model.dynamics_weights_init = model.dynamics_weights[dynamics_weights_inds]
-    sub_model.dynamics_input_weights_init = model.dynamics_input_weights[dynamics_input_weights_inds]
-    sub_model.dynamics_cov_init = model.dynamics_cov[cov_inds]
+    model_new.dynamics_weights_init = model_new.dynamics_weights[dynamics_weights_inds]
+    model_new.dynamics_input_weights_init = model_new.dynamics_input_weights[dynamics_input_weights_inds]
+    model_new.dynamics_cov_init = model_new.dynamics_cov[cov_inds]
 
-    sub_model.emissions_weights_init = model.emissions_weights[emissions_weights_inds]
-    sub_model.emissions_input_weights_init = model.emissions_input_weights[emissions_input_weights_inds]
-    sub_model.emissions_cov_init = model.emissions_cov[cov_inds]
+    model_new.emissions_weights_init = model_new.emissions_weights[emissions_weights_inds]
+    model_new.emissions_input_weights_init = model_new.emissions_input_weights[emissions_input_weights_inds]
+    model_new.emissions_cov_init = model_new.emissions_cov[cov_inds]
 
-    sub_model.dynamics_weights_init = au.stack_weights(sub_model.dynamics_weights_init, model.dynamics_lags, axis=1)
-    sub_model.dynamics_input_weights_init = au.stack_weights(sub_model.dynamics_input_weights_init,
-                                                             model.dynamics_input_lags, axis=1)
-    sub_model.emissions_input_weights_init = au.stack_weights(sub_model.emissions_input_weights_init,
-                                                              model.emissions_input_lags, axis=1)
+    model_new.dynamics_weights_init = au.stack_weights(model_new.dynamics_weights_init, model_new.dynamics_lags, axis=1)
+    model_new.dynamics_input_weights_init = au.stack_weights(model_new.dynamics_input_weights_init,
+                                                             model_new.dynamics_input_lags, axis=1)
+    model_new.emissions_input_weights_init = au.stack_weights(model_new.emissions_input_weights_init,
+                                                              model_new.emissions_input_lags, axis=1)
 
     # set the backward weight from postsynaptic neuron to presynaptic to 0
     if not add_recipricol:
-        sub_model.dynamics_weights_init[:, 0, 1] = 0
+        model_new.dynamics_weights_init[:, 0, 1] = 0
 
-    sub_model.pad_init_for_lags()
-    sub_model.set_to_init()
+    model_new.pad_init_for_lags()
+    model_new.set_to_init()
 
-    return sub_model
+    return model_new
 
 
-def predict_model_cov(model, num_iter=100):
+def predict_model_corr_coef(model, num_iter=100):
     # model correlation
     model_corr = model.dynamics_weights @ model.dynamics_weights.T + model.dynamics_cov
     for i in range(num_iter):

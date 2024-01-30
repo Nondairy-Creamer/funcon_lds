@@ -7,62 +7,27 @@ import matplotlib as mpl
 colormap = mpl.colormaps['coolwarm']
 
 
-def corr_irm_recon(weights, masks, fig_save_path=None):
+def weight_prediction(weights, weight_name, fig_save_path=None):
     # this figure will demonstrate that the model can reconstruct the observed data correlation and IRMs
     # first we will sweep across the data and restrict to neuron pairs where a stimulation event was recorded N times
     # we will demonstrate that ratio between the best possible correlation and our model correlation remains constant
     # this suggests that this ratio is independent of number of data
 
     # compare model corr to measured corr and compare model IRMs to measured IRMs
-    model_corr_score = []
-    model_corr_score_ci = []
     model_irms_score = []
     model_irms_score_ci = []
 
     # get the baseline correlation and IRMs. This is the best the model could have done
     # across all data
-    corr_baseline = met.nan_corr(weights['data']['train']['corr'], weights['data']['test']['corr'])[0]
-
-    irms_baseline = met.nan_corr(weights['data']['train']['irms'], weights['data']['test']['irms'])[0]
-
-    model_corr_to_measured_corr_train, model_corr_to_measured_corr_train_ci = \
-        met.nan_corr(weights['models']['synap']['corr'], weights['data']['train']['corr'])
-    model_corr_score.append(model_corr_to_measured_corr_train)
-    model_corr_score_ci.append(model_corr_to_measured_corr_train_ci)
-
-    model_irms_to_measured_irms_train, model_irms_to_measured_irms_train_ci = \
-        met.nan_corr(weights['models']['synap']['irms'], weights['data']['train']['irms'])
-    model_irms_score.append(model_irms_to_measured_irms_train)
-    model_irms_score_ci.append(model_irms_to_measured_irms_train_ci)
+    irms_baseline = met.nan_corr(weights['data']['train'][weight_name], weights['data']['test'][weight_name])[0]
 
     # get the comparison between model prediction and data irm/correlation
     for m in weights['models']:
         if m in ['synap', 'synap_randC', 'synap_randA']:
-            # first, get the correlation for each model using all the data. Then compare with only part of the data
-            model_corr_to_measured_corr_test, model_corr_to_measured_corr_test_ci = \
-                met.nan_corr(weights['models'][m]['corr'], weights['data']['test']['corr'])
-            model_corr_score.append(model_corr_to_measured_corr_test)
-            model_corr_score_ci.append(model_corr_to_measured_corr_test_ci)
-
             model_irms_to_measured_irms_test, model_irms_to_measured_irms_test_ci = \
-                met.nan_corr(weights['models'][m]['irms'], weights['data']['test']['irms'])
+                met.nan_corr(weights['models'][m][weight_name], weights['data']['test'][weight_name])
             model_irms_score.append(model_irms_to_measured_irms_test)
             model_irms_score_ci.append(model_irms_to_measured_irms_test_ci)
-
-
-
-    # plot average reconstruction over all data
-    plt.figure()
-    y_val = np.array(model_corr_score)
-    y_val_ci = np.stack(model_corr_score_ci).T
-    plot_x = np.arange(y_val.shape[0])
-    plt.bar(plot_x, y_val / corr_baseline)
-    plt.errorbar(plot_x, y_val / corr_baseline, y_val_ci / corr_baseline, fmt='none', color='k')
-    plt.xticks(plot_x, labels=['model (train)', 'model (test)', 'model\n+ scrambled labels', 'model\n+ scrambled anatomy'], rotation=45)
-    plt.ylabel('explainable correlation to data correlation')
-    plt.tight_layout()
-
-    plt.savefig(fig_save_path / 'measured_vs_model_corr.pdf')
 
     # plot average reconstruction over all data
     plt.figure()
@@ -71,16 +36,16 @@ def corr_irm_recon(weights, masks, fig_save_path=None):
     plot_x = np.arange(y_val.shape[0])
     plt.bar(plot_x, y_val / irms_baseline)
     plt.errorbar(plot_x, y_val / irms_baseline, y_val_ci / irms_baseline, fmt='none', color='k')
-    plt.xticks(plot_x, labels=['model (train)', 'model', 'model\n+ scrambled labels', 'model\n+ scrambled anatomy'], rotation=45)
-    plt.ylabel('explainable correlation to measured IRMs')
+    plt.xticks(plot_x, labels=['model', 'model\n+ scrambled labels', 'model\n+ scrambled anatomy'], rotation=45)
+    plt.ylabel('explainable correlation to measured + ' + weight_name)
 
-    plt.savefig(fig_save_path / 'measured_vs_model_irms.pdf')
+    plt.savefig(fig_save_path / ('measured_vs_model_' + weight_name + '.pdf'))
     plt.tight_layout()
 
     plt.show()
 
 
-def corr_irm_recon_sweep(weights, masks, fig_save_path=None):
+def weight_prediction_sweep(weights, masks, weight_name, fig_save_path=None):
     # this figure will demonstrate that the model can reconstruct the observed data correlation and IRMs
     # first we will sweep across the data and restrict to neuron pairs where a stimulation event was recorded N times
     # we will demonstrate that ratio between the best possible correlation and our model correlation remains constant
@@ -89,94 +54,44 @@ def corr_irm_recon_sweep(weights, masks, fig_save_path=None):
     # compare data corr and data IRM to connectome
     n_stim_mask = masks['n_stim_mask']
     n_stim_sweep = masks['n_stim_sweep']
-    n_obs_mask = masks['n_obs_mask']
-    n_obs_sweep = masks['n_obs_sweep']
 
     # compare model corr to measured corr and compare model IRMs to measured IRMs
     model_name = []
-
-    model_corr_score_sweep = []
-    model_corr_score_sweep_ci = []
     model_irms_score_sweep = []
     model_irms_score_sweep_ci = []
 
     # sweep through the minimum number of stimulations allowed and calculate the score
     # as the number of required stimulations goes up the quality of correlation goes up
-    corr_baseline_sweep = np.zeros(n_obs_sweep.shape[0])
-    corr_baseline_sweep_ci = np.zeros((2, n_obs_sweep.shape[0]))
     irms_baseline_sweep = np.zeros(n_stim_sweep.shape[0])
     irms_baseline_sweep_ci = np.zeros((2, n_stim_sweep.shape[0]))
 
     # sweep across number of stims, for the IRF data
     for ni, n in enumerate(n_stim_sweep):
-        data_train_irms = weights['data']['train']['irms'].copy()
-        data_test_irms = weights['data']['test']['irms'].copy()
+        data_train_irms = weights['data']['train'][weight_name].copy()
+        data_test_irms = weights['data']['test'][weight_name].copy()
 
         data_train_irms[n_stim_mask[ni]] = np.nan
         data_test_irms[n_stim_mask[ni]] = np.nan
 
         irms_baseline_sweep[ni], irms_baseline_sweep_ci[:, ni] = met.nan_corr(data_train_irms, data_test_irms)
 
-    # sweep across number of observations, for the correlation data
-    for ni, n in enumerate(n_obs_sweep):
-        data_train_corr = weights['data']['train']['corr'].copy()
-        data_test_corr = weights['data']['test']['corr'].copy()
-
-        data_train_corr[n_obs_mask[ni]] = np.nan
-        data_test_corr[n_obs_mask[ni]] = np.nan
-
-        corr_baseline_sweep[ni], corr_baseline_sweep_ci[:, ni] = met.nan_corr(data_train_corr, data_test_corr)
-
     # get the comparison between model prediction and data irm/correlation
     for m in weights['models']:
         if m in ['synap', 'synap_randC', 'synap_randA']:
             # for each model, calculate its score for both corr and IRM reconstruction across the n stim sweep
             model_name.append(m)
-            model_corr_score_sweep.append(np.zeros(n_obs_sweep.shape[0]))
-            model_corr_score_sweep_ci.append(np.zeros((2, n_obs_sweep.shape[0])))
             model_irms_score_sweep.append(np.zeros(n_stim_sweep.shape[0]))
             model_irms_score_sweep_ci.append(np.zeros((2, n_stim_sweep.shape[0])))
 
             for ni, n in enumerate(n_stim_sweep):
                 # mask the model predicted correlations and IRMs based on how many stimulation events were observed
-                model_irms = weights['models'][m]['irms'].copy()
+                model_irms = weights['models'][m][weight_name].copy()
                 model_irms[n_stim_mask[ni]] = np.nan
 
                 model_irms_to_measured_irms, model_irms_to_measured_irms_ci = \
-                    met.nan_corr(model_irms, weights['data']['test']['irms'])
+                    met.nan_corr(model_irms, weights['data']['test'][weight_name])
                 model_irms_score_sweep[-1][ni] = model_irms_to_measured_irms
                 model_irms_score_sweep_ci[-1][:, ni] = model_irms_to_measured_irms_ci
-
-            for ni, n in enumerate(n_obs_sweep):
-                # mask the model predicted correlations and IRMs based on how many stimulation events were observed
-                model_corr = weights['models'][m]['corr'].copy()
-                model_corr[n_obs_mask[ni]] = np.nan
-
-                model_corr_to_measured_corr, model_corr_to_measured_corr_ci = \
-                    met.nan_corr(model_corr, weights['data']['test']['corr'])
-                model_corr_score_sweep[-1][ni] = model_corr_to_measured_corr
-                model_corr_score_sweep_ci[-1][:, ni] = model_corr_to_measured_corr_ci
-
-    # plot model reconstruction of correlations
-    plt.figure()
-    plt.subplot(1, 2, 1)
-    plt.errorbar(n_obs_sweep, corr_baseline_sweep, corr_baseline_sweep_ci, label='explainable correlation')
-    for n, mcs, mcs_ci in zip(model_name, model_corr_score_sweep, model_corr_score_sweep_ci):
-        plt.errorbar(n_obs_sweep, mcs, mcs_ci, label=n)
-    # plt.ylim([0, plt.ylim()[1]])
-    plt.xlabel('# of pairs observed')
-    plt.ylabel('similarity to measured correlation')
-    plt.legend()
-
-    plt.subplot(1, 2, 2)
-    plt.plot(0, 0)
-    for n, mcs, mcs_ci in zip(model_name, model_corr_score_sweep, model_corr_score_sweep_ci):
-        plt.errorbar(n_obs_sweep, mcs / corr_baseline_sweep, mcs_ci / corr_baseline_sweep, label=n)
-    # plt.ylim([0, 1])
-    plt.xlabel('# of pairs observed')
-    plt.ylabel('similarity to measured correlation')
-    plt.tight_layout()
-    plt.savefig(fig_save_path / 'measured_vs_model_corr_over_n.pdf')
 
     # plot model reconstruction of IRMs
     plt.figure()
@@ -186,7 +101,7 @@ def corr_irm_recon_sweep(weights, masks, fig_save_path=None):
         plt.errorbar(n_stim_sweep, mcs, mcs_ci, label=n)
     # plt.ylim([0, plt.ylim()[1]])
     plt.xlabel('# of stimulation events')
-    plt.ylabel('similarity to measured IRMs')
+    plt.ylabel('similarity to measured ' + weight_name)
     plt.legend()
 
     plt.subplot(1, 2, 2)
@@ -195,9 +110,9 @@ def corr_irm_recon_sweep(weights, masks, fig_save_path=None):
         plt.errorbar(n_stim_sweep, mcs / irms_baseline_sweep, mcs_ci / irms_baseline_sweep, label=n)
     # plt.ylim([0, 1])
     plt.xlabel('# of stimulation events')
-    plt.ylabel('similarity to measured IRMs')
+    plt.ylabel('similarity to measured ' + weight_name)
     plt.tight_layout()
-    plt.savefig(fig_save_path / 'measured_vs_model_irms_over_n.pdf')
+    plt.savefig(fig_save_path / ('measured_vs_model_' + weight_name + '_over_n.pdf'))
 
     plt.show()
 
@@ -808,13 +723,8 @@ def unconstrained_model_vs_connectome(weights, masks, fig_save_path=None):
 
 
 def corr_zimmer_paper(weights, models, cell_ids):
-    cmax = (-1, 1)
-    # cell_ids_selected = ['AVAL', 'AVAR', 'RIML', 'RIMR', 'AIBL', 'AIBR', 'AVEL', 'AVER', 'AS10', 'VA11', 'DA07', 'VA12',
-    #                      'DA09', 'VD13', 'SABD', 'DA01', 'SABVL', 'URYDL', 'URYDR', 'URYVR', 'URYVL', 'SABVR', 'VA01',
-    #                      'RIVL', 'RIVR', 'SMDVL', 'SMDVR', 'SMDDL', 'SMDDR', 'ALA', 'ASKL', 'ASKR', 'PDA', 'PHAL', 'PHAR',
-    #                      'DVC', 'AVFL', 'AVFR', 'ALNL', 'AVBL', 'AVBR', 'RID', 'RIBL', 'RIBR', 'DB07', 'VB11', 'PVNL',
-    #                      'DVA', 'SIADL', 'SAIVL', 'SIAVR', 'SIADR', 'DB02', 'VB01', 'RMEV', 'RMED', 'RMEL', 'RIS', 'PLML',
-    #                      'DB01', 'VB01', 'PVNR', 'RMER']
+    model = models['synap']
+
     # including only the neurons we have in the model
     cell_ids_selected = ['AVAL', 'AVAR', 'RIML', 'RIMR', 'AIBL', 'AIBR', 'AVEL', 'AVER',
                          'SABD', 'SABVL', 'URYDL', 'URYDR', 'URYVR', 'URYVL', 'SABVR',
@@ -823,33 +733,29 @@ def corr_zimmer_paper(weights, models, cell_ids):
                          'DVA', 'SIADL', 'SIAVR', 'SIADR', 'RMEV', 'RMED', 'RMEL', 'RIS', 'PLML',
                          'PVNR', 'RMER']
 
-    neurons_to_silence = ['AVAL', 'AVAR', 'AVEL', 'AVAR', 'PVCL', 'PVCR', 'RIML', 'RIMR']
+    neurons_to_silence = ['AVAL', 'AVAR', 'AVEL', 'AVER', 'PVCL', 'PVCR', 'RIML', 'RIMR']
+    # neurons_to_silence = ['AVBL', 'AVBR', 'RIBL', 'RIBR', 'AIBL', 'AIBR']
     model = models['synap']
+    model_silenced = ssmu.get_silenced_model(model, neurons_to_silence)
+
+    # get the indicies of the selected neurons to show
     cell_plot_inds = np.zeros(len(cell_ids_selected), dtype=int)
     for ci, c in enumerate(cell_ids_selected):
         cell_plot_inds[ci] = cell_ids['all'].index(c)
 
-    model_corr = ssmu.predict_model_cov(model)
+    # predict the covarian
+    model_corr = ssmu.predict_model_corr_coef(model)
+    model_silenced_corr = ssmu.predict_model_corr_coef(model_silenced)
 
-    # silence the neurons
-    for ns in neurons_to_silence:
-        ns_ind = cell_ids['all'].index(ns)
-        silence_inds = np.arange(ns_ind, model.dynamics_dim_full, model.dynamics_dim)
+    # select the neurons you want to predict from the larger matrix
+    data_corr_plot = weights['data']['train']['corr'][np.ix_(cell_plot_inds, cell_plot_inds)]
+    model_corr_plot = model_corr[np.ix_(cell_plot_inds, cell_plot_inds)]
+    model_corr_silenced_plot = model_silenced_corr[np.ix_(cell_plot_inds, cell_plot_inds)]
 
-        y_vals = np.arange(model.dynamics_dim)
-        y_vals = np.delete(y_vals, ns_ind)
-        model.dynamics_weights[np.ix_(y_vals, silence_inds)] = 0
-
-    # predict the correlation matrix
-    model_corr_silenced = ssmu.predict_model_cov(model)
-
-    data_corr = weights['data']['train']['corr'][np.ix_(cell_plot_inds, cell_plot_inds)]
-    model_corr = model_corr[np.ix_(cell_plot_inds, cell_plot_inds)]
-    model_corr_silenced = model_corr_silenced[np.ix_(cell_plot_inds, cell_plot_inds)]
-
-    data_corr[np.eye(model_corr.shape[0], dtype=bool)] = np.nan
-    model_corr[np.eye(model_corr.shape[0], dtype=bool)] = np.nan
-    model_corr_silenced[np.eye(model_corr_silenced.shape[0], dtype=bool)] = np.nan
+    # set diagonals to nan for visualization
+    data_corr_plot[np.eye(data_corr_plot.shape[0], dtype=bool)] = np.nan
+    model_corr_plot[np.eye(model_corr_plot.shape[0], dtype=bool)] = np.nan
+    model_corr_silenced_plot[np.eye(model_corr_silenced_plot.shape[0], dtype=bool)] = np.nan
 
     cell_ids_plot = cell_ids_selected.copy()
     for i in range(len(cell_ids_plot)):
@@ -858,35 +764,39 @@ def corr_zimmer_paper(weights, models, cell_ids):
 
     plot_x = np.arange(len(cell_ids_plot))
 
+    cmax = np.nanmax(np.abs((data_corr_plot, model_corr_plot)))
+    plot_clim = (-cmax, cmax)
+
     plt.figure()
-    plt.imshow(data_corr, interpolation='nearest', cmap=colormap)
+    plt.imshow(data_corr_plot, interpolation='nearest', cmap=colormap)
     plt.xticks(plot_x, cell_ids_plot, size=8, rotation=90)
     plt.yticks(plot_x, cell_ids_plot, size=8)
-    plt.clim(cmax)
+    plt.clim(plot_clim)
 
     plt.figure()
     plt.subplot(1, 2, 1)
-    plt.imshow(model_corr, interpolation='nearest', cmap=colormap)
-    plt.xticks(plot_x, cell_ids_plot, size=8, rotation=90)
-    plt.yticks(plot_x, cell_ids_plot, size=8)
-    plt.clim(cmax)
+    plt.imshow(model_corr_plot, interpolation='nearest', cmap=colormap)
+    plt.xticks(plot_x, cell_ids_plot, size=5, rotation=90)
+    plt.yticks(plot_x, cell_ids_plot, size=5)
+    plt.clim(plot_clim)
 
     plt.subplot(1, 2, 2)
-    plt.imshow(model_corr_silenced, interpolation='nearest', cmap=colormap)
-    plt.xticks(plot_x, cell_ids_plot, size=8, rotation=90)
-    plt.yticks(plot_x, cell_ids_plot, size=8)
-    plt.clim(cmax)
+    plt.imshow(model_corr_silenced_plot, interpolation='nearest', cmap=colormap)
+    plt.xticks(plot_x, cell_ids_plot, size=5, rotation=90)
+    plt.yticks(plot_x, cell_ids_plot, size=5)
+    plt.clim(plot_clim)
 
     plt.figure()
-    plt.imshow(np.abs(model_corr - model_corr_silenced), interpolation='nearest', cmap=colormap)
+    plt.imshow(np.abs(model_corr_plot - model_corr_silenced_plot), interpolation='nearest', cmap=colormap)
     plt.xticks(plot_x, cell_ids_plot, size=8, rotation=90)
     plt.yticks(plot_x, cell_ids_plot, size=8)
-    plt.clim(cmax)
+    plt.clim(plot_clim)
+    plt.colorbar()
 
     num_bins = 100
     plt.figure()
     plt.hist(model_corr.reshape(-1), bins=num_bins, density=True, label='model', fc=(1, 0, 0, 0.5))
-    plt.hist(model_corr_silenced.reshape(-1), bins=num_bins, density=True, label='silenced model', fc=(0, 0, 1, 0.5))
+    plt.hist(model_silenced_corr.reshape(-1), bins=num_bins, density=True, label='silenced model', fc=(0, 0, 1, 0.5))
     plt.legend()
     plt.title('matrix of correlation coefficients')
     plt.xlabel('correlation coefficient')

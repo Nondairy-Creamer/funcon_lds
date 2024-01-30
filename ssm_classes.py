@@ -3,6 +3,7 @@ import pickle
 import inference_utilities as iu
 import warnings
 import analysis_utilities as au
+import copy
 
 
 class Lgssm:
