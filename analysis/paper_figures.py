@@ -99,7 +99,6 @@ def weight_prediction_sweep(weights, masks, weight_name, fig_save_path=None):
     plt.errorbar(n_stim_sweep, irms_baseline_sweep, irms_baseline_sweep_ci, label='explainable correlation')
     for n, mcs, mcs_ci in zip(model_name, model_irms_score_sweep, model_irms_score_sweep_ci):
         plt.errorbar(n_stim_sweep, mcs, mcs_ci, label=n)
-    # plt.ylim([0, plt.ylim()[1]])
     plt.xlabel('# of stimulation events')
     plt.ylabel('similarity to measured ' + weight_name)
     plt.legend()
@@ -108,7 +107,6 @@ def weight_prediction_sweep(weights, masks, weight_name, fig_save_path=None):
     plt.plot(0, 0)
     for n, mcs, mcs_ci in zip(model_name, model_irms_score_sweep, model_irms_score_sweep_ci):
         plt.errorbar(n_stim_sweep, mcs / irms_baseline_sweep, mcs_ci / irms_baseline_sweep, label=n)
-    # plt.ylim([0, 1])
     plt.xlabel('# of stimulation events')
     plt.ylabel('similarity to measured ' + weight_name)
     plt.tight_layout()
@@ -139,6 +137,57 @@ def weights_vs_connectome(weights, masks, metric=met.f_measure, rng=np.random.de
         plt.savefig(fig_save_path / 'weights_vs_connectome.pdf')
 
     plt.show()
+
+
+def plot_eigenvalues(models, cell_ids):
+    # calculate the eignvalues / vectors of the dynamics matrix
+    model = models['synap']
+    A = model.dynamics_weights
+    eig_vals, eig_vects = np.linalg.eig(A)
+
+    sort_inds = np.argsort(np.abs(eig_vals))[::-1]
+
+    eig_vals = eig_vals[sort_inds]
+    eig_vects = eig_vects[:, sort_inds]
+    eig_vects = np.stack(np.split(eig_vects, model.dynamics_lags, axis=0))
+    eig_vects = np.mean(np.abs(eig_vects), axis=0)
+
+    plt.figure()
+    plt.subplot(1, 2, 1)
+    plt.plot(np.abs(eig_vals))
+    plt.xlabel('eigenvalue')
+
+    plt.subplot(1, 2, 2)
+    plt.plot(np.abs(eig_vals[:100]))
+    plt.xlabel('eigenvalue')
+
+    plt.figure()
+    plt.scatter(np.real(eig_vals), np.imag(eig_vals))
+    plt.xlabel('real[eigenvalues]')
+    plt.ylabel('imag[eigenvalues]')
+
+    ylim_max = np.max(eig_vects)
+    ylim_plot = (0, ylim_max)
+
+    num_eigvects_to_plot = 20
+    num_eigvect_inds_to_plot = 20
+    plot_x = np.arange(num_eigvect_inds_to_plot)
+
+    for n in range(num_eigvects_to_plot):
+        cell_ids_plot = cell_ids['all'].copy()
+        this_eig_vect = eig_vects[:, n]
+        cell_sort_inds = np.argsort(this_eig_vect)[::-1]
+        this_eig_vect = this_eig_vect[cell_sort_inds]
+        cell_ids_plot = [cell_ids_plot[i] for i in cell_sort_inds[:num_eigvect_inds_to_plot]]
+
+        plt.figure()
+        plt.scatter(plot_x, this_eig_vect[:num_eigvect_inds_to_plot])
+        plt.ylim(ylim_plot)
+        plt.xticks(plot_x, cell_ids_plot, rotation=90)
+
+    plt.show()
+
+    a=1
 
 
 def unconstrained_vs_constrained_model(weights, fig_save_path=None):
@@ -733,7 +782,8 @@ def corr_zimmer_paper(weights, models, cell_ids):
                          'DVA', 'SIADL', 'SIAVR', 'SIADR', 'RMEV', 'RMED', 'RMEL', 'RIS', 'PLML',
                          'PVNR', 'RMER']
 
-    neurons_to_silence = ['AVAL', 'AVAR', 'AVEL', 'AVER', 'PVCL', 'PVCR', 'RIML', 'RIMR']
+    # neurons_to_silence = ['AVAL', 'AVAR', 'AVEL', 'AVER', 'PVCL', 'PVCR', 'RIML', 'RIMR']
+    neurons_to_silence = ['PVQR', 'RIPR', 'RIPL', 'M2R', 'M2L']
     # neurons_to_silence = ['AVBL', 'AVBR', 'RIBL', 'RIBR', 'AIBL', 'AIBR']
     model = models['synap']
     model_silenced = ssmu.get_silenced_model(model, neurons_to_silence)

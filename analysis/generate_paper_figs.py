@@ -323,10 +323,10 @@ for i in weights_unmasked:
 # pf.plot_irfs(weights, cell_ids, window, num_plot=20, fig_save_path=None)
 # pf.plot_irfs_train_test(weights, cell_ids, window, num_plot=20, fig_save_path=None)
 
-pf.weight_prediction(weights_unmasked, 'irms', fig_save_path=fig_save_path)
-pf.weight_prediction_sweep(weights_unmasked, masks, 'irms', fig_save_path=fig_save_path)
-pf.weight_prediction(weights_unmasked, 'corr', fig_save_path=fig_save_path)
-pf.weight_prediction_sweep(weights_unmasked, masks, 'corr', fig_save_path=fig_save_path)
+# pf.weight_prediction(weights_unmasked, 'irms', fig_save_path=fig_save_path)
+# pf.weight_prediction_sweep(weights_unmasked, masks, 'irms', fig_save_path=fig_save_path)
+# pf.weight_prediction(weights_unmasked, 'corr', fig_save_path=fig_save_path)
+# pf.weight_prediction_sweep(weights_unmasked, masks, 'corr', fig_save_path=fig_save_path)
 
 # pf.irm_prediction(weights_unmasked, fig_save_path=fig_save_path)
 # pf.irm_prediction_sweep(weights_unmasked, masks, fig_save_path=fig_save_path)
@@ -350,5 +350,6 @@ pf.weight_prediction_sweep(weights_unmasked, masks, 'corr', fig_save_path=fig_sa
 # pf.unconstrained_model_vs_connectome(weights, masks, fig_save_path=fig_save_path)
 
 # Figure 4
-# pf.corr_zimmer_paper(weights_unmasked, models, cell_ids)
+pf.corr_zimmer_paper(weights_unmasked, models, cell_ids)
+# pf.plot_eigenvalues(models, cell_ids)
 
