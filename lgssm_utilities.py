@@ -4,6 +4,45 @@ import warnings
 import copy
 
 
+def mask_weights_to_nan(weights, irm_mask, corr_mask, combine_masks=False):
+    weights = copy.deepcopy(weights)
+    if combine_masks:
+        irm_mask = irm_mask | corr_mask
+        corr_mask = irm_mask
+
+    # set all the weights to nan with the nan mask
+    for i in weights:
+        for j in weights[i]:
+            if isinstance(weights[i][j], dict):
+                for k in weights[i][j]:
+                    if 'corr' in k:
+                        mask = corr_mask
+                    else:
+                        mask = irm_mask
+
+                    if weights[i][j][k].ndim == 2:
+                        weights[i][j][k][mask] = np.nan
+                    elif weights[i][j][k].ndim == 3:
+                        weights[i][j][k][:, mask] = np.nan
+                    else:
+                        raise Exception('Weights shape not recognized')
+
+            else:
+                if 'corr' in j:
+                    mask = corr_mask
+                else:
+                    mask = irm_mask
+
+                if weights[i][j].ndim == 2:
+                    weights[i][j][mask] = np.nan
+                elif weights[i][j].ndim == 3:
+                    weights[i][j][:, mask] = np.nan
+                else:
+                    raise Exception('Weights shape not recognized')
+
+    return weights
+
+
 def remove_nan_irfs(weights, cell_ids, data_type='test', chosen_mask=None):
     if chosen_mask is None:
         chosen_mask = np.zeros_like(weights['data'][data_type]['irms']) == 0

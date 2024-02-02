@@ -33,7 +33,7 @@ def nan_corr(y_true, y_hat, alpha=0.05, mean_sub=True):
     y_true_std = np.std(y_true, ddof=0)
     y_hat_std = np.std(y_hat, ddof=0)
 
-    corr = (np.mean(y_true * y_hat) / y_true_std / y_hat_std)
+    corr = np.mean(y_true * y_hat) / y_true_std / y_hat_std
 
     # now estimate the confidence intervals for the correlation
     n = y_true.shape[0]
@@ -165,6 +165,10 @@ def metric_null(metric, y_true, n_sample=1000, rng=np.random.default_rng()):
     y_true = y_true[~nan_loc]
 
     py = np.mean(y_true)
+    if py > 0.5:
+        py = 1
+    else:
+        py = 0
     sampled_mi = np.zeros(n_sample)
 
     for n in range(n_sample):
@@ -172,3 +176,4 @@ def metric_null(metric, y_true, n_sample=1000, rng=np.random.default_rng()):
         sampled_mi[n] = metric(y_true, random_example)
 
     return np.mean(sampled_mi)
+

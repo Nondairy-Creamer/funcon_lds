@@ -265,8 +265,8 @@ def plot_posterior(data, posterior_dict, cell_ids_chosen, sample_rate=0.5, windo
     emissions = data['emissions']
     inputs = data['inputs']
     posterior = posterior_dict['posterior']
-    # model_sampled = posterior_dict['model_sampled_noise']
-    model_sampled = posterior_dict['model_sampled']
+    model_sampled = posterior_dict['model_sampled_noise']
+    # model_sampled = posterior_dict['model_sampled']
 
     neuron_inds_chosen = np.array([data['cell_ids'].index(i) for i in cell_ids_chosen])
 
@@ -317,6 +317,38 @@ def plot_posterior(data, posterior_dict, cell_ids_chosen, sample_rate=0.5, windo
 
     plt.tight_layout()
 
+    # plt.figure()
+    # cmax = np.nanpercentile(np.abs((model_sampled_chosen, posterior_chosen)), plot_percent)
+    #
+    # plt.subplot(3, 1, 1)
+    # plt.imshow(inputs_chosen.T, interpolation='nearest', aspect='auto', cmap=colormap)
+    # plt.title('stimulation events')
+    # plt.yticks(plot_y, cell_ids_chosen)
+    # plt.xticks(plot_x, plot_x * sample_rate)
+    # plt.xlabel('time (s)')
+    # plt.clim((-1, 1))
+    # plt.colorbar()
+    #
+    # plt.subplot(3, 1, 2)
+    # plt.imshow(model_sampled_chosen.T, interpolation='nearest', aspect='auto', cmap=colormap)
+    # plt.clim((-cmax, cmax))
+    # plt.title('sampled model')
+    # plt.yticks(plot_y, cell_ids_chosen)
+    # plt.xticks(plot_x, plot_x * sample_rate)
+    # plt.xlabel('time (s)')
+    # plt.colorbar()
+    #
+    # plt.subplot(3, 1, 3)
+    # plt.imshow(posterior_chosen.T, interpolation='nearest', aspect='auto', cmap=colormap)
+    # plt.clim((-cmax, cmax))
+    # plt.title('model posterior, all data')
+    # plt.yticks(plot_y, cell_ids_chosen)
+    # plt.xticks(plot_x, plot_x * sample_rate)
+    # plt.xlabel('time (s)')
+    # plt.colorbar()
+    #
+    # plt.tight_layout()
+
     plt.figure()
     cmax = np.nanpercentile(np.abs((model_sampled_chosen, posterior_chosen)), plot_percent)
 
@@ -330,18 +362,18 @@ def plot_posterior(data, posterior_dict, cell_ids_chosen, sample_rate=0.5, windo
     plt.colorbar()
 
     plt.subplot(3, 1, 2)
-    plt.imshow(model_sampled_chosen.T, interpolation='nearest', aspect='auto', cmap=colormap)
+    plt.imshow(emissions_chosen.T, interpolation='nearest', aspect='auto', cmap=colormap)
     plt.clim((-cmax, cmax))
-    plt.title('sampled model')
+    plt.title('data')
     plt.yticks(plot_y, cell_ids_chosen)
     plt.xticks(plot_x, plot_x * sample_rate)
     plt.xlabel('time (s)')
     plt.colorbar()
 
     plt.subplot(3, 1, 3)
-    plt.imshow(posterior_chosen.T, interpolation='nearest', aspect='auto', cmap=colormap)
+    plt.imshow(model_sampled_chosen.T, interpolation='nearest', aspect='auto', cmap=colormap)
     plt.clim((-cmax, cmax))
-    plt.title('model posterior, all data')
+    plt.title('sampled model')
     plt.yticks(plot_y, cell_ids_chosen)
     plt.xticks(plot_x, plot_x * sample_rate)
     plt.xlabel('time (s)')
@@ -379,7 +411,7 @@ def plot_missing_neuron(data, posterior_dict, sample_rate=0.5, fig_save_path=Non
     sorted_corr = np.sort(missing_corr.reshape(-1))
     sorted_corr_inds = np.argsort(missing_corr.reshape(-1))
     first_nan = np.where(np.isnan(sorted_corr))[0][0]
-    best_neuron = np.unravel_index(sorted_corr_inds[first_nan - 2], missing_corr.shape)
+    best_neuron = np.unravel_index(sorted_corr_inds[first_nan - 1], missing_corr.shape)
     median_neuron = np.unravel_index(sorted_corr_inds[int((first_nan - 2) / 2) + 3], missing_corr.shape)
 
     best_data_ind = best_neuron[0]

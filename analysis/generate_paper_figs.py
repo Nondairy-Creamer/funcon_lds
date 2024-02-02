@@ -167,28 +167,28 @@ ids_file.close()
 atlas_inds = [atlas_ids.index(i) for i in cell_ids['all']]
 q_in = np.load(str(q_path))[np.ix_(atlas_inds, atlas_inds)]
 
-weights_unmasked = {'data': {}}
-weights_unmasked['data']['train'] = {'irms': data_irms_train,
+weights = {'data': {}}
+weights['data']['train'] = {'irms': data_irms_train,
                                      'irfs': data_irfs_train,
                                      'irfs_sem': data_irfs_sem_train,
                                      'corr': data_corr_train,
                                      'corr_binarized': ((data_corr_train_ci[0] > 0) | (data_corr_train_ci[1] < 0)).astype(float),
                                      'q': (q_in < q_alpha).astype(float),
-                                     }
+                            }
 
-weights_unmasked['data']['test'] = {'irms': data_irms_test,
+weights['data']['test'] = {'irms': data_irms_test,
                                     'irfs': data_irfs_test,
                                     'irfs_sem': data_irfs_sem_test,
                                     'corr': data_corr_test,
                                     'corr_binarized': ((data_corr_test_ci[0] > 0) | (data_corr_test_ci[1] < 0)).astype(float),
                                     'q': (q_in < q_alpha).astype(float),
-                                    }
+                           }
 
 # get anatomical data
-weights_unmasked['anatomy'] = au.load_anatomical_data(cell_ids=cell_ids['all'])
+weights['anatomy'] = au.load_anatomical_data(cell_ids=cell_ids['all'])
 
 # get the model weights
-weights_unmasked['models'] = {}
+weights['models'] = {}
 # get the IRMs of the models and data
 std_factor = 100
 for m in models:
@@ -206,18 +206,18 @@ for m in models:
     if 'eirfs' not in posterior_dicts[m] or posterior_dicts[m]['eirfs'].shape[0] != window_size:
         posterior_dicts[m]['eirfs'] = ssmu.calculate_eirfs(models[m], window=window)
 
-    weights_unmasked['models'][m] = {'irfs': posterior_dicts[m]['irfs'],
+    weights['models'][m] = {'irfs': posterior_dicts[m]['irfs'],
                                      'irms': np.sum(posterior_dicts[m]['irfs'], axis=0) * sample_rate,
                                      'dirfs': posterior_dicts[m]['dirfs'],
                                      'rdirfs': posterior_dicts[m]['rdirfs'],
                                      'dirms': np.sum(posterior_dicts[m]['dirfs'], axis=0) * sample_rate,
                                      'eirfs': posterior_dicts[m]['eirfs'],
                                      'eirms': np.sum(posterior_dicts[m]['eirfs'], axis=0) * sample_rate,
-                                     }
+                            }
 
-    abs_dirms = np.abs(weights_unmasked['models'][m]['dirms'])
+    abs_dirms = np.abs(weights['models'][m]['dirms'])
     dirms_binarized = abs_dirms > (np.nanstd(abs_dirms) / std_factor)
-    weights_unmasked['models'][m]['dirms_binarized'] = dirms_binarized.astype(float)
+    weights['models'][m]['dirms_binarized'] = dirms_binarized.astype(float)
 
 # save the posterior dicts so the irfs and dirfs are saved
 for mf in model_folders:
@@ -228,15 +228,16 @@ for mf in model_folders:
 # model correlation
 for m in models:
     model_corr = ssmu.predict_model_corr_coef(models[m])
-    weights_unmasked['models'][m]['corr'] = model_corr
+    weights['models'][m]['corr'] = model_corr
 
 # set up the masks
-data_nan = np.isnan(weights_unmasked['data']['test']['irms']) | np.isnan(weights_unmasked['data']['test']['corr'])
+data_nan = np.isnan(weights['data']['test']['irms']) | np.isnan(weights['data']['test']['corr'])
 # get masks based on number of stims
 n_stim_mask = []
 n_stim_sweep = np.arange(num_stim_sweep_params[0], num_stim_sweep_params[1], num_stim_sweep_params[2])
 diag_mask = np.eye(num_neurons, dtype=bool)
-minimum_nan_mask = data_nan | diag_mask
+irm_nans = np.isnan(weights['data']['test']['irms']) | diag_mask
+corr_nans = np.isnan(weights['data']['test']['corr']) | diag_mask
 
 for ni, n in enumerate(n_stim_sweep):
     # loop through number of stimulations and include all pairs which were stimulated
@@ -245,7 +246,7 @@ for ni, n in enumerate(n_stim_sweep):
     for i in range(1, num_stim_sweep_params[2]):
         stim_sweep_mask &= num_stim_test != (n + i)
 
-    n_stim_mask.append(stim_sweep_mask | minimum_nan_mask)
+    n_stim_mask.append(stim_sweep_mask | irm_nans)
 
 # get mask based on number of observations
 n_obs_mask = []
@@ -257,99 +258,61 @@ for ni, n in enumerate(n_obs_sweep):
     for i in range(1, num_obs_sweep_params[2]):
         obs_sweep_mask_test &= num_obs_test != (n + i)
 
-    n_obs_mask.append(obs_sweep_mask_test | minimum_nan_mask)
+    n_obs_mask.append(obs_sweep_mask_test | corr_nans)
 
 # put all the masks in a dictionary
 masks = {'diagonal': np.eye(data_irms_train.shape[0], dtype=bool),
-         'synap': (weights_unmasked['anatomy']['chem_conn'] + weights_unmasked['anatomy']['gap_conn']) > 0,
-         'chem': weights_unmasked['anatomy']['chem_conn'] > 0,
-         'gap': weights_unmasked['anatomy']['gap_conn'] > 0,
-         'nan': (num_stim_train < required_num_stim) | (num_stim_test < required_num_stim) | minimum_nan_mask,
+         'synap': (weights['anatomy']['chem_conn'] + weights['anatomy']['gap_conn']) > 0,
+         'chem': weights['anatomy']['chem_conn'] > 0,
+         'gap': weights['anatomy']['gap_conn'] > 0,
+         'irm_nans': irm_nans,
+         'corr_nans': corr_nans,
+         'irm_nans_num_stim': (num_stim_train < required_num_stim) | (num_stim_test < required_num_stim) | irm_nans,
+         'corr_nans_num_stim': (num_obs_train < required_num_stim) | (num_obs_test < required_num_stim) | corr_nans,
          'n_stim_mask': n_stim_mask,
          'n_stim_sweep': n_stim_sweep,
          'n_obs_mask': n_obs_mask,
          'n_obs_sweep': n_obs_sweep}
 masks['unconnected'] = ~masks['synap']
 
-# set all the weights to nan with the nan mask
-weights = copy.deepcopy(weights_unmasked)
-for i in weights:
-    for j in weights[i]:
-        if isinstance(weights[i][j], dict):
-            for k in weights[i][j]:
-                if weights[i][j][k].ndim == 2:
-                    weights[i][j][k][masks['nan']] = np.nan
-                elif weights[i][j][k].ndim == 3:
-                    weights[i][j][k][:, masks['nan']] = np.nan
-                else:
-                    raise Exception('Weights shape not recognized')
-
-        else:
-            if weights[i][j].ndim == 2:
-                weights[i][j][masks['nan']] = np.nan
-            elif weights[i][j].ndim == 3:
-                weights[i][j][:, masks['nan']] = np.nan
-            else:
-                raise Exception('Weights shape not recognized')
-
-# mask the unmasked weights with the minimum mask
-for i in weights_unmasked:
-    for j in weights_unmasked[i]:
-        if isinstance(weights_unmasked[i][j], dict):
-            for k in weights_unmasked[i][j]:
-                if weights_unmasked[i][j][k].ndim == 2:
-                    weights_unmasked[i][j][k][minimum_nan_mask] = np.nan
-                elif weights_unmasked[i][j][k].ndim == 3:
-                    weights_unmasked[i][j][k][:, minimum_nan_mask] = np.nan
-                else:
-                    raise Exception('Weights shape not recognized')
-
-        else:
-            if weights_unmasked[i][j].ndim == 2:
-                weights_unmasked[i][j][minimum_nan_mask] = np.nan
-            elif weights_unmasked[i][j].ndim == 3:
-                weights_unmasked[i][j][:, minimum_nan_mask] = np.nan
-            else:
-                raise Exception('Weights shape not recognized')
+weights_masked = ssmu.mask_weights_to_nan(weights, masks['irm_nans'], masks['corr_nans'])
 
 # Figure 1
-# am.plot_irm(model_weights=weights['models']['synap']['dirms'],
-#             measured_irm=weights['data']['test']['irms'],
-#             model_irm=weights['models']['synap']['irms'],
-#             data_corr=weights['data']['train']['corr'],
+pf.plot_all_irms(weights, cell_ids, fig_save_path=fig_save_path)
+
+# am.plot_irm(model_weights=weights_masked['models']['synap']['dirms'],
+#             measured_irm=weights_masked['data']['test']['irms'],
+#             model_irm=weights_masked['models']['synap']['irms'],
+#             data_corr=weights_masked['data']['train']['corr'],
 #             cell_ids=cell_ids['all'], cell_ids_chosen=cell_ids['chosen'],
 #             fig_save_path=fig_save_path)
 
-# pf.plot_irfs(weights, cell_ids, window, num_plot=20, fig_save_path=None)
-# pf.plot_irfs_train_test(weights, cell_ids, window, num_plot=20, fig_save_path=None)
+# pf.plot_irfs(weights_masked, masks, cell_ids, window, num_plot=20, fig_save_path=fig_save_path)
+# pf.plot_irfs_train_test(weights_masked, masks, cell_ids, window, num_plot=20, fig_save_path=fig_save_path)
 
-# pf.weight_prediction(weights_unmasked, 'irms', fig_save_path=fig_save_path)
-# pf.weight_prediction_sweep(weights_unmasked, masks, 'irms', fig_save_path=fig_save_path)
-# pf.weight_prediction(weights_unmasked, 'corr', fig_save_path=fig_save_path)
-# pf.weight_prediction_sweep(weights_unmasked, masks, 'corr', fig_save_path=fig_save_path)
+# pf.weight_prediction(weights_masked, 'irms', fig_save_path=fig_save_path)
+# pf.weight_prediction_sweep(weights_masked, masks, 'irms', fig_save_path=fig_save_path)
+# pf.weight_prediction(weights_masked, 'corr', fig_save_path=fig_save_path)
+# pf.weight_prediction_sweep(weights_masked, masks, 'corr', fig_save_path=fig_save_path)
 
-# pf.irm_prediction(weights_unmasked, fig_save_path=fig_save_path)
-# pf.irm_prediction_sweep(weights_unmasked, masks, fig_save_path=fig_save_path)
-# pf.corr_prediction(weights_unmasked, fig_save_path=fig_save_path)
-# pf.corr_prediction_sweep(weights_unmasked, masks, fig_save_path=fig_save_path)
-# pf.weights_vs_connectome(weights, masks, metric=metric, fig_save_path=fig_save_path)
+# pf.weights_vs_connectome(weights_masked, masks, metric=metric, fig_save_path=fig_save_path)
 
 # Figure 2
-# pf.plot_dirfs(weights, masks, cell_ids, window, fig_save_path=fig_save_path)
-# pf.plot_dirfs_train_test(weights, cell_ids, window, chosen_mask=masks['synap'], num_plot=10, fig_save_path=fig_save_path)
-# pf.plot_dirfs_train_test(weights, cell_ids, window, chosen_mask=masks['unconnected'], num_plot=10, fig_save_path=fig_save_path)
-# pf.plot_dirm_diff(weights, masks, cell_ids, window, num_plot=10, fig_save_path=fig_save_path)
-# pf.plot_dirfs_train_test_swap(weights, cell_ids, window, chosen_mask=masks['synap'], num_plot=10, fig_save_path=fig_save_path)
-# pf.plot_dirfs_gt_irfs(weights, cell_ids, window, chosen_mask=masks['synap'], num_plot=10, fig_save_path=fig_save_path)
-# pf.irm_vs_dirm(weights, cell_ids)
+# pf.plot_dirfs(weights_masked, masks, cell_ids, window, fig_save_path=fig_save_path)
+# pf.plot_dirfs_train_test(weights_masked, masks, cell_ids, window, chosen_mask=masks['synap'], num_plot=10, fig_save_path=fig_save_path)
+# pf.plot_dirfs_train_test(weights_masked, masks, cell_ids, window, chosen_mask=masks['unconnected'], num_plot=10, fig_save_path=fig_save_path)
+# pf.plot_dirm_diff(weights_masked, masks, cell_ids, window, num_plot=10, fig_save_path=fig_save_path)
+# pf.plot_dirfs_train_test_swap(weights_masked, masks, cell_ids, window, chosen_mask=masks['synap'], num_plot=10, fig_save_path=fig_save_path)
+# pf.plot_dirfs_gt_irfs(weights_masked, masks, cell_ids, window, chosen_mask=masks['synap'], num_plot=10, fig_save_path=fig_save_path)
+# pf.irm_vs_dirm(weights_masked, masks, cell_ids)
 
 # Figure 3
-# pf.predict_chem_synapse_sign(weights, masks, cell_ids, metric=metric, rng=rng, fig_save_path=fig_save_path)
-# pf.predict_gap_synapse_sign(weights, masks, metric=metric, rng=rng, fig_save_path=fig_save_path)
-# pf.unconstrained_vs_constrained_model(weights, fig_save_path=fig_save_path)
-# pf.unconstrained_model_vs_connectome(weights, masks, fig_save_path=fig_save_path)
+# pf.predict_chem_synapse_sign(weights_masked, masks, cell_ids, metric=metric, rng=rng, fig_save_path=fig_save_path)
+# pf.predict_gap_synapse_sign(weights_masked, masks, metric=metric, rng=rng, fig_save_path=fig_save_path)
+# pf.unconstrained_vs_constrained_model(weights_masked, fig_save_path=fig_save_path)
+# pf.unconstrained_model_vs_connectome(weights_masked, masks, fig_save_path=fig_save_path)
 
 # Figure 4
-pf.corr_zimmer_paper(weights_unmasked, models, cell_ids)
+# pf.corr_zimmer_paper(weights_masked, models, cell_ids)
 # pf.plot_eigenvalues(models, cell_ids)
 
