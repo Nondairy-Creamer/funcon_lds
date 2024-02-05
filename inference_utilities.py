@@ -328,6 +328,7 @@ def parallel_get_post(model, data, emissions_offset=None, init_mean=None, init_c
     blocking_scatter = individual_scatter(ll_smeans)
 
     if cpu_id == 0:
+        print('gathering')
         ll_smeans = [i for i in ll_smeans if i is not None]
 
         ll_smeans_out = []
@@ -359,6 +360,8 @@ def parallel_get_post(model, data, emissions_offset=None, init_mean=None, init_c
                           'posterior_missing': posterior_missing,
                           'll_missing': ll_missing,
                           }
+
+        print('gathered')
 
         return inference_test
 

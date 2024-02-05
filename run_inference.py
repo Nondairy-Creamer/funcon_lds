@@ -359,13 +359,16 @@ def run_fitting(run_params, model, data_train, data_test, save_folder, model_tru
         print('get posterior for the test data')
     posterior_test = iu.parallel_get_post(model, data_test, emissions_offset=emissions_offset_test,
                                           init_mean=init_mean_test, init_cov=init_cov_test,
-                                          max_iter=10, converge_res=1e-2, time_lim=300, memmap_cpu_id=memmap_cpu_id,
-                                          infer_missing=False)
+                                          max_iter=10, converge_res=1e-2, time_lim=300,
+                                          memmap_cpu_id=memmap_cpu_id, infer_missing=False)
 
     if cpu_id == 0:
+        print('Finished posterior for test data')
+
         lu.save_run(save_folder, model_trained=model, ep=-1, posterior_train=posterior_train,
                     posterior_test=posterior_test)
 
+        print('finished saving')
         if run_params['use_memmap']:
             for i in range(size):
                 os.remove('/tmp/filtered_covs_' + str(i) + '.tmp')
