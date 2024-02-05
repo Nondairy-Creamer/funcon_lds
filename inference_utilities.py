@@ -290,7 +290,7 @@ def parallel_get_post(model, data, emissions_offset=None, init_mean=None, init_c
                                          add_noise=False)
             model_sampled_noise = model.sample(num_time=emissions.shape[0], inputs_list=[inputs],
                                                emissions_offset=[emissions_offset], init_mean=[init_mean], init_cov=[init_cov],
-                                               add_noise=False)
+                                               add_noise=True)
 
             posterior = posterior[:, :model.dynamics_dim]
             model_sampled = model_sampled['latents'][0][:, :model.dynamics_dim]
