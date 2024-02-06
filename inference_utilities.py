@@ -293,8 +293,8 @@ def parallel_get_post(model, data, emissions_offset=None, init_mean=None, init_c
                                                add_noise=True)
 
             posterior = posterior[:, :model.dynamics_dim]
-            model_sampled = model_sampled['latents'][0][:, :model.dynamics_dim]
-            model_sampled_noise = model_sampled_noise['latents'][0][:, :model.dynamics_dim]
+            model_sampled = model_sampled['emissions'][0]
+            model_sampled_noise = model_sampled_noise['emissions'][0]
 
             posterior_missing = None
             ll_missing = []

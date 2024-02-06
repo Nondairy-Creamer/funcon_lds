@@ -236,13 +236,20 @@ def calculate_eirfs(model, rng=np.random.default_rng(), window=(30, 60)):
 def get_sub_model(model_original, s, r, add_recipricol=False):
     # get a subset of model that includes only the stimulated neuron and the responding neuron
     model_new = copy.deepcopy(model_original)
+    model_new.dynamics_dim = 2
+    model_new.dynamics_input_dim = model_new.dynamics_dim
+    model_new.dynamics_input_dim_full = model_new.dynamics_input_dim * model_new.dynamics_input_lags
+    model_new.dynamics_dim_full = model_new.dynamics_lags * model_new.dynamics_dim
+    model_new.emissions_dim = model_new.dynamics_dim
+    model_new.emissions_input_dim = model_new.emissions_dim
+    model_new.emissions_input_dim = model_new.emissions_input_dim * model_new.emissions_input_lags
 
-    dynamics_inds_s = np.arange(s, model_new.dynamics_dim_full, model_new.dynamics_dim)
-    dynamics_inds_r = np.arange(r, model_new.dynamics_dim_full, model_new.dynamics_dim)
-    dynamics_inputs_inds_s = np.arange(s, model_new.dynamics_input_dim_full, model_new.input_dim)
-    dynamics_inputs_inds_r = np.arange(r, model_new.dynamics_input_dim_full, model_new.input_dim)
-    emissions_inputs_inds_s = np.arange(s, model_new.emissions_input_dim_full, model_new.input_dim)
-    emissions_inputs_inds_r = np.arange(r, model_new.emissions_input_dim_full, model_new.input_dim)
+    dynamics_inds_s = np.arange(s, model_original.dynamics_dim_full, model_original.dynamics_dim)
+    dynamics_inds_r = np.arange(r, model_original.dynamics_dim_full, model_original.dynamics_dim)
+    dynamics_inputs_inds_s = np.arange(s, model_original.dynamics_input_dim_full, model_original.input_dim)
+    dynamics_inputs_inds_r = np.arange(r, model_original.dynamics_input_dim_full, model_original.input_dim)
+    emissions_inputs_inds_s = np.arange(s, model_original.emissions_input_dim_full, model_original.input_dim)
+    emissions_inputs_inds_r = np.arange(r, model_original.emissions_input_dim_full, model_original.input_dim)
 
     dynamics_weights_inds = np.ix_((s, r), au.interleave(dynamics_inds_s, dynamics_inds_r))
     dynamics_input_weights_inds = np.ix_((s, r), au.interleave(dynamics_inputs_inds_s, dynamics_inputs_inds_r))
