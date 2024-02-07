@@ -285,16 +285,14 @@ def parallel_get_post(model, data, emissions_offset=None, init_mean=None, init_c
             inputs = i[1].copy()
 
             ll, posterior = model.lgssm_smoother(emissions, inputs, emissions_offset, init_mean, init_cov, memmap_cpu_id)[:2]
-            model_sampled = model.sample(num_time=emissions.shape[0], inputs_list=[inputs],
-                                         emissions_offset=[emissions_offset], init_mean=[init_mean], init_cov=[init_cov],
-                                         add_noise=False)
-            model_sampled_noise = model.sample(num_time=emissions.shape[0], inputs_list=[inputs],
-                                               emissions_offset=[emissions_offset], init_mean=[init_mean], init_cov=[init_cov],
-                                               add_noise=True)
+            model_sampled = model.sample(num_time=emissions.shape[0], inputs=inputs,
+                                         emissions_offset=emissions_offset, init_mean=init_mean, init_cov=init_cov,
+                                         add_noise=False)['emissions']
+            model_sampled_noise = model.sample(num_time=emissions.shape[0], inputs=inputs,
+                                               emissions_offset=emissions_offset, init_mean=init_mean, init_cov=init_cov,
+                                               add_noise=True)['emissions']
 
-            posterior = posterior[:, :model.dynamics_dim]
-            model_sampled = model_sampled['emissions'][0]
-            model_sampled_noise = model_sampled_noise['emissions'][0]
+            posterior = posterior @ model.emissions_weights.T + emissions_offset[None, :]
 
             posterior_missing = None
             ll_missing = []
@@ -308,9 +306,10 @@ def parallel_get_post(model, data, emissions_offset=None, init_mean=None, init_c
                     if np.any(~np.isnan(emissions[:, n])):
                         emissions_missing = emissions.copy()
                         emissions_missing[:, n] = np.nan
-                        ll_missing_this, posterior_recon = model.lgssm_smoother(emissions_missing, inputs,
-                                                                                emissions_offset, init_mean, init_cov,
-                                                                                memmap_cpu_id)[:2]
+                        ll_missing_this, posterior_recon = \
+                            model.lgssm_smoother(emissions_missing, inputs,
+                                                 emissions_offset, init_mean, init_cov,
+                                                 memmap_cpu_id)[:2]
 
                         ll_missing.append(ll_missing_this)
                         posterior_missing[:, n] = posterior_recon[:, n]

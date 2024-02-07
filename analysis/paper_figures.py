@@ -263,7 +263,7 @@ def unconstrained_vs_constrained_model(weights, fig_save_path=None):
     plt.show()
 
 
-def plot_all_irms(weights, cell_ids, fig_save_path=None):
+def plot_irms(weights, cell_ids, use_chosen_ids=False, fig_save_path=None):
     plot_x = np.arange(len(cell_ids['all']))
     plot_x = np.arange(len(cell_ids['chosen']))
     font_size = 8
@@ -294,20 +294,22 @@ def plot_all_irms(weights, cell_ids, fig_save_path=None):
     corr_lims = np.nanmax(np.abs((model_corr, data_corr)))
 
     # get the neurons to plot
-    neuron_inds = [cell_ids['all'].index(i) for i in cell_ids['chosen']]
-    model_weights = model_weights[np.ix_(neuron_inds, neuron_inds)]
-    model_irms = model_irms[np.ix_(neuron_inds, neuron_inds)]
-    model_corr = model_corr[np.ix_(neuron_inds, neuron_inds)]
+    if use_chosen_ids:
+        neuron_inds = [cell_ids['all'].index(i) for i in cell_ids['chosen']]
+        model_weights = model_weights[np.ix_(neuron_inds, neuron_inds)]
+        model_irms = model_irms[np.ix_(neuron_inds, neuron_inds)]
+        model_corr = model_corr[np.ix_(neuron_inds, neuron_inds)]
 
-    data_irms = data_irms[np.ix_(neuron_inds, neuron_inds)]
-    data_corr = data_corr[np.ix_(neuron_inds, neuron_inds)]
+        data_irms = data_irms[np.ix_(neuron_inds, neuron_inds)]
+        data_corr = data_corr[np.ix_(neuron_inds, neuron_inds)]
+        cell_ids_plot = cell_ids['chosen']
+    else:
+        cell_ids_plot = cell_ids['all']
 
     plt.figure()
     plt.imshow(model_weights, interpolation='nearest', cmap=colormap)
-    # plt.xticks(plot_x, labels=cell_ids['all'], size=font_size, rotation=90)
-    # plt.yticks(plot_x, labels=cell_ids['all'], size=font_size)
-    plt.xticks(plot_x, labels=cell_ids['chosen'], size=font_size, rotation=90)
-    plt.yticks(plot_x, labels=cell_ids['chosen'], size=font_size)
+    plt.xticks(plot_x, labels=cell_ids_plot, size=font_size, rotation=90)
+    plt.yticks(plot_x, labels=cell_ids_plot, size=font_size)
     color_limits = np.nanmax(np.abs(model_weights))
     color_limits = (-color_limits, color_limits)
     plt.clim(color_limits)
@@ -315,10 +317,8 @@ def plot_all_irms(weights, cell_ids, fig_save_path=None):
 
     plt.figure()
     plt.imshow(model_irms, interpolation='nearest', cmap=colormap)
-    # plt.xticks(plot_x, labels=cell_ids['all'], size=font_size, rotation=90)
-    # plt.yticks(plot_x, labels=cell_ids['all'], size=font_size)
-    plt.xticks(plot_x, labels=cell_ids['chosen'], size=font_size, rotation=90)
-    plt.yticks(plot_x, labels=cell_ids['chosen'], size=font_size)
+    plt.xticks(plot_x, labels=cell_ids_plot, size=font_size, rotation=90)
+    plt.yticks(plot_x, labels=cell_ids_plot, size=font_size)
     color_limits = np.nanmax(np.abs(model_irms))
     color_limits = (-color_limits, color_limits)
     plt.clim(color_limits)
@@ -326,10 +326,8 @@ def plot_all_irms(weights, cell_ids, fig_save_path=None):
 
     plt.figure()
     plt.imshow(model_corr, interpolation='nearest', cmap=colormap)
-    # plt.xticks(plot_x, labels=cell_ids['all'], size=font_size, rotation=90)
-    # plt.yticks(plot_x, labels=cell_ids['all'], size=font_size)
-    plt.xticks(plot_x, labels=cell_ids['chosen'], size=font_size, rotation=90)
-    plt.yticks(plot_x, labels=cell_ids['chosen'], size=font_size)
+    plt.xticks(plot_x, labels=cell_ids_plot, size=font_size, rotation=90)
+    plt.yticks(plot_x, labels=cell_ids_plot, size=font_size)
     color_limits = np.nanmax(np.abs(model_corr))
     color_limits = (-color_limits, color_limits)
     plt.clim(color_limits)
@@ -337,10 +335,8 @@ def plot_all_irms(weights, cell_ids, fig_save_path=None):
 
     plt.figure()
     plt.imshow(data_irms, interpolation='nearest', cmap=colormap)
-    # plt.xticks(plot_x, labels=cell_ids['all'], size=font_size, rotation=90)
-    # plt.yticks(plot_x, labels=cell_ids['all'], size=font_size)
-    plt.xticks(plot_x, labels=cell_ids['chosen'], size=font_size, rotation=90)
-    plt.yticks(plot_x, labels=cell_ids['chosen'], size=font_size)
+    plt.xticks(plot_x, labels=cell_ids_plot, size=font_size, rotation=90)
+    plt.yticks(plot_x, labels=cell_ids_plot, size=font_size)
     color_limits = np.nanmax(np.abs(data_irms))
     color_limits = (-color_limits, color_limits)
     plt.clim(color_limits)
@@ -348,10 +344,8 @@ def plot_all_irms(weights, cell_ids, fig_save_path=None):
 
     plt.figure()
     plt.imshow(data_corr, interpolation='nearest', cmap=colormap)
-    # plt.xticks(plot_x, labels=cell_ids['all'], size=font_size, rotation=90)
-    # plt.yticks(plot_x, labels=cell_ids['all'], size=font_size)
-    plt.xticks(plot_x, labels=cell_ids['chosen'], size=font_size, rotation=90)
-    plt.yticks(plot_x, labels=cell_ids['chosen'], size=font_size)
+    plt.xticks(plot_x, labels=cell_ids_plot, size=font_size, rotation=90)
+    plt.yticks(plot_x, labels=cell_ids_plot, size=font_size)
     color_limits = np.nanmax(np.abs(data_corr))
     color_limits = (-color_limits, color_limits)
     plt.clim(color_limits)

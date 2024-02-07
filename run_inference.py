@@ -40,20 +40,20 @@ def fit_synthetic(param_name, save_folder):
         start = time.time()
         # sample from the randomized model
         data_train = \
-            model_true.sample(num_time=run_params['num_time'],
-                              num_data_sets=run_params['num_data_sets'],
-                              scattered_nan_freq=run_params['scattered_nan_freq'],
-                              lost_emission_freq=run_params['lost_emission_freq'],
-                              input_time_scale=run_params['input_time_scale'],
-                              rng=rng)
+            model_true.sample_multiple(num_time=run_params['num_time'],
+                                       num_data_sets=run_params['num_data_sets'],
+                                       scattered_nan_freq=run_params['scattered_nan_freq'],
+                                       lost_emission_freq=run_params['lost_emission_freq'],
+                                       input_time_scale=run_params['input_time_scale'],
+                                       rng=rng)
 
         data_test = \
-            model_true.sample(num_time=run_params['num_time'],
-                              num_data_sets=run_params['num_data_sets'],
-                              scattered_nan_freq=run_params['scattered_nan_freq'],
-                              lost_emission_freq=run_params['lost_emission_freq'],
-                              input_time_scale=run_params['input_time_scale'],
-                              rng=rng)
+            model_true.sample_multiple(num_time=run_params['num_time'],
+                                       num_data_sets=run_params['num_data_sets'],
+                                       scattered_nan_freq=run_params['scattered_nan_freq'],
+                                       lost_emission_freq=run_params['lost_emission_freq'],
+                                       input_time_scale=run_params['input_time_scale'],
+                                       rng=rng)
         print('Time to sample:', time.time() - start, 's')
 
         # make a new model to fit to the random model

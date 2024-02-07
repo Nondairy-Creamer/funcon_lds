@@ -14,6 +14,7 @@ filter_size = run_params['filter_size']
 correct_photobleach = run_params['correct_photobleach']
 interpolate_nans = run_params['interpolate_nans']
 upsample_factor = run_params['upsample_factor']
+sample_rate = 2 * upsample_factor
 
 preprocess_filename = 'funcon_preprocessed_data.pkl'
 
@@ -49,7 +50,7 @@ for i in sorted(data_path.rglob('francesco_green.npy'))[::-1]:
         this_emissions[:, ~full_nan_loc] = interp_emissions
 
     preprocessed_file = open(preprocess_path, 'wb')
-    pickle.dump({'emissions': this_emissions, 'inputs': this_inputs, 'cell_ids': this_cell_ids}, preprocessed_file)
+    pickle.dump({'emissions': this_emissions, 'inputs': this_inputs, 'cell_ids': this_cell_ids, 'sample_rate': sample_rate}, preprocessed_file)
     preprocessed_file.close()
 
     print('Data set', i.parent, 'preprocessed')
@@ -85,8 +86,9 @@ for i in sorted(data_path.rglob('calcium_to_multicolor_alignment.mat'))[::-1]:
         interp_emissions = tp.interpolate_over_nans(this_emissions[:, ~full_nan_loc])[0]
         this_emissions[:, ~full_nan_loc] = interp_emissions
 
+    sample_rate = 2
     preprocessed_file = open(preprocess_path, 'wb')
-    pickle.dump({'emissions': this_emissions, 'inputs': this_inputs, 'cell_ids': this_cell_ids},
+    pickle.dump({'emissions': this_emissions, 'inputs': this_inputs, 'cell_ids': this_cell_ids, 'sample_rate': sample_rate},
                 preprocessed_file)
     preprocessed_file.close()
 

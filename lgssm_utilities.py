@@ -114,12 +114,12 @@ def get_silenced_model(model_original, neurons_to_silence):
     return model_silenced
 
 
-def get_impulse_response_functions(data, inputs, sample_rate=0.5, window=(15, 30), sub_pre_stim=True):
+def get_impulse_response_functions(data, inputs, sample_rate=2, window=(15, 30), sub_pre_stim=True):
     # get IRFs from data
     if window[0] < 0 or window[1] < 0 or np.sum(window) <= 0:
         raise Exception('window must be positive and sum to > 0')
 
-    window = (np.array(window) / sample_rate).astype(int)
+    window = (np.array(window) * sample_rate).astype(int)
 
     num_neurons = data[0].shape[1]
 
@@ -163,17 +163,17 @@ def get_impulse_response_functions(data, inputs, sample_rate=0.5, window=(15, 30
 
 def calculate_irfs(model, rng=np.random.default_rng(), window=(15, 30)):
     # get irfs from Lgssm model
-    num_t = int(window[1] / model.sample_rate)
+    num_t = int(window[1] * model.sample_rate)
     num_n = model.dynamics_dim
     irfs = np.zeros((num_t, num_n, num_n))
 
     for s in range(model.dynamics_dim):
         inputs = np.zeros((num_t, num_n))
         inputs[0, s] = 1
-        irfs[:, :, s] = model.sample(num_time=num_t, inputs_list=[inputs], rng=rng, add_noise=False)['emissions'][0]
+        irfs[:, :, s] = model.sample(num_time=num_t, inputs=inputs, rng=rng, add_noise=False)['emissions']
         print(s + 1, '/', num_n)
 
-    zero_pad = np.zeros((int(window[0] / model.sample_rate), num_n, num_n))
+    zero_pad = np.zeros((int(window[0] * model.sample_rate), num_n, num_n))
     irfs = np.concatenate((zero_pad, irfs), axis=0)
 
     return irfs
@@ -181,7 +181,7 @@ def calculate_irfs(model, rng=np.random.default_rng(), window=(15, 30)):
 
 def calculate_dirfs(model, rng=np.random.default_rng(), window=(15, 30), add_recipricol=False):
     # get dirfs from Lgssm model
-    num_t = int(window[1] / model.sample_rate)
+    num_t = int(window[1] * model.sample_rate)
     num_n = model.dynamics_dim
     dirfs = np.empty((num_t, num_n, num_n))
     dirfs[:] = np.nan
@@ -195,11 +195,11 @@ def calculate_dirfs(model, rng=np.random.default_rng(), window=(15, 30), add_rec
                 continue
 
             sub_model = get_sub_model(model, s, r, add_recipricol=add_recipricol)
-            dirfs[:, r, s] = sub_model.sample(num_time=num_t, inputs_list=[inputs], rng=rng, add_noise=False)['emissions'][0][:, 1]
+            dirfs[:, r, s] = sub_model.sample(num_time=num_t, inputs=inputs, rng=rng, add_noise=False)['emissions'][:, 1]
 
         print(s + 1, '/', num_n)
 
-    zero_pad = np.zeros((int(window[0] / model.sample_rate), num_n, num_n))
+    zero_pad = np.zeros((int(window[0] * model.sample_rate), num_n, num_n))
     dirfs = np.concatenate((zero_pad, dirfs), axis=0)
 
     return dirfs
@@ -207,7 +207,7 @@ def calculate_dirfs(model, rng=np.random.default_rng(), window=(15, 30), add_rec
 
 def calculate_eirfs(model, rng=np.random.default_rng(), window=(30, 60)):
     # get eirfs from Lgssm model
-    num_t = int(window[1] / model.sample_rate)
+    num_t = int(window[1] * model.sample_rate)
     num_n = model.dynamics_dim
     eirfs = np.empty((num_t, num_n, num_n))
     eirfs[:] = np.nan
@@ -222,12 +222,12 @@ def calculate_eirfs(model, rng=np.random.default_rng(), window=(30, 60)):
                 continue
 
             sub_model = get_sub_model(model, s, r)
-            eirfs[:, r, s] = sub_model.sample(num_time=num_t, init_mean=[init_mean], inputs_list=[inputs],
-                                              rng=rng, add_noise=False)['latents'][0][:, 1]
+            eirfs[:, r, s] = sub_model.sample(num_time=num_t, init_mean=init_mean, inputs=inputs,
+                                              rng=rng, add_noise=False)['emissions'][:, 1]
 
         print(s + 1, '/', num_n)
 
-    zero_pad = np.zeros((int(window[0] / model.sample_rate), num_n, num_n))
+    zero_pad = np.zeros((int(window[0] * model.sample_rate), num_n, num_n))
     eirfs = np.concatenate((zero_pad, eirfs), axis=0)
 
     return eirfs

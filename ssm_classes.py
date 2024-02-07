@@ -27,7 +27,7 @@ class Lgssm:
         self.log_likelihood = None
         self.train_time = None
         self.epsilon = epsilon
-        self.sample_rate = 0.5  # default is 2 Hz
+        self.sample_rate = 2  # default is 2 Hz
         self.ridge_lambda = ridge_lambda
 
         if cell_ids is None:
@@ -213,114 +213,98 @@ class Lgssm:
 
         return params_out
 
-    def sample(self, num_time=100, emissions_offset=None, init_mean=None, init_cov=None, num_data_sets=1,
-               input_time_scale=0, inputs_list=None, scattered_nan_freq=0.0, lost_emission_freq=0.0,
+    def sample(self, num_time=100, emissions_offset=None, init_mean=None, init_cov=None,
+               input_time_scale=0, inputs=None, scattered_nan_freq=0.0, lost_emission_freq=0.0,
                rng=np.random.default_rng(), add_noise=True):
-        latents_list = []
-        emissions_list = []
-        #TODO it looks like we make a list for init_mean, pull it out of the list, and put it back in wth is going on
-        emissions_offset_list = []
-        init_mean_list = []
-        init_cov_list = []
-
         if emissions_offset is None:
-            emissions_offset = [np.zeros(self.emissions_dim) for i in range(num_data_sets)]
+            emissions_offset = np.zeros(self.emissions_dim)
 
         if init_mean is None:
-            init_mean = [np.zeros(self.dynamics_dim_full) for i in range(num_data_sets)]
+            init_mean = np.zeros(self.dynamics_dim_full)
 
         if init_cov is None:
-            init_cov = [np.eye(self.dynamics_dim_full) for i in range(num_data_sets)]
+            init_cov = np.eye(self.dynamics_dim_full)
 
-        if inputs_list is None:
+        if inputs is None:
             if input_time_scale != 0:
                 stims_per_data_set = int(num_time / input_time_scale)
-                num_stims = num_data_sets * stims_per_data_set
-                sparse_inputs_init = np.eye(self.input_dim)[rng.choice(self.input_dim, num_stims, replace=True)]
+                sparse_inputs_init = np.eye(self.input_dim)[rng.choice(self.input_dim, stims_per_data_set, replace=True)]
 
                 # upsample to full time
-                total_time = num_time * num_data_sets
-                inputs_list = np.zeros((total_time, self.emissions_dim))
-                inputs_list[::input_time_scale, :] = sparse_inputs_init
-                inputs_list = np.split(inputs_list, num_data_sets)
+                inputs = np.zeros((num_time, self.emissions_dim))
+                inputs[::input_time_scale, :] = sparse_inputs_init
             else:
-                inputs_list = [rng.standard_normal((num_time, self.input_dim)) for i in range(num_data_sets)]
+                inputs = rng.standard_normal((num_time, self.input_dim))
 
-        dynamics_inputs_lagged = [self.get_lagged_data(i, self.dynamics_input_lags, add_pad=True) for i in inputs_list]
-        emissions_inputs_lagged = [self.get_lagged_data(i, self.emissions_input_lags, add_pad=True) for i in inputs_list]
+        dynamics_inputs = self.get_lagged_data(inputs, self.dynamics_input_lags, add_pad=True)
+        emissions_inputs = self.get_lagged_data(inputs, self.emissions_input_lags, add_pad=True)
 
-        for d in range(num_data_sets):
-            emissions_offset_this = emissions_offset[d]
-            init_mean_this = init_mean[d]
-            init_cov_this = init_cov[d]
+        latents = np.zeros((num_time, self.dynamics_dim_full))
+        emissions = np.zeros((num_time, self.emissions_dim))
 
-            latents = np.zeros((num_time, self.dynamics_dim_full))
-            emissions = np.zeros((num_time, self.emissions_dim))
-            dynamics_inputs = dynamics_inputs_lagged[d]
-            emissions_inputs = emissions_inputs_lagged[d]
+        # get the initial observations
+        dynamics_noise = add_noise * rng.multivariate_normal(np.zeros(self.dynamics_dim_full), self.dynamics_cov, size=num_time)
+        emissions_noise = add_noise * rng.multivariate_normal(np.zeros(self.emissions_dim), self.emissions_cov, size=num_time)
+        dynamics_inputs = (self.dynamics_input_weights @ dynamics_inputs[:, :, None])[:, :, 0]
+        emissions_inputs = (self.emissions_input_weights @ emissions_inputs[:, :, None])[:, :, 0]
 
-            # get the initial observations
-            dynamics_noise = add_noise * rng.multivariate_normal(np.zeros(self.dynamics_dim_full), self.dynamics_cov, size=num_time)
-            emissions_noise = add_noise * rng.multivariate_normal(np.zeros(self.emissions_dim), self.emissions_cov, size=num_time)
-            dynamics_inputs = (self.dynamics_input_weights @ dynamics_inputs[:, :, None])[:, :, 0]
-            emissions_inputs = (self.emissions_input_weights @ emissions_inputs[:, :, None])[:, :, 0]
+        latents[0, :] = rng.multivariate_normal(init_mean, add_noise * init_cov)
 
-            latents[0, :] = rng.multivariate_normal(init_mean_this, add_noise * init_cov_this)
+        emissions[0, :] = self.emissions_weights @ latents[0, :] + \
+                          emissions_inputs[0, :] + \
+                          emissions_offset + \
+                          emissions_noise[0, :]
 
-            emissions[0, :] = self.emissions_weights @ latents[0, :] + \
-                              emissions_inputs[0, :] + \
-                              emissions_offset_this + \
-                              emissions_noise[0, :]
+        # loop through time and generate the latents and emissions
+        for t in range(1, num_time):
+            latents[t, :] = self.dynamics_weights @ latents[t-1, :] + \
+                            dynamics_inputs[t, :] + \
+                            dynamics_noise[t, :]
 
-            # loop through time and generate the latents and emissions
-            for t in range(1, num_time):
-                latents[t, :] = self.dynamics_weights @ latents[t-1, :] + \
-                                dynamics_inputs[t, :] + \
-                                dynamics_noise[t, :]
-
-                emissions[t, :] = self.emissions_weights @ latents[t, :] + \
-                                  emissions_inputs[t, :] + \
-                                  emissions_offset_this + \
-                                  emissions_noise[t, :]
-
-            latents_list.append(latents[:, :self.dynamics_dim])
-            emissions_list.append(emissions)
-            emissions_offset_list.append(emissions_offset_this)
-            init_mean_list.append(init_mean_this)
-            init_cov_list.append(init_cov_this)
+            emissions[t, :] = self.emissions_weights @ latents[t, :] + \
+                              emissions_inputs[t, :] + \
+                              emissions_offset + \
+                              emissions_noise[t, :]
 
         # add in nans
-        scattered_nans_mask = [rng.random((num_time, self.emissions_dim)) < scattered_nan_freq for i in range(num_data_sets)]
-        lost_emission_mask = [rng.random((1, self.emissions_dim)) < lost_emission_freq for i in range(num_data_sets)]
-        nan_mask = [scattered_nans_mask[i] | lost_emission_mask[i] for i in range(num_data_sets)]
+        scattered_nans_mask = rng.random((num_time, self.emissions_dim)) < scattered_nan_freq
+        lost_emission_mask = rng.random((1, self.emissions_dim)) < lost_emission_freq
+        nan_mask = scattered_nans_mask | lost_emission_mask
+        emissions[nan_mask] = np.nan
 
-        # make sure each data set has at least one measurement and that all emissions were measured at least once
-        for d in range(num_data_sets):
-            if np.all(nan_mask[d]):
-                nan_mask[d][:, rng.integers(0, self.emissions_dim)] = False
-
-        neurons_measured = np.zeros(self.emissions_dim, dtype=bool)
-        for d in range(num_data_sets):
-            neurons_measured = neurons_measured | ~np.all(nan_mask[d], axis=0)
-
-        for nmi, nm in enumerate(neurons_measured):
-            if not nm:
-                random_data_set = rng.integers(0, num_data_sets)
-                nan_mask[random_data_set][:, nmi] = False
-
-        for d in range(num_data_sets):
-            emissions_list[d][nan_mask[d]] = np.nan
-
-        data_dict = {'latents': latents_list,
-                     'inputs': inputs_list,
-                     'emissions': emissions_list,
-                     'emissions_offset': emissions_offset_list,
-                     'init_mean': init_mean_list,
-                     'init_cov': init_cov_list,
+        data_dict = {'latents': latents,
+                     'inputs': inputs,
+                     'emissions': emissions,
+                     'emissions_offset': emissions_offset,
+                     'init_mean': init_mean,
+                     'init_cov': init_cov,
+                     'sample_rate': self.sample_rate,
                      'cell_ids': self.cell_ids,
                      }
 
         return data_dict
+
+    def sample_multiple(self, num_data_sets=1, num_time=100, emissions_offset=None, init_mean=None, init_cov=None,
+                        input_time_scale=0, inputs=None, scattered_nan_freq=0.0, lost_emission_freq=0.0,
+                        rng=np.random.default_rng(), add_noise=True):
+        data_sets = []
+        for n in range(num_data_sets):
+            data_sets.append(self.sample(num_time=num_time,
+                                         emissions_offset=emissions_offset, init_mean=init_mean, init_cov=init_cov,
+                                         input_time_scale=input_time_scale, inputs=inputs,
+                                         scattered_nan_freq=scattered_nan_freq, lost_emission_freq=lost_emission_freq,
+                                         rng=rng, add_noise=add_noise))
+
+        # loop through data sets and append them into a single array
+        data_out = data_sets[0].copy()
+
+        for k in data_sets[0]:
+            data_out[k] = [i[k] for i in data_sets]
+
+        data_out['sample_rate'] = data_out['sample_rate'][0]
+        data_out['cell_ids'] = data_out['cell_ids'][0]
+
+        return data_out
 
     def lgssm_filter(self, emissions, inputs, emissions_offset, init_mean, init_cov, memmap_cpu_id=None):
         """Run a Kalman filter to produce the marginal likelihood and filtered state estimates.

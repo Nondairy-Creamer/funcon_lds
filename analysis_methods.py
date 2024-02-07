@@ -261,12 +261,12 @@ def plot_matrix(param_trained, param_true=None, labels_x=None, labels_y=None, ab
     return
 
 
-def plot_posterior(data, posterior_dict, cell_ids_chosen, sample_rate=0.5, window_size=1000):
+def plot_posterior(data, posterior_dict, cell_ids_chosen, sample_rate=2, window_size=1000):
     emissions = data['emissions']
     inputs = data['inputs']
     posterior = posterior_dict['posterior']
     model_sampled = posterior_dict['model_sampled_noise']
-    # model_sampled = posterior_dict['model_sampled']
+    model_sampled = posterior_dict['model_sampled']
 
     neuron_inds_chosen = np.array([data['cell_ids'].index(i) for i in cell_ids_chosen])
 
@@ -277,7 +277,8 @@ def plot_posterior(data, posterior_dict, cell_ids_chosen, sample_rate=0.5, windo
     emissions_chosen = emissions[data_ind_chosen][time_window[0]:time_window[1], neuron_inds_chosen]
     inputs_chosen = inputs[data_ind_chosen][time_window[0]:time_window[1], neuron_inds_chosen]
     posterior_chosen = posterior[data_ind_chosen][time_window[0]:time_window[1], neuron_inds_chosen]
-    model_sampled_chosen = model_sampled[data_ind_chosen][time_window[0]:time_window[1], neuron_inds_chosen]
+    model_sampled_chosen_noise = posterior_dict['model_sampled_noise'][data_ind_chosen][time_window[0]:time_window[1], neuron_inds_chosen]
+    model_sampled_chosen = posterior_dict['model_sampled'][data_ind_chosen][time_window[0]:time_window[1], neuron_inds_chosen]
 
     filt_shape = np.ones(5)
     for i in range(inputs_chosen.shape[1]):
@@ -292,7 +293,7 @@ def plot_posterior(data, posterior_dict, cell_ids_chosen, sample_rate=0.5, windo
     plt.imshow(inputs_chosen.T, interpolation='nearest', aspect='auto', cmap=colormap)
     plt.title('stimulation events')
     plt.yticks(plot_y, cell_ids_chosen)
-    plt.xticks(plot_x, plot_x * sample_rate)
+    plt.xticks(plot_x, plot_x / sample_rate)
     plt.xlabel('time (s)')
     plt.clim((-1, 1))
     plt.colorbar()
@@ -302,7 +303,7 @@ def plot_posterior(data, posterior_dict, cell_ids_chosen, sample_rate=0.5, windo
     plt.clim((-cmax, cmax))
     plt.title('measured data')
     plt.yticks(plot_y, cell_ids_chosen)
-    plt.xticks(plot_x, plot_x * sample_rate)
+    plt.xticks(plot_x, plot_x / sample_rate)
     plt.xlabel('time (s)')
     plt.colorbar()
 
@@ -311,7 +312,7 @@ def plot_posterior(data, posterior_dict, cell_ids_chosen, sample_rate=0.5, windo
     plt.clim((-cmax, cmax))
     plt.title('model posterior, all data')
     plt.yticks(plot_y, cell_ids_chosen)
-    plt.xticks(plot_x, plot_x * sample_rate)
+    plt.xticks(plot_x, plot_x / sample_rate)
     plt.xlabel('time (s)')
     plt.colorbar()
 
@@ -356,7 +357,7 @@ def plot_posterior(data, posterior_dict, cell_ids_chosen, sample_rate=0.5, windo
     plt.imshow(inputs_chosen.T, interpolation='nearest', aspect='auto', cmap=colormap)
     plt.title('stimulation events')
     plt.yticks(plot_y, cell_ids_chosen)
-    plt.xticks(plot_x, plot_x * sample_rate)
+    plt.xticks(plot_x, plot_x / sample_rate)
     plt.xlabel('time (s)')
     plt.clim((-1, 1))
     plt.colorbar()
@@ -366,7 +367,7 @@ def plot_posterior(data, posterior_dict, cell_ids_chosen, sample_rate=0.5, windo
     plt.clim((-cmax, cmax))
     plt.title('data')
     plt.yticks(plot_y, cell_ids_chosen)
-    plt.xticks(plot_x, plot_x * sample_rate)
+    plt.xticks(plot_x, plot_x / sample_rate)
     plt.xlabel('time (s)')
     plt.colorbar()
 
@@ -375,7 +376,7 @@ def plot_posterior(data, posterior_dict, cell_ids_chosen, sample_rate=0.5, windo
     plt.clim((-cmax, cmax))
     plt.title('sampled model')
     plt.yticks(plot_y, cell_ids_chosen)
-    plt.xticks(plot_x, plot_x * sample_rate)
+    plt.xticks(plot_x, plot_x / sample_rate)
     plt.xlabel('time (s)')
     plt.colorbar()
 
@@ -386,7 +387,7 @@ def plot_posterior(data, posterior_dict, cell_ids_chosen, sample_rate=0.5, windo
     return
 
 
-def plot_missing_neuron(data, posterior_dict, sample_rate=0.5, fig_save_path=None):
+def plot_missing_neuron(data, posterior_dict, sample_rate=2, fig_save_path=None):
     cell_ids = data['cell_ids']
     posterior_missing = posterior_dict['posterior_missing']
     emissions = data['emissions']
@@ -419,7 +420,7 @@ def plot_missing_neuron(data, posterior_dict, sample_rate=0.5, fig_save_path=Non
     median_data_ind = median_neuron[0]
     median_neuron_ind = median_neuron[1]
 
-    plot_x = np.arange(emissions[best_data_ind].shape[0]) * sample_rate
+    plot_x = np.arange(emissions[best_data_ind].shape[0]) / sample_rate
     plt.figure()
     plt.subplot(2, 1, 1)
     plt.title('best held out neuron: ' + cell_ids[best_neuron_ind])
@@ -428,7 +429,7 @@ def plot_missing_neuron(data, posterior_dict, sample_rate=0.5, fig_save_path=Non
     plt.xlabel('time (s)')
     plt.ylabel('neural activity')
 
-    plot_x = np.arange(emissions[median_data_ind].shape[0]) * sample_rate
+    plot_x = np.arange(emissions[median_data_ind].shape[0]) / sample_rate
     # plot_x = np.arange(1000) * sample_rate
     plt.subplot(2, 1, 2)
     plt.title('median held out neuron: ' + cell_ids[median_neuron_ind])
@@ -677,10 +678,10 @@ def compare_measured_and_model_irm(model_weights, model_corr, measured_irm, mode
 
 
 def plot_irf(measured_irf, measured_irf_sem, model_irf, cell_ids, cell_ids_chosen, window=(30, 60),
-             sample_rate=0.5, num_plot=5, fig_save_path=None):
+             sample_rate=2, num_plot=5, fig_save_path=None):
 
     chosen_neuron_inds = [cell_ids.index(i) for i in cell_ids_chosen]
-    plot_x = np.arange(-window[0] / sample_rate, window[1] / sample_rate)
+    plot_x = np.arange(-window[0] * sample_rate, window[1] * sample_rate)
 
     # pull out the neurons we care about
     measured_irf = measured_irf[:, chosen_neuron_inds, :][:, :, chosen_neuron_inds]

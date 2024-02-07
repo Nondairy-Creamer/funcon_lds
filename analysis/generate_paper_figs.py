@@ -101,7 +101,7 @@ data_irfs_test, data_irfs_sem_test, data_irfs_test_all = \
     ssmu.get_impulse_response_functions(data_test['emissions'], data_test['inputs'],
                                         sample_rate=sample_rate, window=window, sub_pre_stim=sub_pre_stim)
 nan_loc = np.all(np.isnan(data_irfs_test), axis=0)
-data_irms_test = np.nansum(data_irfs_test[window[0]:], axis=0) * sample_rate
+data_irms_test = np.nansum(data_irfs_test[window[0]:], axis=0) / sample_rate
 data_irms_test[nan_loc] = np.nan
 
 num_neurons = data_irfs_test.shape[1]
@@ -169,19 +169,19 @@ q_in = np.load(str(q_path))[np.ix_(atlas_inds, atlas_inds)]
 
 weights = {'data': {}}
 weights['data']['train'] = {'irms': data_irms_train,
-                                     'irfs': data_irfs_train,
-                                     'irfs_sem': data_irfs_sem_train,
-                                     'corr': data_corr_train,
-                                     'corr_binarized': ((data_corr_train_ci[0] > 0) | (data_corr_train_ci[1] < 0)).astype(float),
-                                     'q': (q_in < q_alpha).astype(float),
+                            'irfs': data_irfs_train,
+                            'irfs_sem': data_irfs_sem_train,
+                            'corr': data_corr_train,
+                            'corr_binarized': ((data_corr_train_ci[0] > 0) | (data_corr_train_ci[1] < 0)).astype(float),
+                            'q': (q_in < q_alpha).astype(float),
                             }
 
 weights['data']['test'] = {'irms': data_irms_test,
-                                    'irfs': data_irfs_test,
-                                    'irfs_sem': data_irfs_sem_test,
-                                    'corr': data_corr_test,
-                                    'corr_binarized': ((data_corr_test_ci[0] > 0) | (data_corr_test_ci[1] < 0)).astype(float),
-                                    'q': (q_in < q_alpha).astype(float),
+                           'irfs': data_irfs_test,
+                           'irfs_sem': data_irfs_sem_test,
+                           'corr': data_corr_test,
+                           'corr_binarized': ((data_corr_test_ci[0] > 0) | (data_corr_test_ci[1] < 0)).astype(float),
+                           'q': (q_in < q_alpha).astype(float),
                            }
 
 # get anatomical data
@@ -192,38 +192,43 @@ weights['models'] = {}
 # get the IRMs of the models and data
 std_factor = 100
 for m in models:
+    save_post = False
     sample_rate = models[m].sample_rate
-    window_size = (np.sum(np.array(window) / sample_rate)).astype(int)
+    window_size = (np.sum(np.array(window) * sample_rate)).astype(int)
     if 'irfs' not in posterior_dicts[m] or posterior_dicts[m]['irfs'].shape[0] != window_size:
         posterior_dicts[m]['irfs'] = ssmu.calculate_irfs(models[m], window=window)
+        save_post = True
 
     if 'dirfs' not in posterior_dicts[m] or posterior_dicts[m]['dirfs'].shape[0] != window_size:
         posterior_dicts[m]['dirfs'] = ssmu.calculate_dirfs(models[m], window=window)
+        save_post = True
 
     if 'rdirfs' not in posterior_dicts[m] or posterior_dicts[m]['rdirfs'].shape[0] != window_size:
         posterior_dicts[m]['rdirfs'] = ssmu.calculate_dirfs(models[m], add_recipricol=True, window=window)
+        save_post = True
 
     if 'eirfs' not in posterior_dicts[m] or posterior_dicts[m]['eirfs'].shape[0] != window_size:
         posterior_dicts[m]['eirfs'] = ssmu.calculate_eirfs(models[m], window=window)
+        save_post = True
 
     weights['models'][m] = {'irfs': posterior_dicts[m]['irfs'],
-                                     'irms': np.sum(posterior_dicts[m]['irfs'], axis=0) * sample_rate,
-                                     'dirfs': posterior_dicts[m]['dirfs'],
-                                     'rdirfs': posterior_dicts[m]['rdirfs'],
-                                     'dirms': np.sum(posterior_dicts[m]['dirfs'], axis=0) * sample_rate,
-                                     'eirfs': posterior_dicts[m]['eirfs'],
-                                     'eirms': np.sum(posterior_dicts[m]['eirfs'], axis=0) * sample_rate,
+                            'irms': np.sum(posterior_dicts[m]['irfs'], axis=0) / sample_rate,
+                            'dirfs': posterior_dicts[m]['dirfs'],
+                            'rdirfs': posterior_dicts[m]['rdirfs'],
+                            'dirms': np.sum(posterior_dicts[m]['dirfs'], axis=0) / sample_rate,
+                            'eirfs': posterior_dicts[m]['eirfs'],
+                            'eirms': np.sum(posterior_dicts[m]['eirfs'], axis=0) / sample_rate,
                             }
 
     abs_dirms = np.abs(weights['models'][m]['dirms'])
     dirms_binarized = abs_dirms > (np.nanstd(abs_dirms) / std_factor)
     weights['models'][m]['dirms_binarized'] = dirms_binarized.astype(float)
 
-# save the posterior dicts so the irfs and dirfs are saved
-for mf in model_folders:
-    post_file = open(saved_run_folder / model_folders[mf] / 'posterior_test.pkl', 'wb')
-    pickle.dump(posterior_dicts[mf], post_file)
-    post_file.close()
+    if save_post:
+        # save the posterior dicts so the irfs and dirfs are saved
+        post_file = open(saved_run_folder / model_folders[m] / 'posterior_test.pkl', 'wb')
+        pickle.dump(posterior_dicts[m], post_file)
+        post_file.close()
 
 # model correlation
 for m in models:
@@ -278,7 +283,8 @@ masks['unconnected'] = ~masks['synap']
 weights_masked = ssmu.mask_weights_to_nan(weights, masks['irm_nans'], masks['corr_nans'])
 
 # Figure 1
-pf.plot_all_irms(weights, cell_ids, fig_save_path=fig_save_path)
+pf.plot_irms(weights, cell_ids, use_chosen_ids=False, fig_save_path=fig_save_path)
+# pf.plot_irms(weights, cell_ids, use_chosen_ids=True, fig_save_path=fig_save_path)
 
 # am.plot_irm(model_weights=weights_masked['models']['synap']['dirms'],
 #             measured_irm=weights_masked['data']['test']['irms'],
@@ -287,7 +293,7 @@ pf.plot_all_irms(weights, cell_ids, fig_save_path=fig_save_path)
 #             cell_ids=cell_ids['all'], cell_ids_chosen=cell_ids['chosen'],
 #             fig_save_path=fig_save_path)
 
-# pf.plot_irfs(weights_masked, masks, cell_ids, window, num_plot=20, fig_save_path=fig_save_path)
+pf.plot_irfs(weights_masked, masks, cell_ids, window, num_plot=20, fig_save_path=fig_save_path)
 # pf.plot_irfs_train_test(weights_masked, masks, cell_ids, window, num_plot=20, fig_save_path=fig_save_path)
 
 # pf.weight_prediction(weights_masked, 'irms', fig_save_path=fig_save_path)
@@ -298,7 +304,7 @@ pf.plot_all_irms(weights, cell_ids, fig_save_path=fig_save_path)
 # pf.weights_vs_connectome(weights_masked, masks, metric=metric, fig_save_path=fig_save_path)
 
 # Figure 2
-# pf.plot_dirfs(weights_masked, masks, cell_ids, window, fig_save_path=fig_save_path)
+pf.plot_dirfs(weights_masked, masks, cell_ids, window, fig_save_path=fig_save_path)
 # pf.plot_dirfs_train_test(weights_masked, masks, cell_ids, window, chosen_mask=masks['synap'], num_plot=10, fig_save_path=fig_save_path)
 # pf.plot_dirfs_train_test(weights_masked, masks, cell_ids, window, chosen_mask=masks['unconnected'], num_plot=10, fig_save_path=fig_save_path)
 # pf.plot_dirm_diff(weights_masked, masks, cell_ids, window, num_plot=10, fig_save_path=fig_save_path)

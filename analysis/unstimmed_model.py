@@ -104,7 +104,7 @@ else:
     # sample the unstimulated model using these inputs
     model_unstim_sampled = []
     for i in new_inputs:
-        model_unstim_sampled.append(model_unstim.sample(num_time=i.shape[0], inputs_list=[i], add_noise=False)['emissions'][0])
+        model_unstim_sampled.append(model_unstim.sample(num_time=i.shape[0], inputs=i, add_noise=False)['emissions'])
 
     data_unstim['model_sampled_stimmed'] = model_unstim_sampled
     data_unstim_file = open(path_unstim / 'data_train.pkl', 'wb')
