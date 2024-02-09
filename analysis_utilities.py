@@ -13,6 +13,12 @@ def auto_select_ids(inputs, cell_ids, num_neurons=10):
     return cell_ids_chosen
 
 
+def nan_argsort(data):
+    sorted_inds = np.argsort(data)
+    sorted_inds = sorted_inds[~np.isnan(data[sorted_inds])]
+    return sorted_inds
+
+
 def p_norm(data, power=1, axis=None):
     return np.nanmean(np.abs(data)**power, axis=axis)**(1/power)
 

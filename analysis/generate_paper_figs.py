@@ -28,12 +28,12 @@ q_alpha = run_params['q_alpha']
 required_num_stim = run_params['required_num_stim']
 sub_pre_stim = run_params['sub_pre_stim']
 window = run_params['window']
-cell_ids_chosen = run_params['cell_ids_chosen']
 num_stim_sweep_params = run_params['num_stim_sweep_params']
 num_obs_sweep_params = run_params['num_obs_sweep_params']
 rng = np.random.default_rng(run_params['random_seed'])
 metric = getattr(met, run_params['metric'])
 filter_tau = run_params['filter_tau']
+num_chosen = run_params['num_cell_ids_chosen']
 
 # get the models
 models = {}
@@ -85,7 +85,7 @@ else:
     pickle.dump(data_test, data_test_file)
     data_test_file.close()
 
-cell_ids = {'all': data_test['cell_ids'], 'chosen': cell_ids_chosen}
+cell_ids = {'all': data_test['cell_ids']}
 sample_rate = models['synap'].sample_rate
 
 # get data IRMs before interpolation
@@ -220,9 +220,9 @@ for m in models:
                             'eirms': np.sum(posterior_dicts[m]['eirfs'], axis=0) / sample_rate,
                             }
 
-    abs_dirms = np.abs(weights['models'][m]['dirms'])
-    dirms_binarized = abs_dirms > (np.nanstd(abs_dirms) / std_factor)
-    weights['models'][m]['dirms_binarized'] = dirms_binarized.astype(float)
+    abs_eirms = np.abs(weights['models'][m]['dirms'])
+    eirms_binarized = abs_eirms > (np.nanstd(abs_eirms) / std_factor)
+    weights['models'][m]['eirms_binarized'] = eirms_binarized.astype(float)
 
     if save_post:
         # save the posterior dicts so the irfs and dirfs are saved
@@ -282,8 +282,13 @@ masks['unconnected'] = ~masks['synap']
 
 weights_masked = ssmu.mask_weights_to_nan(weights, masks['irm_nans'], masks['corr_nans'])
 
+# get the highlighted cell IDs
+stim_in_both = num_stim_train.diagonal() * num_stim_test.diagonal()
+stim_in_both_inds = np.argsort(stim_in_both)[::-1][:num_chosen]
+cell_ids['chosen'] = sorted([cell_ids['all'][i] for i in stim_in_both_inds])
+
 # Figure 1
-pf.plot_irms(weights, cell_ids, use_chosen_ids=False, fig_save_path=fig_save_path)
+# pf.plot_irms(weights, cell_ids, use_chosen_ids=False, fig_save_path=fig_save_path)
 # pf.plot_irms(weights, cell_ids, use_chosen_ids=True, fig_save_path=fig_save_path)
 
 # am.plot_irm(model_weights=weights_masked['models']['synap']['dirms'],
@@ -293,18 +298,18 @@ pf.plot_irms(weights, cell_ids, use_chosen_ids=False, fig_save_path=fig_save_pat
 #             cell_ids=cell_ids['all'], cell_ids_chosen=cell_ids['chosen'],
 #             fig_save_path=fig_save_path)
 
-pf.plot_irfs(weights_masked, masks, cell_ids, window, num_plot=20, fig_save_path=fig_save_path)
+# pf.plot_irfs(weights_masked, masks, cell_ids, window, num_plot=20, fig_save_path=fig_save_path)
 # pf.plot_irfs_train_test(weights_masked, masks, cell_ids, window, num_plot=20, fig_save_path=fig_save_path)
 
-# pf.weight_prediction(weights_masked, 'irms', fig_save_path=fig_save_path)
-# pf.weight_prediction_sweep(weights_masked, masks, 'irms', fig_save_path=fig_save_path)
-# pf.weight_prediction(weights_masked, 'corr', fig_save_path=fig_save_path)
-# pf.weight_prediction_sweep(weights_masked, masks, 'corr', fig_save_path=fig_save_path)
-
-# pf.weights_vs_connectome(weights_masked, masks, metric=metric, fig_save_path=fig_save_path)
+pf.weight_prediction(weights_masked, 'irms', fig_save_path=fig_save_path)
+pf.weight_prediction_sweep(weights_masked, masks, 'irms', fig_save_path=fig_save_path)
+pf.weight_prediction(weights_masked, 'corr', fig_save_path=fig_save_path)
+pf.weight_prediction_sweep(weights_masked, masks, 'corr', fig_save_path=fig_save_path)
+#
+# pf.weights_vs_connectome(weights, masks, metric=metric, fig_save_path=fig_save_path)
 
 # Figure 2
-pf.plot_dirfs(weights_masked, masks, cell_ids, window, fig_save_path=fig_save_path)
+# pf.plot_dirfs(weights_masked, masks, cell_ids, window, num_plot=20, fig_save_path=fig_save_path)
 # pf.plot_dirfs_train_test(weights_masked, masks, cell_ids, window, chosen_mask=masks['synap'], num_plot=10, fig_save_path=fig_save_path)
 # pf.plot_dirfs_train_test(weights_masked, masks, cell_ids, window, chosen_mask=masks['unconnected'], num_plot=10, fig_save_path=fig_save_path)
 # pf.plot_dirm_diff(weights_masked, masks, cell_ids, window, num_plot=10, fig_save_path=fig_save_path)

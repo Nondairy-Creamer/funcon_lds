@@ -150,8 +150,8 @@ def metric_ci(metric, y_true, y_hat, alpha=0.05, n_boot=1000, rng=np.random.defa
         y_hat_resampled = y_hat[sample_inds]
         booted_mi[n] = metric(y_true_resampled, y_hat_resampled)
 
-    mi_ci[0] = np.percentile(booted_mi, alpha * 100)
-    mi_ci[1] = np.percentile(booted_mi, (1 - alpha) * 100)
+    mi_ci[0] = np.percentile(booted_mi, alpha / 2 * 100)
+    mi_ci[1] = np.percentile(booted_mi, (1 - alpha / 2) * 100)
 
     mi_ci = np.abs(mi_ci - mi)
 
