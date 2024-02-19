@@ -18,10 +18,11 @@ plot_color = {'data': np.array([27, 158, 119]) / 255,
               'synap_randA': np.array([231, 41, 138]) / 255,
               # 'synap_randC': np.array([102, 166, 30]) / 255,
               'synap_randC': np.array([128, 128, 128]) / 255,
+              'anatomy': np.array([64, 64, 64]) / 255,
               }
 
 
-def weight_prediction(weights, weight_name, fig_save_path=None):
+def weight_prediction(weights, masks, weight_name, fig_save_path=None):
     # this figure will demonstrate that the model can reconstruct the observed data correlation and IRMs
     # first we will sweep across the data and restrict to neuron pairs where a stimulation event was recorded N times
     # we will demonstrate that ratio between the best possible correlation and our model correlation remains constant
@@ -36,9 +37,10 @@ def weight_prediction(weights, weight_name, fig_save_path=None):
     irms_baseline = met.nan_corr(weights['data']['train'][weight_name], weights['data']['test'][weight_name])[0]
 
     # get the comparison between model prediction and data irm/correlation
-    for m in ['synap', 'synap_randC']:
+    for m in [weights['models']['synap'][weight_name], weights['anatomy']['chem_conn'] + weights['anatomy']['gap_conn'], weights['models']['synap_randC'][weight_name]]:
+    # for m in [weights['models']['synap'][weight_name], masks['synap'], weights['models']['synap_randC'][weight_name]]:
         model_irms_to_measured_irms_test, model_irms_to_measured_irms_test_ci = \
-        met.nan_corr(weights['models'][m][weight_name], weights['data']['test'][weight_name])
+            met.nan_corr(m, weights['data']['test'][weight_name])
         model_irms_score.append(model_irms_to_measured_irms_test)
         model_irms_score_ci.append(model_irms_to_measured_irms_test_ci)
 
@@ -47,10 +49,10 @@ def weight_prediction(weights, weight_name, fig_save_path=None):
     y_val = np.array(model_irms_score)
     y_val_ci = np.stack(model_irms_score_ci).T
     plot_x = np.arange(y_val.shape[0])
-    bar_colors = [plot_color['synap'], plot_color['synap_randC']]
+    bar_colors = [plot_color['synap'], plot_color['anatomy'], plot_color['synap_randC']]
     plt.bar(plot_x, y_val / irms_baseline, color=bar_colors)
     plt.errorbar(plot_x, y_val / irms_baseline, y_val_ci / irms_baseline, fmt='none', color='k')
-    plt.xticks(plot_x, labels=['model', 'model\n+ scrambled labels'], rotation=45)
+    plt.xticks(plot_x, labels=['model', 'connectome', 'model\n+ scrambled labels'], rotation=45)
     # plt.xticks(plot_x, labels=['model', 'model\n+ scrambled labels', 'model\n+ scrambled anatomy'], rotation=45)
     plt.ylabel('% explainable correlation to measured ' + weight_name)
     plt.tight_layout()

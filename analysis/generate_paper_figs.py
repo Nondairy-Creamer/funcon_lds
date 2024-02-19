@@ -351,10 +351,10 @@ pairs = np.array([['AVDR', 'AVJR'],
 
 # pf.weights_vs_connectome(weights, masks, metric=metric, fig_save_path=fig_save_path / 'fig_1')
 
-pf.weight_prediction(weights_masked, 'irms', fig_save_path=fig_save_path / 'fig_1')
-# pf.weight_prediction_sweep(weights_masked, masks, 'irms', fig_save_path=fig_save_path / 'fig_1')
-pf.weight_prediction(weights_masked, 'corr', fig_save_path=fig_save_path / 'fig_1')
-# pf.weight_prediction_sweep(weights_masked, masks, 'corr', fig_save_path=fig_save_path / 'fig_1')
+pf.weight_prediction(weights_masked, masks, 'irms', fig_save_path=fig_save_path / 'fig_1')
+pf.weight_prediction_sweep(weights_masked, masks, 'irms', fig_save_path=fig_save_path / 'fig_1')
+pf.weight_prediction(weights_masked, masks, 'corr', fig_save_path=fig_save_path / 'fig_1')
+pf.weight_prediction_sweep(weights_masked, masks, 'corr', fig_save_path=fig_save_path / 'fig_1')
 
 # pf.plot_sampled_model(data_test, posterior_dicts['synap'], sample_rate=sample_rate, cell_ids=cell_ids,
 #                       num_neurons=15, fig_save_path=fig_save_path / 'fig_1')
