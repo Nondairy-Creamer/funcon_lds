@@ -5,7 +5,20 @@ import metrics as met
 import lgssm_utilities as ssmu
 import matplotlib as mpl
 import analysis_utilities as au
+import scipy.cluster.hierarchy as sch
+
+
+# colormap = mpl.colormaps['RdBu_r']
 colormap = mpl.colormaps['coolwarm']
+# colormap.set_bad(color=[0.8, 0.8, 0.8])
+
+plot_color = {'data': np.array([27, 158, 119]) / 255,
+              'synap': np.array([217, 95, 2]) / 255,
+              'unconstrained': np.array([117, 112, 179]) / 255,
+              'synap_randA': np.array([231, 41, 138]) / 255,
+              # 'synap_randC': np.array([102, 166, 30]) / 255,
+              'synap_randC': np.array([128, 128, 128]) / 255,
+              }
 
 
 def weight_prediction(weights, weight_name, fig_save_path=None):
@@ -34,14 +47,15 @@ def weight_prediction(weights, weight_name, fig_save_path=None):
     y_val = np.array(model_irms_score)
     y_val_ci = np.stack(model_irms_score_ci).T
     plot_x = np.arange(y_val.shape[0])
-    plt.bar(plot_x, y_val / irms_baseline)
+    bar_colors = [plot_color['synap'], plot_color['synap_randC']]
+    plt.bar(plot_x, y_val / irms_baseline, color=bar_colors)
     plt.errorbar(plot_x, y_val / irms_baseline, y_val_ci / irms_baseline, fmt='none', color='k')
     plt.xticks(plot_x, labels=['model', 'model\n+ scrambled labels'], rotation=45)
     # plt.xticks(plot_x, labels=['model', 'model\n+ scrambled labels', 'model\n+ scrambled anatomy'], rotation=45)
     plt.ylabel('% explainable correlation to measured ' + weight_name)
     plt.tight_layout()
 
-    plt.savefig(fig_save_path / ('measured_vs_model_' + weight_name + '.pdf'))
+    plt.savefig(fig_save_path / ('measured_vs_model_randC_' + weight_name + '.pdf'))
 
     model_irms_score = []
     model_irms_score_ci = []
@@ -57,14 +71,15 @@ def weight_prediction(weights, weight_name, fig_save_path=None):
     y_val = np.array(model_irms_score)
     y_val_ci = np.stack(model_irms_score_ci).T
     plot_x = np.arange(y_val.shape[0])
-    plt.bar(plot_x, y_val / irms_baseline)
+    bar_colors = [plot_color['synap'], plot_color['unconstrained'], plot_color['synap_randA']]
+    plt.bar(plot_x, y_val / irms_baseline, color=bar_colors)
     plt.errorbar(plot_x, y_val / irms_baseline, y_val_ci / irms_baseline, fmt='none', color='k')
     # plt.xticks(plot_x, labels=['model', 'model\n+ scrambled labels', 'model\n+ scrambled anatomy'], rotation=45)
     plt.xticks(plot_x, labels=['model', 'model\n+ unconstrained', 'model\n+ scrambled anatomy'], rotation=45)
     plt.ylabel('% explainable correlation to measured ' + weight_name)
     plt.tight_layout()
 
-    plt.savefig(fig_save_path / ('measured_vs_model_' + weight_name + '.pdf'))
+    plt.savefig(fig_save_path / ('measured_vs_model_randA_' + weight_name + '.pdf'))
 
     plt.show()
 
@@ -121,9 +136,9 @@ def weight_prediction_sweep(weights, masks, weight_name, fig_save_path=None):
     # plot model reconstruction of IRMs
     plt.figure()
     plt.subplot(1, 2, 1)
-    plt.errorbar(n_stim_sweep, irms_baseline_sweep, irms_baseline_sweep_ci, label='explainable correlation')
+    plt.errorbar(n_stim_sweep, irms_baseline_sweep, irms_baseline_sweep_ci, label='explainable correlation', color=plot_color['data'])
     for n, mcs, mcs_ci in zip(model_name, model_irms_score_sweep, model_irms_score_sweep_ci):
-        plt.errorbar(n_stim_sweep, mcs, mcs_ci, label=n)
+        plt.errorbar(n_stim_sweep, mcs, mcs_ci, label=n, color=plot_color[n])
     plt.xlabel('# of stimulation events')
     plt.ylabel('correlation to measured ' + weight_name)
     plt.legend()
@@ -131,7 +146,7 @@ def weight_prediction_sweep(weights, masks, weight_name, fig_save_path=None):
     plt.subplot(1, 2, 2)
     plt.plot(0, 0)
     for n, mcs, mcs_ci in zip(model_name, model_irms_score_sweep, model_irms_score_sweep_ci):
-        plt.errorbar(n_stim_sweep, mcs / irms_baseline_sweep, mcs_ci / irms_baseline_sweep, label=n)
+        plt.errorbar(n_stim_sweep, mcs / irms_baseline_sweep, mcs_ci / irms_baseline_sweep, label=n, color=plot_color[n])
     plt.xlabel('# of stimulation events')
     plt.ylabel('% explainable correlation to measured ' + weight_name)
     plt.tight_layout()
@@ -144,12 +159,12 @@ def weights_vs_connectome(weights, masks, metric=met.f_measure, rng=np.random.de
     # weights = ssmu.mask_weights_to_nan(weights, masks['irm_nans'], masks['corr_nans'], combine_masks=True)
 
     model_weights_conn, model_weights_conn_ci = met.metric_ci(metric, masks['synap'], weights['models']['synap']['eirms_binarized'], rng=rng)
-    data_corr_conn, data_corr_conn_ci = met.metric_ci(metric, masks['synap'], weights['data']['train']['corr_binarized'], rng=rng)
-    data_irm_conn, data_irm_conn_ci = met.metric_ci(metric, masks['synap'], weights['data']['train']['q'], rng=rng)
+    data_corr_conn, data_corr_conn_ci = met.nan_corr(masks['synap'], weights['data']['train']['corr_binarized'])
+    data_irm_conn, data_irm_conn_ci = met.nan_corr(masks['synap'], weights['data']['train']['q'])
     conn_null = met.metric_null(metric, masks['synap'])
 
-    model_weights = np.abs(weights['models']['synap']['eirms'])
-    synapse_counts = weights['anatomy']['chem_conn'] + weights['anatomy']['gap_conn']
+    model_weights = np.abs(weights['models']['synap']['eirms'][masks['synap']])
+    synapse_counts = (weights['anatomy']['chem_conn'] + weights['anatomy']['gap_conn'])[masks['synap']]
     weights_counts_corr, weights_counts_corr_ci = met.nan_corr(model_weights, synapse_counts)
 
     plt.figure()
@@ -159,13 +174,16 @@ def weights_vs_connectome(weights, masks, metric=met.f_measure, rng=np.random.de
 
     # plot model weight similarity to connectome
     plt.figure()
-    y_val = np.array([data_corr_conn, data_irm_conn, model_weights_conn])
-    y_val_ci = np.stack([data_corr_conn_ci, data_irm_conn_ci, model_weights_conn_ci]).T
+    y_val = np.array([data_corr_conn, data_irm_conn])
+    y_val_ci = np.stack([data_corr_conn_ci, data_irm_conn_ci]).T
+    # y_val = np.array([data_corr_conn, data_irm_conn, model_weights_conn])
+    # y_val_ci = np.stack([data_corr_conn_ci, data_irm_conn_ci, model_weights_conn_ci]).T
     plot_x = np.arange(y_val.shape[0])
     plt.bar(plot_x, y_val)
     plt.errorbar(plot_x, y_val, y_val_ci, fmt='none', color='k')
-    plt.axhline(conn_null, color='k', linestyle='--')
-    plt.xticks(plot_x, labels=['data correlation', 'data IRMs', 'model weights'], rotation=45)
+    plt.ylim([0, 1])
+    # plt.axhline(conn_null, color='k', linestyle='--')
+    plt.xticks(plot_x, labels=['data correlation', 'data STAMs'])
     plt.ylabel('similarity to connectome')
     plt.tight_layout()
 
@@ -181,12 +199,17 @@ def plot_eigenvalues(models, cell_ids):
     A = model.dynamics_weights
     eig_vals, eig_vects = np.linalg.eig(A)
 
+    # sort_inds = np.argsort(np.abs(eig_vals))
     sort_inds = np.argsort(np.abs(eig_vals))[::-1]
 
     eig_vals = eig_vals[sort_inds]
     eig_vects = eig_vects[:, sort_inds]
-    eig_vects = np.stack(np.split(eig_vects, model.dynamics_lags, axis=0))
-    eig_vects = np.mean(np.abs(eig_vects), axis=0)
+    remove_complex_conj = np.where(np.iscomplex(eig_vals))[0][::2]
+    eig_vals = np.delete(eig_vals, remove_complex_conj)
+    eig_vects = np.delete(eig_vects, remove_complex_conj, axis=1)
+    eig_vects_stacked = np.stack(np.split(eig_vects, model.dynamics_lags, axis=0))
+    eig_vects_comb_real = np.mean(np.real(eig_vects_stacked), axis=0)
+    eig_vects_comb_abs = np.mean(np.abs(eig_vects_stacked), axis=0)
 
     plt.figure()
     plt.subplot(1, 2, 1)
@@ -197,33 +220,54 @@ def plot_eigenvalues(models, cell_ids):
     plt.plot(np.abs(eig_vals[:100]))
     plt.xlabel('eigenvalue')
 
-    plt.figure()
+    fig = plt.figure()
+    ax = fig.add_subplot()
     plt.scatter(np.real(eig_vals), np.imag(eig_vals))
+    plt.plot(np.cos(np.linspace(0, 2 * np.pi, 100)), np.sin(np.linspace(0, 2 * np.pi, 100)))
+    plt.xlim([-1, 1])
+    plt.ylim([-1, 1])
+    ax.set_aspect('equal', 'box')
     plt.xlabel('real[eigenvalues]')
     plt.ylabel('imag[eigenvalues]')
 
-    ylim_max = np.max(eig_vects)
-    ylim_plot = (0, ylim_max)
+    ylim_max = np.max(np.abs(eig_vects_comb_real))
+    ylim_plot = (-ylim_max, ylim_max)
 
-    num_eigvects_to_plot = 20
+    num_eigvects_to_plot = 10
     num_eigvect_inds_to_plot = 20
     plot_x = np.arange(num_eigvect_inds_to_plot)
 
     for n in range(num_eigvects_to_plot):
         cell_ids_plot = cell_ids['all'].copy()
-        this_eig_vect = eig_vects[:, n]
-        cell_sort_inds = np.argsort(this_eig_vect)[::-1]
-        this_eig_vect = this_eig_vect[cell_sort_inds]
+        this_eig_vect_comb_real = eig_vects_comb_real[:, n]
+        this_eig_vect_comb_abs = eig_vects_comb_abs[:, n]
+        this_eig_vect_stacked = eig_vects_stacked[:, :, n]
+
+        cell_sort_inds = np.argsort(this_eig_vect_comb_abs)[::-1]
+
+        this_eig_vect_comb_abs = this_eig_vect_comb_abs[cell_sort_inds]
+        this_eig_vect_comb_real = this_eig_vect_comb_real[cell_sort_inds]
+        this_eig_vect_stacked = this_eig_vect_stacked[:, cell_sort_inds]
+
         cell_ids_plot = [cell_ids_plot[i] for i in cell_sort_inds[:num_eigvect_inds_to_plot]]
 
         plt.figure()
-        plt.scatter(plot_x, this_eig_vect[:num_eigvect_inds_to_plot])
+        plt.subplot(3, 1, 1)
+        plt.scatter(plot_x, this_eig_vect_comb_abs[:num_eigvect_inds_to_plot])
         plt.ylim(ylim_plot)
+        # plt.xticks(plot_x, cell_ids_plot, rotation=90)
+
+        plt.subplot(3, 1, 2)
+        plt.scatter(plot_x, this_eig_vect_comb_real[:num_eigvect_inds_to_plot])
+        plt.ylim(ylim_plot)
+        # plt.xticks(plot_x, cell_ids_plot, rotation=90)
+
+        plt.subplot(3, 1, 3)
+        plt.imshow(np.real(this_eig_vect_stacked[:, :num_eigvect_inds_to_plot]))
         plt.xticks(plot_x, cell_ids_plot, rotation=90)
+        plt.ylabel('time lags')
 
     plt.show()
-
-    a=1
 
 
 def unconstrained_vs_constrained_model(weights, fig_save_path=None):
@@ -272,24 +316,43 @@ def unconstrained_vs_constrained_model(weights, fig_save_path=None):
     plt.show()
 
 
-def plot_irms(weights, cell_ids, use_chosen_ids=False, fig_save_path=None):
+def plot_irms(weights, cell_ids, num_neurons=None, fig_save_path=None):
     font_size = 8
-    # get the neurons to plot
-    if use_chosen_ids:
-        plot_x = np.arange(len(cell_ids['chosen']))
-        neuron_inds = [cell_ids['all'].index(i) for i in cell_ids['chosen']]
-        cell_ids_plot = cell_ids['chosen']
-    else:
-        plot_x = np.arange(len(cell_ids['all']))
-        neuron_inds = [i for i in range(len(cell_ids['all']))]
-        cell_ids_plot = cell_ids['all']
 
     data_irms = weights['data']['test']['irms'].copy()
     data_corr = weights['data']['test']['corr'].copy()
+
+    not_all_nan = ~np.all(np.isnan(data_corr), axis=0)
+    data_irms = data_irms[:, not_all_nan][not_all_nan, :]
+    data_corr = data_corr[:, not_all_nan][not_all_nan, :]
+    cell_ids_all = cell_ids['all'].copy()
+    cell_ids_all = [cell_ids_all[i] for i in range(len(cell_ids_all)) if not_all_nan[i]]
+
+    # get the neurons to plot
+    if num_neurons is None:
+        cell_ids_plot = cell_ids_all
+        neuron_inds = [i for i in range(len(cell_ids_all))]
+    else:
+        cell_ids_plot = sorted(cell_ids['sorted'][:num_neurons])
+        neuron_inds = [cell_ids_all.index(i) for i in cell_ids_plot]
+
     data_irms[np.eye(data_irms.shape[0], dtype=bool)] = np.nan
     data_corr[np.eye(data_corr.shape[0], dtype=bool)] = np.nan
     data_irms = data_irms[np.ix_(neuron_inds, neuron_inds)]
     data_corr = data_corr[np.ix_(neuron_inds, neuron_inds)]
+
+    # get euclidian distances for correlation matrix
+    # corr_dist = au.condensed_distance(data_corr)
+    # link = sch.linkage(corr_dist)
+    # dendo = sch.dendrogram(link)
+    # new_order = dendo['leaves']
+    # new_order = np.arange(data_corr.shape[0])
+
+    # data_irms = data_irms[np.ix_(new_order, new_order)]
+    # data_corr = data_corr[np.ix_(new_order, new_order)]
+    # cell_ids_plot = [cell_ids_plot[i] for i in new_order]
+
+    plot_x = np.arange(len(cell_ids_plot))
 
     plt.figure()
     plt.imshow(data_irms, interpolation='nearest', cmap=colormap)
@@ -299,7 +362,10 @@ def plot_irms(weights, cell_ids, use_chosen_ids=False, fig_save_path=None):
     color_limits = (-color_limits, color_limits)
     plt.clim(color_limits)
     plt.title('data IRMs')
-    plt.savefig(fig_save_path / 'full_data_irms.pdf')
+    if num_neurons is None:
+        plt.savefig(fig_save_path / 'full_data_irms.pdf')
+    else:
+        plt.savefig(fig_save_path / 'sampled_data_irms.pdf')
 
     plt.figure()
     plt.imshow(data_corr, interpolation='nearest', cmap=colormap)
@@ -309,12 +375,20 @@ def plot_irms(weights, cell_ids, use_chosen_ids=False, fig_save_path=None):
     color_limits = (-color_limits, color_limits)
     plt.clim(color_limits)
     plt.title('data correlation matrix')
-    plt.savefig(fig_save_path / 'full_data_corr.pdf')
+    if num_neurons is None:
+        plt.savefig(fig_save_path / 'full_data_corr.pdf')
+    else:
+        plt.savefig(fig_save_path / 'sampled_data_corr.pdf')
 
     for m in ['synap', 'unconstrained', 'synap_randA']:
         neurons_to_mask = ['AIAL']
         model_irms = weights['models'][m]['irms'].copy()
         model_corr = weights['models'][m]['corr'].copy()
+
+        model_irms = model_irms[:, not_all_nan][not_all_nan, :]
+        model_corr = model_corr[:, not_all_nan][not_all_nan, :]
+        # model_irms = model_irms[np.ix_(new_order, new_order)]
+        # model_corr = model_corr[np.ix_(new_order, new_order)]
 
         model_irms[np.eye(model_irms.shape[0], dtype=bool)] = np.nan
         model_corr[np.eye(model_corr.shape[0], dtype=bool)] = np.nan
@@ -335,7 +409,10 @@ def plot_irms(weights, cell_ids, use_chosen_ids=False, fig_save_path=None):
         color_limits = (-color_limits, color_limits)
         plt.clim(color_limits)
         plt.title(m + ' IRMs')
-        plt.savefig(fig_save_path / 'full_model_irms.pdf')
+        if num_neurons is None:
+            plt.savefig(fig_save_path / ('full_data_irms_' + m + '.pdf'))
+        else:
+            plt.savefig(fig_save_path / ('sampled_data_irms_' + m + '.pdf'))
 
         plt.figure()
         plt.imshow(model_corr, interpolation='nearest', cmap=colormap)
@@ -345,7 +422,10 @@ def plot_irms(weights, cell_ids, use_chosen_ids=False, fig_save_path=None):
         color_limits = (-color_limits, color_limits)
         plt.clim(color_limits)
         plt.title(m + ' correlation matrix')
-        plt.savefig(fig_save_path / 'full_model_corr.pdf')
+        if num_neurons is None:
+            plt.savefig(fig_save_path / ('full_data_corr_' + m + '.pdf'))
+        else:
+            plt.savefig(fig_save_path / ('sampled_data_corr_' + m + '.pdf'))
 
     plt.show()
 
@@ -380,7 +460,7 @@ def plot_irfs(weights, masks, cell_ids, window, num_plot=10, fig_save_path=None)
         plt.fill_between(plot_x, this_irf - this_irf_sem, this_irf + this_irf_sem, alpha=0.4)
 
         plt.plot(plot_x, model_irfs[:, plot_ind], label='model irf')
-        plt.title(cell_ids[1, plot_ind] + ' -> ' + cell_ids[0, plot_ind])
+        plt.title(cell_ids[plot_ind, 1] + ' -> ' + cell_ids[plot_ind, 0])
         plt.legend()
         plt.axvline(0, color='k', linestyle='--')
         plt.axhline(0, color='k', linestyle='--')
@@ -447,11 +527,10 @@ def plot_irfs_train_test(weights, masks, cell_ids, window, chosen_mask=None, num
     plt.show()
 
 
-def plot_dirfs(weights, masks, cell_ids, window, num_plot=10, fig_save_path=None):
+def plot_dirfs(weights, masks, cell_ids, window, chosen_mask=None, num_plot=10, fig_save_path=None):
     weights = ssmu.mask_weights_to_nan(weights, masks['irm_nans_num_stim'], masks['corr_nans_num_stim'])
 
-    no_nan_irfs = ssmu.remove_nan_irfs(weights, cell_ids, chosen_mask=masks['synap'])
-    # no_nan_irfs = ssmu.remove_nan_irfs(weights, cell_ids, chosen_mask=masks['unconnected'])
+    no_nan_irfs = ssmu.remove_nan_irfs(weights, cell_ids, chosen_mask=chosen_mask)
 
     data_irfs = no_nan_irfs['data_irfs']
     data_irfs_sem = no_nan_irfs['data_irfs_sem']
@@ -469,7 +548,9 @@ def plot_dirfs(weights, masks, cell_ids, window, num_plot=10, fig_save_path=None
 
     plot_x = np.linspace(-window[0], window[1], data_irfs.shape[0])
 
-    for i in range(num_plot):
+    offset = 0
+    # offset = int(irm_dirm_mag_inds.shape[0] / 2)
+    for i in range(offset, offset + num_plot):
         plt.figure()
         plot_ind = irm_dirm_mag_inds[i]
         this_irf = data_irfs[:, plot_ind]
@@ -481,7 +562,7 @@ def plot_dirfs(weights, masks, cell_ids, window, num_plot=10, fig_save_path=None
         plt.plot(plot_x, model_irfs[:, plot_ind], label='model irf')
         plt.plot(plot_x, model_dirfs[:, plot_ind], label='model dirf')
         # plt.plot(plot_x, model_eirfs[:, plot_ind], label='model eirf')
-        plt.title(cell_ids[1, plot_ind] + ' -> ' + cell_ids[0, plot_ind])
+        plt.title(cell_ids[plot_ind, 1] + ' -> ' + cell_ids[plot_ind, 0])
         plt.legend()
         plt.axvline(0, color='k', linestyle='--')
         plt.axhline(0, color='k', linestyle='--')
@@ -490,7 +571,55 @@ def plot_dirfs(weights, masks, cell_ids, window, num_plot=10, fig_save_path=None
 
         plt.savefig(fig_save_path / ('dirfs_' + str(i) + '.pdf'))
 
+        plt.show()
+
+        a=1
+
     plt.show()
+
+
+def plot_specific_dirfs(weights, masks, cell_ids, pairs, window, fig_save_path=None):
+    weights = ssmu.mask_weights_to_nan(weights, masks['irm_nans_num_stim'], masks['corr_nans_num_stim'])
+
+    no_nan_irfs = ssmu.remove_nan_irfs(weights, cell_ids)
+
+    data_irfs = no_nan_irfs['data_irfs']
+    data_irfs_sem = no_nan_irfs['data_irfs_sem']
+    model_irfs = no_nan_irfs['model_irfs']
+    model_dirfs = no_nan_irfs['model_dirfs']
+    model_eirfs = no_nan_irfs['model_eirfs']
+    model_irms = no_nan_irfs['model_irms']
+    cell_ids = no_nan_irfs['cell_ids']
+
+    chosen_inds = np.zeros(pairs.shape[0], dtype=int)
+    for pi, p in enumerate(pairs):
+        chosen_inds[pi] = np.where(np.all(cell_ids == p, axis=1))[0]
+
+    plot_x = np.linspace(-window[0], window[1], data_irfs.shape[0])
+
+    for i, plot_ind in enumerate(chosen_inds):
+        plt.figure()
+        this_irf = data_irfs[:, plot_ind]
+        this_irf_sem = data_irfs_sem[:, plot_ind]
+
+        plt.plot(plot_x, this_irf, color=plot_color['data'], label='data STA')
+        plt.fill_between(plot_x, this_irf - this_irf_sem, this_irf + this_irf_sem, color=plot_color['data'], alpha=0.4)
+
+        plt.plot(plot_x, model_irfs[:, plot_ind], color=plot_color['synap'], label='model STA')
+        plt.plot(plot_x, model_dirfs[:, plot_ind], color=plot_color['synap'], linestyle='dashed', label='model direct STA')
+        # plt.plot(plot_x, model_eirfs[:, plot_ind], label='model eirf')
+        stim_string = cell_ids[plot_ind, 1] + ' -> ' + cell_ids[plot_ind, 0]
+        plt.title(stim_string)
+        plt.legend()
+        plt.axvline(0, color='k', linestyle='--')
+        plt.axhline(0, color='k', linestyle='--')
+        plt.xlabel('time (s)')
+        plt.ylabel('cell activity')
+
+        plt.savefig(fig_save_path / ('dirfs_' + stim_string + '.pdf'))
+
+    plt.show()
+    a=1
 
 
 def plot_dirfs_train_test(weights, masks, cell_ids, window, chosen_mask=None, num_plot=10, fig_save_path=None):
@@ -814,7 +943,6 @@ def predict_chem_synapse_sign(weights, masks, cell_ids, metric=met.accuracy, rng
 
     # calculate a two-sample bootstrap test
     n_boot = 10000
-    alpha = 0.05
     booted_diff = np.zeros(n_boot)
 
     # get rid of nans
@@ -1039,4 +1167,188 @@ def corr_zimmer_paper(weights, models, cell_ids):
     plt.ylabel('probability density')
 
     plt.show()
+
+
+def plot_missing_neuron(data, posterior_dict, sample_rate=2, fig_save_path=None):
+    cell_ids = data['cell_ids']
+    posterior_missing = posterior_dict['posterior_missing']
+    emissions = data['emissions']
+    rng = np.random.default_rng(0)
+
+    # calculate the correlation of the missing to measured neurons
+    missing_corr = np.zeros((len(emissions), emissions[0].shape[1]))
+    for ei, pi in zip(range(len(emissions)), range(len(posterior_missing))):
+        for n in range(emissions[ei].shape[1]):
+            if np.mean(~np.isnan(emissions[ei][:, n])) > 0.5:
+                missing_corr[ei, n] = met.nan_corr(emissions[ei][:, n], posterior_missing[ei][:, n])[0]
+            else:
+                missing_corr[ei, n] = np.nan
+
+    # calculate a null distribution
+    missing_corr_null = np.zeros((len(emissions), emissions[0].shape[1]))
+    for ei, pi in zip(range(len(emissions)), range(len(posterior_missing))):
+        random_assignment = rng.permutation(emissions[ei].shape[1])
+
+        for n in range(emissions[ei].shape[1]):
+            if np.mean(~np.isnan(emissions[ei][:, n])) > 0.5:
+                missing_corr_null[ei, n] = met.nan_corr(emissions[ei][:, n], posterior_missing[ei][:, random_assignment[n]])[0]
+            else:
+                missing_corr_null[ei, n] = np.nan
+
+    # get the p value that the reconstructed neuron accuracy is significantly different than the null
+    p = au.bootstrap_p(missing_corr - missing_corr_null, n_boot=1000)
+
+    plt.figure()
+    plt.hist(missing_corr_null.reshape(-1), label='null', alpha=0.5, color='k')
+    plt.hist(missing_corr.reshape(-1), label='missing data', alpha=0.5, color=plot_color['synap'])
+    plt.title('p = ' + str(p))
+    plt.legend()
+    plt.xlabel('correlation')
+    plt.ylabel('count')
+
+    if fig_save_path is not None:
+        plt.savefig(fig_save_path / 'recon_histogram.pdf')
+
+    sorted_corr_inds = au.nan_argsort(missing_corr.reshape(-1))
+    best_offset = -3  # AVER
+    median_offset = 5  # URYDL
+    best_neuron = np.unravel_index(sorted_corr_inds[-1 + best_offset], missing_corr.shape)
+    median_neuron = np.unravel_index(sorted_corr_inds[int(sorted_corr_inds.shape[0] / 2) + median_offset], missing_corr.shape)
+
+    best_data_ind = best_neuron[0]
+    best_neuron_ind = best_neuron[1]
+    median_data_ind = median_neuron[0]
+    median_neuron_ind = median_neuron[1]
+
+    plot_x = np.arange(emissions[best_data_ind].shape[0]) / sample_rate
+    plt.figure()
+    plt.subplot(2, 1, 1)
+    plt.title('best held out neuron: ' + cell_ids[best_neuron_ind])
+    plt.plot(plot_x, emissions[best_data_ind][:, best_neuron_ind], label='data', color=plot_color['data'])
+    plt.plot(plot_x, posterior_missing[best_data_ind][:, best_neuron_ind], label='posterior', color=plot_color['synap'])
+    plt.xlabel('time (s)')
+    plt.ylabel('neural activity')
+
+    plot_x = np.arange(emissions[median_data_ind].shape[0]) / sample_rate
+    # plot_x = np.arange(1000) * sample_rate
+    plt.subplot(2, 1, 2)
+    plt.title('median held out neuron: ' + cell_ids[median_neuron_ind])
+    plt.plot(plot_x, emissions[median_data_ind][:, median_neuron_ind], label='data', color=plot_color['data'])
+    plt.plot(plot_x, posterior_missing[median_data_ind][:, median_neuron_ind], label='posterior', color=plot_color['synap'])
+    plt.ylim(plt.ylim()[0], 1.2)
+    plt.xlabel('time (s)')
+    plt.ylabel('neural activity')
+
+    plt.tight_layout()
+
+    if fig_save_path is not None:
+        plt.savefig(fig_save_path / 'recon_examples.pdf')
+
+    plt.show()
+
+    return
+
+
+def plot_sampled_model(data, posterior_dict, cell_ids, sample_rate=2, num_neurons=10,
+                       window_size=1000, fig_save_path=None):
+    emissions = data['emissions']
+    inputs = data['inputs']
+    posterior = posterior_dict['posterior']
+    model_sampled = posterior_dict['model_sampled_noise']
+
+    cell_ids_chosen = sorted(cell_ids['sorted'][:num_neurons])
+    neuron_inds_chosen = np.array([cell_ids['all'].index(i) for i in cell_ids_chosen])
+
+    # get all the inputs but with only the chosen neurons
+    inputs_truncated = [i[:, neuron_inds_chosen] for i in inputs]
+    emissions_truncated = [e[:, neuron_inds_chosen] for e in emissions]
+    data_ind_chosen, time_window = au.get_example_data_set(inputs_truncated, emissions_truncated, window_size=window_size)
+
+    emissions_chosen = emissions[data_ind_chosen][time_window[0]:time_window[1], neuron_inds_chosen]
+    inputs_chosen = inputs[data_ind_chosen][time_window[0]:time_window[1], neuron_inds_chosen]
+    all_inputs = inputs[data_ind_chosen][time_window[0]:time_window[1], :]
+    posterior_chosen = posterior[data_ind_chosen][time_window[0]:time_window[1], neuron_inds_chosen]
+    model_sampled_chosen = model_sampled[data_ind_chosen][time_window[0]:time_window[1], neuron_inds_chosen]
+
+    stim_events = np.where(np.sum(all_inputs, axis=1) > 0)[0]
+    stim_ids = [cell_ids['all'][np.where(all_inputs[i, :])[0][0]] for i in stim_events]
+
+    filt_shape = np.ones(5)
+    for i in range(inputs_chosen.shape[1]):
+        inputs_chosen[:, i] = np.convolve(inputs_chosen[:, i], filt_shape, mode='same')
+
+    plot_y = np.arange(len(cell_ids_chosen))
+    plot_x = np.arange(0, emissions_chosen.shape[0], 60 * sample_rate)
+
+    plt.figure()
+    cmax = np.nanpercentile(np.abs((model_sampled_chosen, posterior_chosen)), plot_percent)
+
+    plt.subplot(3, 1, 1)
+    plt.imshow(inputs_chosen.T, interpolation='nearest', aspect='auto', cmap=colormap)
+    plt.title('stimulation events')
+    plt.yticks(plot_y, cell_ids_chosen)
+    plt.xticks(plot_x, plot_x / sample_rate)
+    plt.xlabel('time (s)')
+    plt.clim((-1, 1))
+    plt.colorbar()
+
+    plt.subplot(3, 1, 2)
+    plt.imshow(emissions_chosen.T, interpolation='nearest', aspect='auto', cmap=colormap)
+    plt.clim((-cmax, cmax))
+    plt.title('data')
+    plt.yticks(plot_y, cell_ids_chosen)
+    plt.xticks(plot_x, plot_x / sample_rate)
+    plt.xlabel('time (s)')
+    plt.colorbar()
+
+    plt.subplot(3, 1, 3)
+    plt.imshow(model_sampled_chosen.T, interpolation='nearest', aspect='auto', cmap=colormap)
+    plt.clim((-cmax, cmax))
+    plt.title('sampled model')
+    plt.yticks(plot_y, cell_ids_chosen)
+    plt.xticks(plot_x, plot_x / sample_rate)
+    plt.xlabel('time (s)')
+    plt.colorbar()
+
+    plt.tight_layout()
+
+    if fig_save_path is not None:
+        plt.savefig(fig_save_path / 'emissions_vs_sampled.pdf')
+
+    # plot the sampled model as time traces
+    data_offset = -np.arange(emissions_chosen.shape[1])
+    emissions_chosen = emissions_chosen + data_offset[None, :]
+    model_sampled_chosen = model_sampled_chosen + data_offset[None, :]
+
+    plt.figure()
+    for stim_time, stim_name in zip(stim_events, stim_ids):
+        plt.axvline(stim_time, color=[0.6, 0.6, 0.6], linestyle='--')
+        plt.text(stim_time, 1.5, stim_name, rotation=90)
+    plt.plot(emissions_chosen)
+    plt.ylim([data_offset[-1] - 1, 1])
+    plt.yticks(data_offset, cell_ids_chosen)
+    plt.xticks(plot_x, (plot_x / sample_rate).astype(int))
+    plt.xlabel('time (s)')
+    plt.tight_layout()
+
+    if fig_save_path is not None:
+        plt.savefig(fig_save_path / 'emissions_time_traces.pdf')
+
+    plt.figure()
+    for stim_time, stim_name in zip(stim_events, stim_ids):
+        plt.axvline(stim_time, color=[0.6, 0.6, 0.6], linestyle='--')
+        plt.text(stim_time, 1.5, stim_name, rotation=90)
+    plt.plot(model_sampled_chosen)
+    plt.ylim([data_offset[-1] - 1, 1])
+    plt.yticks(data_offset, cell_ids_chosen)
+    plt.xticks(plot_x, (plot_x / sample_rate).astype(int))
+    plt.xlabel('time (s)')
+    plt.tight_layout()
+
+    if fig_save_path is not None:
+        plt.savefig(fig_save_path / 'model_sampled_time_traces.pdf')
+
+    plt.show()
+
+    return
 

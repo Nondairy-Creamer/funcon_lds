@@ -8,7 +8,6 @@ import numpy as np
 import pickle
 import loading_utilities as lu
 import analysis.paper_figures as pf
-import copy
 
 run_params = lu.get_run_params(param_name='../analysis_params/paper_figures.yml')
 
@@ -148,6 +147,10 @@ if filter_tau > 0:
     for di, d in enumerate(data_test['emissions']):
         data_test['emissions'][di] = ss.convolve2d(d, filt_shape[:, None], mode='full')[:-filt_shape.size+1, :]
 
+    for pi, p in enumerate(posterior_dicts):
+        for di, d in enumerate(posterior_dicts[p]['model_sampled_noise']):
+            posterior_dicts[p]['model_sampled_noise'][di] = ss.convolve2d(d, filt_shape[:, None], mode='full')[:-filt_shape.size+1, :]
+
 # get data IRFs after interpolation
 data_irfs_train, data_irfs_sem_train = \
     ssmu.get_impulse_response_functions(data_train['emissions'], data_train['inputs'],
@@ -284,9 +287,10 @@ weights_masked = ssmu.mask_weights_to_nan(weights, masks['irm_nans'], masks['cor
 
 # get the highlighted cell IDs
 stim_in_both = num_stim_train.diagonal() * num_stim_test.diagonal()
-stim_in_both_inds = np.argsort(stim_in_both)[::-1][:num_chosen]
-cell_ids['chosen'] = sorted([cell_ids['all'][i] for i in stim_in_both_inds])
+stim_in_both_inds = np.argsort(stim_in_both)[::-1]
+cell_ids['sorted'] = [cell_ids['all'][i] for i in stim_in_both_inds]
 
+### Exploration
 # Figure 1
 # pf.plot_irms(weights, cell_ids, use_chosen_ids=False, fig_save_path=fig_save_path)
 # pf.plot_irms(weights, cell_ids, use_chosen_ids=True, fig_save_path=fig_save_path)
@@ -295,21 +299,22 @@ cell_ids['chosen'] = sorted([cell_ids['all'][i] for i in stim_in_both_inds])
 #             measured_irm=weights_masked['data']['test']['irms'],
 #             model_irm=weights_masked['models']['synap']['irms'],
 #             data_corr=weights_masked['data']['train']['corr'],
-#             cell_ids=cell_ids['all'], cell_ids_chosen=cell_ids['chosen'],
+#             cell_ids=cell_ids['all'], cell_ids_chosen=cell_ids['sorted'],
 #             fig_save_path=fig_save_path)
 
 # pf.plot_irfs(weights_masked, masks, cell_ids, window, num_plot=20, fig_save_path=fig_save_path)
 # pf.plot_irfs_train_test(weights_masked, masks, cell_ids, window, num_plot=20, fig_save_path=fig_save_path)
 
-pf.weight_prediction(weights_masked, 'irms', fig_save_path=fig_save_path)
-pf.weight_prediction_sweep(weights_masked, masks, 'irms', fig_save_path=fig_save_path)
-pf.weight_prediction(weights_masked, 'corr', fig_save_path=fig_save_path)
-pf.weight_prediction_sweep(weights_masked, masks, 'corr', fig_save_path=fig_save_path)
+# pf.weight_prediction(weights_masked, 'irms', fig_save_path=fig_save_path)
+# pf.weight_prediction_sweep(weights_masked, masks, 'irms', fig_save_path=fig_save_path)
+# pf.weight_prediction(weights_masked, 'corr', fig_save_path=fig_save_path)
+# pf.weight_prediction_sweep(weights_masked, masks, 'corr', fig_save_path=fig_save_path)
 #
 # pf.weights_vs_connectome(weights, masks, metric=metric, fig_save_path=fig_save_path)
 
 # Figure 2
-# pf.plot_dirfs(weights_masked, masks, cell_ids, window, num_plot=20, fig_save_path=fig_save_path)
+# pf.plot_dirfs(weights_masked, masks, cell_ids, window, chosen_mask=masks['synap'], num_plot=20, fig_save_path=fig_save_path)
+# pf.plot_dirfs(weights_masked, masks, cell_ids, window, chosen_mask=masks['unconnected'], num_plot=20, fig_save_path=fig_save_path)
 # pf.plot_dirfs_train_test(weights_masked, masks, cell_ids, window, chosen_mask=masks['synap'], num_plot=10, fig_save_path=fig_save_path)
 # pf.plot_dirfs_train_test(weights_masked, masks, cell_ids, window, chosen_mask=masks['unconnected'], num_plot=10, fig_save_path=fig_save_path)
 # pf.plot_dirm_diff(weights_masked, masks, cell_ids, window, num_plot=10, fig_save_path=fig_save_path)
@@ -326,4 +331,37 @@ pf.weight_prediction_sweep(weights_masked, masks, 'corr', fig_save_path=fig_save
 # Figure 4
 # pf.corr_zimmer_paper(weights_masked, models, cell_ids)
 # pf.plot_eigenvalues(models, cell_ids)
+
+### Final verson of the figures
+pairs = np.array([['AVDR', 'AVJR'],
+                  ['SAADR', 'RMDDL'],
+
+                  ['AVAL', 'AVEL'],
+                  ['RMDDR', 'RMDDL'],
+
+                  ['AWBR', 'AWAL'],
+                  ['CEPVL', 'CEPDR'],
+                  ])
+
+# Figure 1
+# pf.plot_irms(weights, cell_ids, num_neurons=None, fig_save_path=fig_save_path / 'fig_1')
+# pf.plot_irms(weights, cell_ids, num_neurons=50, fig_save_path=fig_save_path / 'fig_1')
+
+# pf.plot_specific_dirfs(weights_masked, masks, cell_ids, pairs, window, fig_save_path=fig_save_path / 'fig_1')
+
+# pf.weights_vs_connectome(weights, masks, metric=metric, fig_save_path=fig_save_path / 'fig_1')
+
+pf.weight_prediction(weights_masked, 'irms', fig_save_path=fig_save_path / 'fig_1')
+# pf.weight_prediction_sweep(weights_masked, masks, 'irms', fig_save_path=fig_save_path / 'fig_1')
+pf.weight_prediction(weights_masked, 'corr', fig_save_path=fig_save_path / 'fig_1')
+# pf.weight_prediction_sweep(weights_masked, masks, 'corr', fig_save_path=fig_save_path / 'fig_1')
+
+# pf.plot_sampled_model(data_test, posterior_dicts['synap'], sample_rate=sample_rate, cell_ids=cell_ids,
+#                       num_neurons=15, fig_save_path=fig_save_path / 'fig_1')
+
+# Figure 2
+
+# Figure 3
+# pf.plot_missing_neuron(data_test, posterior_dicts['synap'], sample_rate=sample_rate, fig_save_path=fig_save_path / 'fig_3')
+
 

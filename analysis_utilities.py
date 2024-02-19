@@ -3,6 +3,7 @@ import wormneuroatlas as wa
 import pickle
 from pathlib import Path
 import metrics as met
+import itertools
 
 
 def auto_select_ids(inputs, cell_ids, num_neurons=10):
@@ -129,7 +130,7 @@ def interleave(a, b):
     return c
 
 
-def find_stim_events(inputs, emissions=None, chosen_neuron_ind=None, window_size=1000):
+def get_example_data_set(inputs, emissions=None, chosen_neuron_ind=None, window_size=1000):
     max_data_set = 0
     max_ind = 0
     max_val = 0
@@ -153,18 +154,41 @@ def find_stim_events(inputs, emissions=None, chosen_neuron_ind=None, window_size
             recording_has_neuron = np.mean(np.isnan(emissions[ii][:, chosen_neuron_ind]), axis=0) < 0.3
             total_stim = total_stim * recording_has_neuron
 
+        if emissions is not None:
+            # check that all the neurons are measured
+            e = emissions[ii]
+            has_emissions = np.all(np.mean(np.isnan(e), axis=0) < 0.5)
+        else:
+            has_emissions = True
+        has_emissions = True
+
         this_max_val = np.max(total_stim)
         this_max_ind = np.argmax(total_stim)
 
-        if (ii == 0) or (this_max_val > max_val):
+        if (ii == 0) or (this_max_val > max_val and has_emissions):
             max_val = this_max_val
             max_ind = this_max_ind
             max_data_set = ii
             max_window = this_window_size
+            print(ii)
 
     time_window = (max_ind, max_ind + max_window)
 
     return max_data_set, time_window
+
+
+def condensed_distance(mat):
+    def ave_nan_dist(x, y):
+        return np.nanmean(np.sqrt(x**2 + y**2))
+
+    dist = []
+
+    for i in itertools.combinations(range(mat.shape[0]), 2):
+        m1 = mat[i[0], :]
+        m2 = mat[i[1], :]
+        dist.append(ave_nan_dist(m1, m2))
+
+    return dist
 
 
 def normalize_model(model, posterior=None, init_mean=None, init_cov=None):
@@ -204,3 +228,22 @@ def nan_corr_data(data, alpha=0.05):
 
     return data_corr, data_corr_ci
 
+
+def bootstrap_p(data, metric=np.mean, n_boot=10000, compare_value=0, rng=np.random.default_rng()):
+    booted_metric = np.zeros(n_boot)
+
+    # get rid of nans
+    data = data.reshape(-1).astype(float)
+    data = data[~np.isnan(data)]
+
+    for n in range(n_boot):
+        sample_inds = rng.integers(0, high=data.shape[0], size=data.shape[0])
+        data_resampled = data[sample_inds]
+        booted_metric[n] = metric(data_resampled) - compare_value
+
+    if np.median(booted_metric) < 0:
+        booted_metric *= -1
+
+    p = 2 * np.mean(booted_metric <= 0)
+
+    return p

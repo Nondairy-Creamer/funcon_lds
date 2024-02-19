@@ -102,8 +102,8 @@ if run_params['plot_model_params']:
 if run_params['plot_eigen_values']:
     am.plot_dynamics_eigs(model=model)
 
-if run_params['plot_posterior']:
-    am.plot_posterior(data=data, posterior_dict=posterior_dict, cell_ids_chosen=cell_ids_chosen, sample_rate=model.sample_rate)
+if run_params['plot_sampled_model']:
+    am.plot_sampled_model(data=data, posterior_dict=posterior_dict, cell_ids=cell_ids_chosen, sample_rate=model.sample_rate)
 
 if run_params['plot_irf']:
     am.plot_irf(measured_irf=measured_irf, measured_irf_sem=measured_irf_sem,
@@ -137,4 +137,3 @@ if run_params['plot_missing_neurons']:
     if 'posterior_missing' in posterior_dict.keys():
         am.plot_missing_neuron(data=data, posterior_dict=posterior_dict, sample_rate=model.sample_rate)
 
-a=1

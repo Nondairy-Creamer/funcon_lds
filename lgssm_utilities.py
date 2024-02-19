@@ -81,7 +81,7 @@ def remove_nan_irfs(weights, cell_ids, data_type='test', chosen_mask=None):
 
     model_irms = model_irms[~nan_loc]
     model_dirms = model_dirms[~nan_loc]
-    cell_ids_no_nan = np.stack((cell_stim_names[0, ~nan_loc], cell_stim_names[1, ~nan_loc]))
+    cell_ids_no_nan = np.stack((cell_stim_names[0, ~nan_loc], cell_stim_names[1, ~nan_loc])).T
 
     selected_irfs = {'data_irfs': data_irfs,
                      'data_irfs_sem': data_irfs_sem,

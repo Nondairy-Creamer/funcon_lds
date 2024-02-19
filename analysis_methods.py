@@ -77,6 +77,9 @@ def get_best_model(model_folders, sorting_param, use_test_data=True, plot_figs=T
     model = model_list[best_model_ind]
     model_true = model_true_list[best_model_ind]
 
+    if type(data_corr) is tuple:
+        data_corr = data_corr[0]
+
     return model, model_true, data, posterior_dict, data_path, posterior_path, data_corr
 
 
@@ -261,94 +264,36 @@ def plot_matrix(param_trained, param_true=None, labels_x=None, labels_y=None, ab
     return
 
 
-def plot_posterior(data, posterior_dict, cell_ids_chosen, sample_rate=2, window_size=1000):
+def plot_sampled_model(data, posterior_dict, cell_ids, sample_rate=2, num_neurons=10,
+                       window_size=1000, fig_save_path=None):
     emissions = data['emissions']
     inputs = data['inputs']
     posterior = posterior_dict['posterior']
     model_sampled = posterior_dict['model_sampled_noise']
-    model_sampled = posterior_dict['model_sampled']
 
-    neuron_inds_chosen = np.array([data['cell_ids'].index(i) for i in cell_ids_chosen])
+    cell_ids_chosen = sorted(cell_ids['sorted'][:num_neurons])
+    neuron_inds_chosen = np.array([cell_ids['all'].index(i) for i in cell_ids_chosen])
 
     # get all the inputs but with only the chosen neurons
     inputs_truncated = [i[:, neuron_inds_chosen] for i in inputs]
-    data_ind_chosen, time_window = au.find_stim_events(inputs_truncated, window_size=window_size)
+    emissions_truncated = [e[:, neuron_inds_chosen] for e in emissions]
+    data_ind_chosen, time_window = au.get_example_data_set(inputs_truncated, emissions_truncated, window_size=window_size)
 
     emissions_chosen = emissions[data_ind_chosen][time_window[0]:time_window[1], neuron_inds_chosen]
     inputs_chosen = inputs[data_ind_chosen][time_window[0]:time_window[1], neuron_inds_chosen]
+    all_inputs = inputs[data_ind_chosen][time_window[0]:time_window[1], :]
     posterior_chosen = posterior[data_ind_chosen][time_window[0]:time_window[1], neuron_inds_chosen]
-    model_sampled_chosen_noise = posterior_dict['model_sampled_noise'][data_ind_chosen][time_window[0]:time_window[1], neuron_inds_chosen]
-    model_sampled_chosen = posterior_dict['model_sampled'][data_ind_chosen][time_window[0]:time_window[1], neuron_inds_chosen]
+    model_sampled_chosen = model_sampled[data_ind_chosen][time_window[0]:time_window[1], neuron_inds_chosen]
+
+    stim_events = np.where(np.sum(all_inputs, axis=1) > 0)[0]
+    stim_ids = [cell_ids['all'][np.where(all_inputs[i, :])[0][0]] for i in stim_events]
 
     filt_shape = np.ones(5)
     for i in range(inputs_chosen.shape[1]):
         inputs_chosen[:, i] = np.convolve(inputs_chosen[:, i], filt_shape, mode='same')
 
     plot_y = np.arange(len(cell_ids_chosen))
-    plot_x = np.arange(0, emissions_chosen.shape[0], emissions_chosen.shape[0]/10)
-    cmax = np.nanpercentile(np.abs((emissions_chosen, posterior_chosen)), plot_percent)
-
-    plt.figure()
-    plt.subplot(3, 1, 1)
-    plt.imshow(inputs_chosen.T, interpolation='nearest', aspect='auto', cmap=colormap)
-    plt.title('stimulation events')
-    plt.yticks(plot_y, cell_ids_chosen)
-    plt.xticks(plot_x, plot_x / sample_rate)
-    plt.xlabel('time (s)')
-    plt.clim((-1, 1))
-    plt.colorbar()
-
-    plt.subplot(3, 1, 2)
-    plt.imshow(emissions_chosen.T, interpolation='nearest', aspect='auto', cmap=colormap)
-    plt.clim((-cmax, cmax))
-    plt.title('measured data')
-    plt.yticks(plot_y, cell_ids_chosen)
-    plt.xticks(plot_x, plot_x / sample_rate)
-    plt.xlabel('time (s)')
-    plt.colorbar()
-
-    plt.subplot(3, 1, 3)
-    plt.imshow(posterior_chosen.T, interpolation='nearest', aspect='auto', cmap=colormap)
-    plt.clim((-cmax, cmax))
-    plt.title('model posterior, all data')
-    plt.yticks(plot_y, cell_ids_chosen)
-    plt.xticks(plot_x, plot_x / sample_rate)
-    plt.xlabel('time (s)')
-    plt.colorbar()
-
-    plt.tight_layout()
-
-    # plt.figure()
-    # cmax = np.nanpercentile(np.abs((model_sampled_chosen, posterior_chosen)), plot_percent)
-    #
-    # plt.subplot(3, 1, 1)
-    # plt.imshow(inputs_chosen.T, interpolation='nearest', aspect='auto', cmap=colormap)
-    # plt.title('stimulation events')
-    # plt.yticks(plot_y, cell_ids_chosen)
-    # plt.xticks(plot_x, plot_x * sample_rate)
-    # plt.xlabel('time (s)')
-    # plt.clim((-1, 1))
-    # plt.colorbar()
-    #
-    # plt.subplot(3, 1, 2)
-    # plt.imshow(model_sampled_chosen.T, interpolation='nearest', aspect='auto', cmap=colormap)
-    # plt.clim((-cmax, cmax))
-    # plt.title('sampled model')
-    # plt.yticks(plot_y, cell_ids_chosen)
-    # plt.xticks(plot_x, plot_x * sample_rate)
-    # plt.xlabel('time (s)')
-    # plt.colorbar()
-    #
-    # plt.subplot(3, 1, 3)
-    # plt.imshow(posterior_chosen.T, interpolation='nearest', aspect='auto', cmap=colormap)
-    # plt.clim((-cmax, cmax))
-    # plt.title('model posterior, all data')
-    # plt.yticks(plot_y, cell_ids_chosen)
-    # plt.xticks(plot_x, plot_x * sample_rate)
-    # plt.xlabel('time (s)')
-    # plt.colorbar()
-    #
-    # plt.tight_layout()
+    plot_x = np.arange(0, emissions_chosen.shape[0], 60 * sample_rate)
 
     plt.figure()
     cmax = np.nanpercentile(np.abs((model_sampled_chosen, posterior_chosen)), plot_percent)
@@ -382,6 +327,42 @@ def plot_posterior(data, posterior_dict, cell_ids_chosen, sample_rate=2, window_
 
     plt.tight_layout()
 
+    if fig_save_path is not None:
+        plt.savefig(fig_save_path / 'emissions_vs_sampled.pdf')
+
+    # plot the sampled model as time traces
+    data_offset = -np.arange(emissions_chosen.shape[1])
+    emissions_chosen = emissions_chosen + data_offset[None, :]
+    model_sampled_chosen = model_sampled_chosen + data_offset[None, :]
+
+    plt.figure()
+    for stim_time, stim_name in zip(stim_events, stim_ids):
+        plt.axvline(stim_time, color=[0.6, 0.6, 0.6], linestyle='--')
+        plt.text(stim_time, 1.5, stim_name, rotation=90)
+    plt.plot(emissions_chosen)
+    plt.ylim([data_offset[-1] - 1, 1])
+    plt.yticks(data_offset, cell_ids_chosen)
+    plt.xticks(plot_x, (plot_x / sample_rate).astype(int))
+    plt.xlabel('time (s)')
+    plt.tight_layout()
+
+    if fig_save_path is not None:
+        plt.savefig(fig_save_path / 'emissions_time_traces.pdf')
+
+    plt.figure()
+    for stim_time, stim_name in zip(stim_events, stim_ids):
+        plt.axvline(stim_time, color=[0.6, 0.6, 0.6], linestyle='--')
+        plt.text(stim_time, 1.5, stim_name, rotation=90)
+    plt.plot(model_sampled_chosen)
+    plt.ylim([data_offset[-1] - 1, 1])
+    plt.yticks(data_offset, cell_ids_chosen)
+    plt.xticks(plot_x, (plot_x / sample_rate).astype(int))
+    plt.xlabel('time (s)')
+    plt.tight_layout()
+
+    if fig_save_path is not None:
+        plt.savefig(fig_save_path / 'model_sampled_time_traces.pdf')
+
     plt.show()
 
     return
@@ -391,6 +372,7 @@ def plot_missing_neuron(data, posterior_dict, sample_rate=2, fig_save_path=None)
     cell_ids = data['cell_ids']
     posterior_missing = posterior_dict['posterior_missing']
     emissions = data['emissions']
+    rng = np.random.default_rng(0)
 
     # calculate the correlation of the missing to measured neurons
     missing_corr = np.zeros((len(emissions), emissions[0].shape[1]))
@@ -401,19 +383,36 @@ def plot_missing_neuron(data, posterior_dict, sample_rate=2, fig_save_path=None)
             else:
                 missing_corr[ei, n] = np.nan
 
+    # calculate a null distribution
+    missing_corr_null = np.zeros((len(emissions), emissions[0].shape[1]))
+    for ei, pi in zip(range(len(emissions)), range(len(posterior_missing))):
+        random_assignment = rng.permutation(emissions[ei].shape[1])
+
+        for n in range(emissions[ei].shape[1]):
+            if np.mean(~np.isnan(emissions[ei][:, n])) > 0.5:
+                missing_corr_null[ei, n] = met.nan_corr(emissions[ei][:, n], posterior_missing[ei][:, random_assignment[n]])[0]
+            else:
+                missing_corr_null[ei, n] = np.nan
+
+    # get the p value that the reconstructed neuron accuracy is significantly different than the null
+    p = au.bootstrap_p(missing_corr - missing_corr_null, n_boot=1000)
+
     plt.figure()
-    plt.hist(missing_corr.reshape(-1))
+    plt.hist(missing_corr_null.reshape(-1), label='null', alpha=0.5)
+    plt.hist(missing_corr.reshape(-1), label='missing data', alpha=0.5)
+    plt.title('p = ' + str(p))
+    plt.legend()
     plt.xlabel('correlation')
     plt.ylabel('count')
 
     if fig_save_path is not None:
-        plt.savefig(fig_save_path / 'recon_hist.pdf')
+        plt.savefig(fig_save_path / 'recon_histogram.pdf')
 
-    sorted_corr = np.sort(missing_corr.reshape(-1))
-    sorted_corr_inds = np.argsort(missing_corr.reshape(-1))
-    first_nan = np.where(np.isnan(sorted_corr))[0][0]
-    best_neuron = np.unravel_index(sorted_corr_inds[first_nan - 1], missing_corr.shape)
-    median_neuron = np.unravel_index(sorted_corr_inds[int((first_nan - 2) / 2) + 3], missing_corr.shape)
+    sorted_corr_inds = au.nan_argsort(missing_corr.reshape(-1))
+    best_offset = -3  # AVER
+    median_offset = 5  # URYDL
+    best_neuron = np.unravel_index(sorted_corr_inds[-1 + best_offset], missing_corr.shape)
+    median_neuron = np.unravel_index(sorted_corr_inds[int(sorted_corr_inds.shape[0] / 2) + median_offset], missing_corr.shape)
 
     best_data_ind = best_neuron[0]
     best_neuron_ind = best_neuron[1]
@@ -424,7 +423,7 @@ def plot_missing_neuron(data, posterior_dict, sample_rate=2, fig_save_path=None)
     plt.figure()
     plt.subplot(2, 1, 1)
     plt.title('best held out neuron: ' + cell_ids[best_neuron_ind])
-    plt.plot(plot_x, emissions[best_data_ind][:, best_neuron_ind], label='data')
+    plt.plot(plot_x, emissions[best_data_ind][:, best_neuron_ind], label='data', color=plot_color[''])
     plt.plot(plot_x, posterior_missing[best_data_ind][:, best_neuron_ind], label='posterior')
     plt.xlabel('time (s)')
     plt.ylabel('neural activity')
@@ -838,8 +837,9 @@ def unmeasured_neuron(posterior, posterior_ids, emissions, emissions_ids, missin
     plt.axvline(score, label='Estimation of ' + missing_neuron + ' vs true', color='k', linestyle='--')
     plt.xlabel('average correlation')
     plt.ylabel('# of neurons')
-    plt.title('Estimation of ' + missing_neuron + 'when its activity is not measured\n p=' + str(p_value))
+    plt.title('Estimation of ' + missing_neuron + ' when its activity is not measured\n p=' + str(p_value))
     plt.legend()
 
     plt.show()
 
+    return
