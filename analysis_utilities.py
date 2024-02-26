@@ -130,7 +130,7 @@ def interleave(a, b):
     return c
 
 
-def get_example_data_set(inputs, emissions=None, chosen_neuron_ind=None, window_size=1000):
+def get_example_data_set(inputs, mask=None, emissions=None, chosen_neuron_ind=None, window_size=1000):
     max_data_set = 0
     max_ind = 0
     max_val = 0

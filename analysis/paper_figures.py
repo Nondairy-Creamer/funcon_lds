@@ -11,9 +11,10 @@ import scipy.cluster.hierarchy as sch
 # colormap = mpl.colormaps['RdBu_r']
 colormap = mpl.colormaps['coolwarm']
 # colormap.set_bad(color=[0.8, 0.8, 0.8])
+plot_percent = 95
 
-plot_color = {'data': np.array([27, 158, 119]) / 255,
-              'synap': np.array([217, 95, 2]) / 255,
+plot_color = {'data': np.array([217, 95, 2]) / 255,
+              'synap': np.array([27, 158, 119]) / 255,
               'unconstrained': np.array([117, 112, 179]) / 255,
               'synap_randA': np.array([231, 41, 138]) / 255,
               # 'synap_randC': np.array([102, 166, 30]) / 255,
@@ -35,12 +36,19 @@ def weight_prediction(weights, masks, weight_name, fig_save_path=None):
     # get the baseline correlation and IRMs. This is the best the model could have done
     # across all data
     irms_baseline = met.nan_corr(weights['data']['train'][weight_name], weights['data']['test'][weight_name])[0]
+    anat = weights['anatomy']['chem_conn'] + weights['anatomy']['gap_conn']
+    anat = anat / np.sum(anat, axis=1, keepdims=True) * 0.2
+    anat[np.eye(anat.shape[0], dtype=bool)] = 0.8
+
+    weights_to_compare = [anat,
+                          weights['models']['synap_randC'][weight_name],
+                          weights['models']['synap']['dirms'],
+                          weights['models']['synap'][weight_name]]
 
     # get the comparison between model prediction and data irm/correlation
-    for m in [weights['models']['synap'][weight_name], weights['anatomy']['chem_conn'] + weights['anatomy']['gap_conn'], weights['models']['synap_randC'][weight_name]]:
-    # for m in [weights['models']['synap'][weight_name], masks['synap'], weights['models']['synap_randC'][weight_name]]:
+    for m in weights_to_compare:
         model_irms_to_measured_irms_test, model_irms_to_measured_irms_test_ci = \
-            met.nan_corr(m, weights['data']['test'][weight_name])
+            met.nan_corr(m, np.abs(weights['data']['test'][weight_name]))
         model_irms_score.append(model_irms_to_measured_irms_test)
         model_irms_score_ci.append(model_irms_to_measured_irms_test_ci)
 
@@ -49,11 +57,10 @@ def weight_prediction(weights, masks, weight_name, fig_save_path=None):
     y_val = np.array(model_irms_score)
     y_val_ci = np.stack(model_irms_score_ci).T
     plot_x = np.arange(y_val.shape[0])
-    bar_colors = [plot_color['synap'], plot_color['anatomy'], plot_color['synap_randC']]
+    bar_colors = [plot_color['anatomy'], plot_color['synap_randC'],  plot_color['synap'], plot_color['synap']]
     plt.bar(plot_x, y_val / irms_baseline, color=bar_colors)
     plt.errorbar(plot_x, y_val / irms_baseline, y_val_ci / irms_baseline, fmt='none', color='k')
-    plt.xticks(plot_x, labels=['model', 'connectome', 'model\n+ scrambled labels'], rotation=45)
-    # plt.xticks(plot_x, labels=['model', 'model\n+ scrambled labels', 'model\n+ scrambled anatomy'], rotation=45)
+    plt.xticks(plot_x, labels=['connectome', 'model\n+ scrambled labels', 'direct only', 'model'], rotation=45)
     plt.ylabel('% explainable correlation to measured ' + weight_name)
     plt.tight_layout()
 
@@ -610,7 +617,7 @@ def plot_specific_dirfs(weights, masks, cell_ids, pairs, window, fig_save_path=N
         plt.plot(plot_x, model_irfs[:, plot_ind], color=plot_color['synap'], label='model STA')
         plt.plot(plot_x, model_dirfs[:, plot_ind], color=plot_color['synap'], linestyle='dashed', label='model direct STA')
         # plt.plot(plot_x, model_eirfs[:, plot_ind], label='model eirf')
-        stim_string = cell_ids[plot_ind, 1] + ' -> ' + cell_ids[plot_ind, 0]
+        stim_string = cell_ids[plot_ind, 1] + '_' + cell_ids[plot_ind, 0]
         plt.title(stim_string)
         plt.legend()
         plt.axvline(0, color='k', linestyle='--')
@@ -1223,22 +1230,25 @@ def plot_missing_neuron(data, posterior_dict, sample_rate=2, fig_save_path=None)
     median_neuron_ind = median_neuron[1]
 
     plot_x = np.arange(emissions[best_data_ind].shape[0]) / sample_rate
+    display_x = np.arange(0, emissions[best_data_ind].shape[0], 5*60*sample_rate) / sample_rate
     plt.figure()
     plt.subplot(2, 1, 1)
     plt.title('best held out neuron: ' + cell_ids[best_neuron_ind])
     plt.plot(plot_x, emissions[best_data_ind][:, best_neuron_ind], label='data', color=plot_color['data'])
     plt.plot(plot_x, posterior_missing[best_data_ind][:, best_neuron_ind], label='posterior', color=plot_color['synap'])
     plt.xlabel('time (s)')
+    plt.xticks(display_x)
     plt.ylabel('neural activity')
 
     plot_x = np.arange(emissions[median_data_ind].shape[0]) / sample_rate
-    # plot_x = np.arange(1000) * sample_rate
+    display_x = np.arange(0, emissions[median_data_ind].shape[0], 5*60*sample_rate) / sample_rate
     plt.subplot(2, 1, 2)
     plt.title('median held out neuron: ' + cell_ids[median_neuron_ind])
     plt.plot(plot_x, emissions[median_data_ind][:, median_neuron_ind], label='data', color=plot_color['data'])
     plt.plot(plot_x, posterior_missing[median_data_ind][:, median_neuron_ind], label='posterior', color=plot_color['synap'])
     plt.ylim(plt.ylim()[0], 1.2)
     plt.xlabel('time (s)')
+    plt.xticks(display_x)
     plt.ylabel('neural activity')
 
     plt.tight_layout()
@@ -1256,9 +1266,11 @@ def plot_sampled_model(data, posterior_dict, cell_ids, sample_rate=2, num_neuron
     emissions = data['emissions']
     inputs = data['inputs']
     posterior = posterior_dict['posterior']
-    model_sampled = posterior_dict['model_sampled_noise']
+    # model_sampled = posterior_dict['model_sampled_noise']
+    model_sampled = posterior_dict['model_sampled']
 
-    cell_ids_chosen = sorted(cell_ids['sorted'][:num_neurons])
+    cell_ids_chosen = sorted(cell_ids['sorted'][:num_neurons+1])
+    del cell_ids_chosen[cell_ids_chosen.index('AVEL')]
     neuron_inds_chosen = np.array([cell_ids['all'].index(i) for i in cell_ids_chosen])
 
     # get all the inputs but with only the chosen neurons
@@ -1271,6 +1283,7 @@ def plot_sampled_model(data, posterior_dict, cell_ids, sample_rate=2, num_neuron
     all_inputs = inputs[data_ind_chosen][time_window[0]:time_window[1], :]
     posterior_chosen = posterior[data_ind_chosen][time_window[0]:time_window[1], neuron_inds_chosen]
     model_sampled_chosen = model_sampled[data_ind_chosen][time_window[0]:time_window[1], neuron_inds_chosen]
+
 
     stim_events = np.where(np.sum(all_inputs, axis=1) > 0)[0]
     stim_ids = [cell_ids['all'][np.where(all_inputs[i, :])[0][0]] for i in stim_events]
@@ -1325,7 +1338,7 @@ def plot_sampled_model(data, posterior_dict, cell_ids, sample_rate=2, num_neuron
     plt.figure()
     for stim_time, stim_name in zip(stim_events, stim_ids):
         plt.axvline(stim_time, color=[0.6, 0.6, 0.6], linestyle='--')
-        plt.text(stim_time, 1.5, stim_name, rotation=90)
+        plt.text(stim_time-5, 1.5, stim_name, rotation=90)
     plt.plot(emissions_chosen)
     plt.ylim([data_offset[-1] - 1, 1])
     plt.yticks(data_offset, cell_ids_chosen)

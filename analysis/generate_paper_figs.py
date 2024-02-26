@@ -345,19 +345,19 @@ pairs = np.array([['AVDR', 'AVJR'],
 
 # Figure 1
 # pf.plot_irms(weights, cell_ids, num_neurons=None, fig_save_path=fig_save_path / 'fig_1')
-# pf.plot_irms(weights, cell_ids, num_neurons=50, fig_save_path=fig_save_path / 'fig_1')
+# pf.plot_irms(weights, cell_ids, num_neurons=20, fig_save_path=fig_save_path / 'fig_1')
 
 # pf.plot_specific_dirfs(weights_masked, masks, cell_ids, pairs, window, fig_save_path=fig_save_path / 'fig_1')
 
 # pf.weights_vs_connectome(weights, masks, metric=metric, fig_save_path=fig_save_path / 'fig_1')
 
 pf.weight_prediction(weights_masked, masks, 'irms', fig_save_path=fig_save_path / 'fig_1')
-pf.weight_prediction_sweep(weights_masked, masks, 'irms', fig_save_path=fig_save_path / 'fig_1')
-pf.weight_prediction(weights_masked, masks, 'corr', fig_save_path=fig_save_path / 'fig_1')
-pf.weight_prediction_sweep(weights_masked, masks, 'corr', fig_save_path=fig_save_path / 'fig_1')
+# pf.weight_prediction_sweep(weights_masked, masks, 'irms', fig_save_path=fig_save_path / 'fig_1')
+# pf.weight_prediction(weights_masked, masks, 'corr', fig_save_path=fig_save_path / 'fig_1')
+# pf.weight_prediction_sweep(weights_masked, masks, 'corr', fig_save_path=fig_save_path / 'fig_1')
 
 # pf.plot_sampled_model(data_test, posterior_dicts['synap'], sample_rate=sample_rate, cell_ids=cell_ids,
-#                       num_neurons=15, fig_save_path=fig_save_path / 'fig_1')
+#                       num_neurons=10, fig_save_path=fig_save_path / 'fig_1')
 
 # Figure 2
 
