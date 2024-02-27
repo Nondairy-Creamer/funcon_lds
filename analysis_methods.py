@@ -395,7 +395,7 @@ def plot_missing_neuron(data, posterior_dict, sample_rate=2, fig_save_path=None)
                 missing_corr_null[ei, n] = np.nan
 
     # get the p value that the reconstructed neuron accuracy is significantly different than the null
-    p = au.bootstrap_p(missing_corr - missing_corr_null, n_boot=1000)
+    p = au.two_sample_boostrap_corr_p(missing_corr - missing_corr_null, n_boot=1000)
 
     plt.figure()
     plt.hist(missing_corr_null.reshape(-1), label='null', alpha=0.5)

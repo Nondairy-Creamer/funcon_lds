@@ -351,7 +351,7 @@ pairs = np.array([['AVDR', 'AVJR'],
 
 # pf.weights_vs_connectome(weights, masks, metric=metric, fig_save_path=fig_save_path / 'fig_1')
 
-pf.weight_prediction(weights_masked, masks, 'irms', fig_save_path=fig_save_path / 'fig_1')
+pf.weight_prediction(weights, masks, 'irms', fig_save_path=fig_save_path / 'fig_1')
 # pf.weight_prediction_sweep(weights_masked, masks, 'irms', fig_save_path=fig_save_path / 'fig_1')
 # pf.weight_prediction(weights_masked, masks, 'corr', fig_save_path=fig_save_path / 'fig_1')
 # pf.weight_prediction_sweep(weights_masked, masks, 'corr', fig_save_path=fig_save_path / 'fig_1')
