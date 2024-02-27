@@ -179,6 +179,31 @@ def calculate_irfs(model, rng=np.random.default_rng(), window=(15, 30)):
     return irfs
 
 
+def calculate_iirfs(model, rng=np.random.default_rng(), window=(15, 30)):
+    # get iirfs from Lgssm model
+    num_t = int(window[1] * model.sample_rate)
+    num_n = model.dynamics_dim
+    iirfs = np.empty((num_t, num_n, num_n))
+    iirfs[:] = np.nan
+
+    for s in range(model.dynamics_dim):
+        for r in range(model.dynamics_dim):
+            if s == r:
+                continue
+            inputs = np.zeros((num_t, num_n))
+            inputs[0, s] = 1
+
+            sub_model = get_indirect_model(model, s, r)
+            iirfs[:, r, s] = sub_model.sample(num_time=num_t, inputs=inputs, rng=rng, add_noise=False)['emissions'][:, r]
+
+        print(s + 1, '/', num_n)
+
+    zero_pad = np.zeros((int(window[0] * model.sample_rate), num_n, num_n))
+    iirfs = np.concatenate((zero_pad, iirfs), axis=0)
+
+    return iirfs
+
+
 def calculate_dirfs(model, rng=np.random.default_rng(), window=(15, 30), add_recipricol=False):
     # get dirfs from Lgssm model
     num_t = int(window[1] * model.sample_rate)
@@ -278,6 +303,18 @@ def get_sub_model(model_original, s, r, add_recipricol=False):
 
     model_new.pad_init_for_lags()
     model_new.set_to_init()
+
+    return model_new
+
+
+def get_indirect_model(model_original, s, r):
+    # get a subset of model that includes only the stimulated neuron and the responding neuron
+    model_new = copy.deepcopy(model_original)
+
+    dynamics_inds_s = np.array(s)[None]
+    dynamics_inds_r = np.arange(r, model_original.dynamics_dim_full, model_original.dynamics_dim)
+
+    model_new.dynamics_weights[np.ix_(dynamics_inds_s, dynamics_inds_r)] = 0
 
     return model_new
 

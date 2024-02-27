@@ -202,6 +202,11 @@ for m in models:
         posterior_dicts[m]['irfs'] = ssmu.calculate_irfs(models[m], window=window)
         save_post = True
 
+    if m == 'synap':
+        if 'iirfs' not in posterior_dicts[m] or posterior_dicts[m]['iirfs'].shape[0] != window_size:
+            posterior_dicts[m]['iirfs'] = ssmu.calculate_iirfs(models[m], window=window)
+            save_post = True
+
     if 'dirfs' not in posterior_dicts[m] or posterior_dicts[m]['dirfs'].shape[0] != window_size:
         posterior_dicts[m]['dirfs'] = ssmu.calculate_dirfs(models[m], window=window)
         save_post = True
