@@ -202,11 +202,6 @@ for m in models:
         posterior_dicts[m]['irfs'] = ssmu.calculate_irfs(models[m], window=window)
         save_post = True
 
-    if m == 'synap':
-        if 'iirfs' not in posterior_dicts[m] or posterior_dicts[m]['iirfs'].shape[0] != window_size:
-            posterior_dicts[m]['iirfs'] = ssmu.calculate_iirfs(models[m], window=window)
-            save_post = True
-
     if 'dirfs' not in posterior_dicts[m] or posterior_dicts[m]['dirfs'].shape[0] != window_size:
         posterior_dicts[m]['dirfs'] = ssmu.calculate_dirfs(models[m], window=window)
         save_post = True
@@ -227,10 +222,6 @@ for m in models:
                             'eirfs': posterior_dicts[m]['eirfs'],
                             'eirms': np.sum(posterior_dicts[m]['eirfs'], axis=0) / sample_rate,
                             }
-
-    if m == 'synap':
-        weights['models'][m]['iirfs'] = posterior_dicts[m]['iirfs']
-        weights['models'][m]['iirms'] = np.sum(posterior_dicts[m]['iirfs'], axis=0) / sample_rate
 
     abs_eirms = np.abs(weights['models'][m]['dirms'])
     eirms_binarized = abs_eirms > (np.nanstd(abs_eirms) / std_factor)

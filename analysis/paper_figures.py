@@ -43,21 +43,11 @@ def weight_prediction(weights, masks, weight_name, fig_save_path=None):
     # get the baseline correlation and IRMs. This is the best the model could have done
     # across all data
     irms_baseline = met.nan_corr(test_weights, train_weights)[0]
-    anat = weights['anatomy']['chem_conn'] + weights['anatomy']['gap_conn']
-    anat2 = masks['synap'].astype(float)
 
-    anat2 = anat2.copy() / np.nansum(anat2, axis=1, keepdims=True) * 0.2
-    anat[np.isnan(anat)] = 0
-    anat2[np.isnan(anat2)] = 0
-    anat[np.eye(anat.shape[0], dtype=bool)] = 0.8
-    anat2[np.eye(anat2.shape[0], dtype=bool)] = 0.8
-
-    weights_to_compare = [np.linalg.matrix_power(anat, 1),
-                          np.linalg.matrix_power(anat2, 5),
+    weights_to_compare = [weights['anatomy']['chem_conn'] + weights['anatomy']['gap_conn'],
                           weights['models']['synap_randC'][weight_name],
-                          weights['models']['synap']['dirms'],
-                          weights['models']['synap']['iirms'],
-                          weights['models']['synap'][weight_name]]
+                          weights['models']['synap'][weight_name],
+                          ]
 
     for ii, i in enumerate(weights_to_compare):
         weights_to_compare[ii][np.eye(i.shape[0], dtype=bool)] = np.nan
@@ -70,21 +60,15 @@ def weight_prediction(weights, masks, weight_name, fig_save_path=None):
         model_irms_score.append(model_irms_to_measured_irms_test)
         model_irms_score_ci.append(model_irms_to_measured_irms_test_ci)
 
-    p, diff_mean, diff_ci = au.two_sample_boostrap_corr_p(test_weights, weights_to_compare[-1], weights_to_compare[-2])
-    model_irms_score.append(diff_mean)
-    model_irms_score_ci.append(diff_ci)
-
     # plot average reconstruction over all data
     plt.figure()
     y_val = np.array(model_irms_score)
     y_val_ci = np.stack(model_irms_score_ci).T
     plot_x = np.arange(y_val.shape[0])
-    bar_colors = [plot_color['anatomy'], plot_color['anatomy'], plot_color['synap_randC'],  plot_color['synap'], plot_color['synap']]
+    bar_colors = [plot_color['anatomy'], plot_color['synap_randC'],  plot_color['synap']]
     plt.bar(plot_x, y_val / irms_baseline, color=bar_colors)
     plt.errorbar(plot_x, y_val / irms_baseline, y_val_ci / irms_baseline, fmt='none', color='k')
-    # plt.xticks(plot_x, labels=['unnormalized connectome', 'binary norm connectome^5', 'model\n+ scrambled labels', 'direct only', 'model', 'model - direct'], rotation=45)
-    plt.xticks(plot_x, labels=['unnormalized connectome', 'binary norm connectome^5', 'model\n+ scrambled labels', 'direct only', 'indirect only', 'model', 'model - direct'], rotation=45)
-    # plt.xticks(plot_x, labels=['unnormalized connectome', 'binary norm connectome^5', 'model\n+ scrambled labels', 'model', 'model - direct'], rotation=45)
+    plt.xticks(plot_x, labels=['connectome', 'model\n+ scrambled labels', 'model'], rotation=45)
     plt.ylabel('% explainable correlation to measured ' + weight_name)
     plt.tight_layout()
 
@@ -107,7 +91,6 @@ def weight_prediction(weights, masks, weight_name, fig_save_path=None):
     bar_colors = [plot_color['synap'], plot_color['unconstrained'], plot_color['synap_randA']]
     plt.bar(plot_x, y_val / irms_baseline, color=bar_colors)
     plt.errorbar(plot_x, y_val / irms_baseline, y_val_ci / irms_baseline, fmt='none', color='k')
-    # plt.xticks(plot_x, labels=['model', 'model\n+ scrambled labels', 'model\n+ scrambled anatomy'], rotation=45)
     plt.xticks(plot_x, labels=['model', 'model\n+ unconstrained', 'model\n+ scrambled anatomy'], rotation=45)
     plt.ylabel('% explainable correlation to measured ' + weight_name)
     plt.tight_layout()
@@ -115,8 +98,6 @@ def weight_prediction(weights, masks, weight_name, fig_save_path=None):
     plt.savefig(fig_save_path / ('measured_vs_model_randA_' + weight_name + '.pdf'))
 
     plt.show()
-
-    return
 
 
 def weight_prediction_sweep(weights, masks, weight_name, fig_save_path=None):
