@@ -395,7 +395,7 @@ def plot_missing_neuron(data, posterior_dict, sample_rate=2, fig_save_path=None)
                 missing_corr_null[ei, n] = np.nan
 
     # get the p value that the reconstructed neuron accuracy is significantly different than the null
-    p = au.two_sample_boostrap_corr_p(missing_corr - missing_corr_null, n_boot=1000)
+    p = au.single_sample_boostrap_p(missing_corr - missing_corr_null, n_boot=1000)
 
     plt.figure()
     plt.hist(missing_corr_null.reshape(-1), label='null', alpha=0.5)
@@ -423,7 +423,7 @@ def plot_missing_neuron(data, posterior_dict, sample_rate=2, fig_save_path=None)
     plt.figure()
     plt.subplot(2, 1, 1)
     plt.title('best held out neuron: ' + cell_ids[best_neuron_ind])
-    plt.plot(plot_x, emissions[best_data_ind][:, best_neuron_ind], label='data', color=plot_color[''])
+    plt.plot(plot_x, emissions[best_data_ind][:, best_neuron_ind], label='data')
     plt.plot(plot_x, posterior_missing[best_data_ind][:, best_neuron_ind], label='posterior')
     plt.xlabel('time (s)')
     plt.ylabel('neural activity')
@@ -745,13 +745,15 @@ def plot_dynamics_eigs(model):
     plt.xlabel('eigen values')
 
     plt.figure()
-    plt.scatter(np.real(d_eigvals), np.imag(d_eigvals))
+    plt.scatter(np.real(d_eigvals), np.imag(d_eigvals), c=np.abs(d_eigvals), cmap=mpl.colormaps['YlOrRd'])
+    plt.clim((0, 1))
+    circ_t = np.linspace(0, 2*np.pi, 100)
+    plt.plot(np.cos(circ_t), np.sin(circ_t), color='k')
     plt.xlabel('real components')
     plt.ylabel('imaginary components')
     plt.title('eigenvalues of the dynamics matrix')
-    lims = np.max((np.abs(plt.xlim()), np.abs(plt.ylim())))
-    plt.xlim((-lims, lims))
-    plt.ylim((-lims, lims))
+    plt.xlim((-1.05, 1.05))
+    plt.ylim((-1.05, 1.05))
     ax = plt.gca()
     ax.set_aspect('equal', 'box')
 
@@ -786,12 +788,22 @@ def plot_model_comparison(sorting_param, model_list, posterior_train_list, poste
         train_ll = [train_ll[i] for i in sorting_list_inds]
         test_ll = [test_ll[i] for i in sorting_list_inds]
 
+        plt.figure()
         for ii, i in enumerate(ll_over_train):
-            plt.figure()
-            plt.plot(i)
-            plt.title(sorting_param + ': ' + str(sorting_list[ii]))
+            num_iter = len(i)
+            iter_x = np.arange(num_iter)
+            plt.subplot(1, 2, 1)
+            plt.plot(iter_x, i, label=sorting_param + ': ' + str(sorting_list[ii]))
             plt.xlabel('Iterations of EM')
             plt.ylabel('log likelihood')
+            plt.subplot(1, 2, 2)
+            plt.plot(iter_x[int(num_iter / 2):], i[int(num_iter / 2):], label=sorting_param + ': ' + str(sorting_list[ii]))
+            plt.xlabel('Iterations of EM')
+            plt.ylabel('log likelihood')
+
+        plt.subplot(1, 2, 1)
+        plt.legend()
+        plt.tight_layout()
 
         if sorting_list[0] == -np.inf:
             sorting_list[0] = 2 * sorting_list[1] - sorting_list[2]

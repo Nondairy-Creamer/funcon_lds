@@ -12,7 +12,7 @@ class Lgssm:
     """
 
     def __init__(self, dynamics_dim, emissions_dim, input_dim,
-                 dynamics_lags=1, dynamics_input_lags=1, emissions_input_lags=1,
+                 dynamics_lags=1, emissions_lags=1, dynamics_input_lags=1, emissions_input_lags=1,
                  cell_ids=None, param_props=None, verbose=True, epsilon=1e8, ridge_lambda=0):
         self.dynamics_lags = dynamics_lags
         self.dynamics_input_lags = dynamics_input_lags

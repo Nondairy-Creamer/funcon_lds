@@ -310,11 +310,8 @@ def get_sub_model(model_original, s, r, add_recipricol=False):
 def get_indirect_model(model_original, s, r):
     # get a subset of model that includes only the stimulated neuron and the responding neuron
     model_new = copy.deepcopy(model_original)
-
-    dynamics_inds_s = np.array(s)[None]
-    dynamics_inds_r = np.arange(r, model_original.dynamics_dim_full, model_original.dynamics_dim)
-
-    model_new.dynamics_weights[np.ix_(dynamics_inds_s, dynamics_inds_r)] = 0
+    dynamics_inds_s = np.arange(s, model_original.dynamics_dim_full, model_original.dynamics_dim)
+    model_new.dynamics_weights[r, dynamics_inds_s] = 0
 
     return model_new
 

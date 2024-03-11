@@ -228,6 +228,10 @@ for m in models:
                             'eirms': np.sum(posterior_dicts[m]['eirfs'], axis=0) / sample_rate,
                             }
 
+    if m == 'synap':
+        weights['models'][m]['iirfs'] = posterior_dicts[m]['iirfs']
+        weights['models'][m]['iirms'] = np.sum(posterior_dicts[m]['iirfs'], axis=0) / sample_rate
+
     abs_eirms = np.abs(weights['models'][m]['dirms'])
     eirms_binarized = abs_eirms > (np.nanstd(abs_eirms) / std_factor)
     weights['models'][m]['eirms_binarized'] = eirms_binarized.astype(float)
@@ -308,9 +312,9 @@ cell_ids['sorted'] = [cell_ids['all'][i] for i in stim_in_both_inds]
 #             fig_save_path=fig_save_path)
 
 # pf.plot_irfs(weights_masked, masks, cell_ids, window, num_plot=20, fig_save_path=fig_save_path)
-# pf.plot_irfs_train_test(weights_masked, masks, cell_ids, window, num_plot=20, fig_save_path=fig_save_path)
+# pf.plot_irfs_train_test(weights_masked, masks, cell_ids, window, num_plot=5, fig_save_path=fig_save_path)
 
-# pf.weight_prediction(weights_masked, 'irms', fig_save_path=fig_save_path)
+pf.weight_prediction(weights_masked, masks, 'irms', fig_save_path=fig_save_path)
 # pf.weight_prediction_sweep(weights_masked, masks, 'irms', fig_save_path=fig_save_path)
 # pf.weight_prediction(weights_masked, 'corr', fig_save_path=fig_save_path)
 # pf.weight_prediction_sweep(weights_masked, masks, 'corr', fig_save_path=fig_save_path)
@@ -356,7 +360,7 @@ pairs = np.array([['AVDR', 'AVJR'],
 
 # pf.weights_vs_connectome(weights, masks, metric=metric, fig_save_path=fig_save_path / 'fig_1')
 
-pf.weight_prediction(weights, masks, 'irms', fig_save_path=fig_save_path / 'fig_1')
+# pf.weight_prediction(weights, masks, 'irms', fig_save_path=fig_save_path / 'fig_1')
 # pf.weight_prediction_sweep(weights_masked, masks, 'irms', fig_save_path=fig_save_path / 'fig_1')
 # pf.weight_prediction(weights_masked, masks, 'corr', fig_save_path=fig_save_path / 'fig_1')
 # pf.weight_prediction_sweep(weights_masked, masks, 'corr', fig_save_path=fig_save_path / 'fig_1')

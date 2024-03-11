@@ -5,12 +5,9 @@ import loading_utilities as lu
 from pathlib import Path
 import lgssm_utilities as ssmu
 
-run_params = lu.get_run_params(param_name='analysis_params/ana_test.yml')
-# run_params = lu.get_run_params(param_name='analysis_params/ana_exp_synap.yml')
-# run_params = lu.get_run_params(param_name='analysis_params/ana_exp_DL.yml')
-# run_params = lu.get_run_params(param_name='analysis_params/ana_exp_DL_old.yml')
-# run_params = lu.get_run_params(param_name='analysis_params/ana_exp_DL_fullq.yml')
-# run_params = lu.get_run_params(param_name='analysis_params/ana_syn_ridge_sweep.yml')
+# run_params = lu.get_run_params(param_name='analysis_params/ana_test.yml')
+run_params = lu.get_run_params(param_name='analysis_params/ana_exp_DL.yml')
+# run_params = lu.get_run_params(param_name='analysis_params/ana_exp_DL_synap.yml')
 
 window = run_params['window']
 sub_pre_stim = run_params['sub_pre_stim']

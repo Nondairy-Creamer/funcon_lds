@@ -56,6 +56,7 @@ def weight_prediction(weights, masks, weight_name, fig_save_path=None):
                           np.linalg.matrix_power(anat2, 5),
                           weights['models']['synap_randC'][weight_name],
                           weights['models']['synap']['dirms'],
+                          weights['models']['synap']['iirms'],
                           weights['models']['synap'][weight_name]]
 
     for ii, i in enumerate(weights_to_compare):
@@ -81,7 +82,9 @@ def weight_prediction(weights, masks, weight_name, fig_save_path=None):
     bar_colors = [plot_color['anatomy'], plot_color['anatomy'], plot_color['synap_randC'],  plot_color['synap'], plot_color['synap']]
     plt.bar(plot_x, y_val / irms_baseline, color=bar_colors)
     plt.errorbar(plot_x, y_val / irms_baseline, y_val_ci / irms_baseline, fmt='none', color='k')
-    plt.xticks(plot_x, labels=['unnormalized connectome', 'binary norm connectome^5', 'model\n+ scrambled labels', 'direct only', 'model', 'model - direct'], rotation=45)
+    # plt.xticks(plot_x, labels=['unnormalized connectome', 'binary norm connectome^5', 'model\n+ scrambled labels', 'direct only', 'model', 'model - direct'], rotation=45)
+    plt.xticks(plot_x, labels=['unnormalized connectome', 'binary norm connectome^5', 'model\n+ scrambled labels', 'direct only', 'indirect only', 'model', 'model - direct'], rotation=45)
+    # plt.xticks(plot_x, labels=['unnormalized connectome', 'binary norm connectome^5', 'model\n+ scrambled labels', 'model', 'model - direct'], rotation=45)
     plt.ylabel('% explainable correlation to measured ' + weight_name)
     plt.tight_layout()
 
@@ -112,6 +115,8 @@ def weight_prediction(weights, masks, weight_name, fig_save_path=None):
     plt.savefig(fig_save_path / ('measured_vs_model_randA_' + weight_name + '.pdf'))
 
     plt.show()
+
+    return
 
 
 def weight_prediction_sweep(weights, masks, weight_name, fig_save_path=None):
@@ -534,7 +539,7 @@ def plot_irfs_train_test(weights, masks, cell_ids, window, chosen_mask=None, num
         plt.fill_between(plot_x, this_irf - this_irf_sem, this_irf + this_irf_sem, alpha=0.4)
 
         plt.plot(plot_x, model_irfs[:, plot_ind], label='model irf')
-        plt.title(cell_ids[1, plot_ind] + ' -> ' + cell_ids[0, plot_ind])
+        plt.title(cell_ids[plot_ind, 1] + ' -> ' + cell_ids[plot_ind, 0])
         plt.legend()
         plt.axvline(0, color='k', linestyle='--')
         plt.axhline(0, color='k', linestyle='--')
