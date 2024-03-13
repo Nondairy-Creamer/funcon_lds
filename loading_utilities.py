@@ -196,7 +196,7 @@ def load_data(data_path, num_data_sets=None, neuron_freq=0.0, held_out_data=[],
         align_data_cell_ids(emissions_test, inputs_test, cell_ids_test, cell_ids_unique=data_train['cell_ids'])
 
     # eliminate neurons that don't show up often enough
-    measured_neurons = np.stack([~np.all(np.isnan(i), axis=0) for i in data_train['emissions']])
+    measured_neurons = np.stack([np.mean(np.isnan(i), axis=0) <= 0.5 for i in data_train['emissions']])
     measured_freq = np.mean(measured_neurons, axis=0)
     neurons_to_keep = measured_freq >= neuron_freq
 
