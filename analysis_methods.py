@@ -146,6 +146,33 @@ def plot_model_params(model, model_true=None, cell_ids_chosen=None):
     for i in range(len(A)):
         plot_matrix(A[i], A_true[i], labels_x=cell_ids_chosen, labels_y=cell_ids_chosen, abs_max=abs_max, title='A')
 
+    # plot the dynamics weights eigenvalues
+    eigvals_trained, eigvects_trained = np.linalg.eig(model_params['trained']['dynamics_weights'])
+
+    fig = plt.figure()
+    x_circ = np.cos(np.linspace(0, 2 * np.pi, 100))
+    y_circ = np.sin(np.linspace(0, 2 * np.pi, 100))
+
+    if has_ground_truth:
+        ax = plt.subplot(1, 2, 2)
+        eigvals_true, eigvects_true = np.linalg.eig(model_params_true['trained']['dynamics_weights'])
+        plt.scatter(np.real(eigvals_true), np.imag(eigvals_true))
+        plt.plot(x_circ, y_circ)
+        plt.plot(0.5*x_circ, 0.5*y_circ)
+        ax.set_aspect('equal', 'box')
+        plt.title('true eigvals')
+        ax = plt.subplot(1, 2, 1)
+    else:
+        ax = fig.add_subplot()
+
+    plt.scatter(np.real(eigvals_trained), np.imag(eigvals_trained))
+    plt.plot(x_circ, y_circ)
+    plt.plot(0.5*x_circ, 0.5*y_circ)
+    ax.set_aspect('equal', 'box')
+    plt.title('trained eigvals')
+
+    plt.show()
+
     # plot the B matrix
     B_full = model_params['trained']['dynamics_input_weights'][:model.dynamics_dim, :]
     B = np.split(B_full, model.dynamics_input_lags, axis=1)

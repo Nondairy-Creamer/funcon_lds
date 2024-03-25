@@ -229,6 +229,30 @@ def nan_corr_data(data, alpha=0.05):
     return data_corr, data_corr_ci
 
 
+def get_neuron_types(cell_ids):
+    try:
+        neuron_types_str = np.loadtxt('anatomical_data/neuron_type.csv', delimiter=',', dtype=str, usecols=[0, 1])
+    except:
+        neuron_types_str = np.loadtxt('../anatomical_data/neuron_type.csv', delimiter=',', dtype=str, usecols=[0, 1])
+
+    file_cell_names = list(neuron_types_str[:, 0])
+    file_cell_descriptions = list(neuron_types_str[:, 1])
+
+    cell_classifications = ['Sensory', 'Interneuron', 'Modulatory', 'Motor', 'Pharynx']
+    neuron_types = np.zeros((len(cell_ids), len(cell_classifications))).astype(bool)
+
+    for cfni, cfn in enumerate(file_cell_names):
+        for cii, ci in enumerate(cell_ids):
+            if cfn in ci:
+                cell_description = file_cell_descriptions[cfni]
+
+                for cci, cc in enumerate(cell_classifications):
+                    if cc in cell_description:
+                        neuron_types[cii, cci] = True
+
+    return neuron_types, cell_classifications
+
+
 def single_sample_boostrap_p(data, metric=np.mean, n_boot=10000, rng=np.random.default_rng()):
     booted_metric = np.zeros(n_boot)
 

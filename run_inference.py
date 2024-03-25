@@ -25,7 +25,8 @@ def fit_synthetic(param_name, save_folder):
         # define the model, setting specific parameters
         model_true = Lgssm(run_params['dynamics_dim'], run_params['emissions_dim'], run_params['input_dim'],
                            dynamics_lags=run_params['dynamics_lags'], dynamics_input_lags=run_params['dynamics_input_lags'],
-                           emissions_input_lags=run_params['emissions_input_lags'], param_props=run_params['param_props'],)
+                           emissions_input_lags=run_params['emissions_input_lags'], param_props=run_params['param_props'])
+
         model_true.randomize_weights(rng=rng)
         if model_true.param_props['update']['emissions_weights']:
             emission_weights_values = rng.uniform(size=(model_true.emissions_dim, model_true.dynamics_lags))

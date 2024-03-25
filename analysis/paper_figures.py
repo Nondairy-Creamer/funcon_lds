@@ -6,6 +6,7 @@ import lgssm_utilities as ssmu
 import matplotlib as mpl
 import analysis_utilities as au
 import scipy.cluster.hierarchy as sch
+import networkx as nx
 
 
 # colormap = mpl.colormaps['RdBu_r']
@@ -209,52 +210,65 @@ def weights_vs_connectome(weights, masks, metric=met.f_measure, rng=np.random.de
     plt.show()
 
 
-def plot_eigenvalues(models, cell_ids):
-    # calculate the eignvalues / vectors of the dynamics matrix
+def plot_eigenvalues(models, masks, data, cell_ids, num_vect_plot=5, neuron_freq=0.1):
     model = models['synap']
-    A = model.dynamics_weights
+    cell_types, cell_type_labels = au.get_neuron_types(cell_ids['all'])
+
+    # remove neurons that were measured infrequently
+    measured_neurons = np.stack([np.mean(np.isnan(i), axis=0) <= 0.5 for i in data])
+    measured_freq = np.mean(measured_neurons, axis=0)
+    neurons_to_keep = measured_freq >= neuron_freq
+    neurons_to_keep_tiled = np.tile(neurons_to_keep, model.dynamics_lags)
+
+    # restrict the A matrix to neurons that were measured a lot
+    A = model.dynamics_weights[:, neurons_to_keep_tiled][neurons_to_keep_tiled, :]
+    cell_ids_all = [cell_ids['all'][i] for i in range(len(neurons_to_keep)) if neurons_to_keep[i]]
+    cell_types = cell_types[neurons_to_keep, :]
+    cell_type_count = np.sum(cell_types, axis=0)
+
+    # calculate the eignvalues / vectors of the dynamics matrix
     eig_vals, eig_vects = np.linalg.eig(A)
 
-    # sort_inds = np.argsort(np.abs(eig_vals))
+    # sort to get the largest
     sort_inds = np.argsort(np.abs(eig_vals))[::-1]
 
     eig_vals = eig_vals[sort_inds]
+    eig_vals_abs = np.abs(eig_vals)
     eig_vects = eig_vects[:, sort_inds]
-    remove_complex_conj = np.where(np.iscomplex(eig_vals))[0][::2]
-    eig_vals = np.delete(eig_vals, remove_complex_conj)
-    eig_vects = np.delete(eig_vects, remove_complex_conj, axis=1)
+    
+    # average together eigenvectors across lags
     eig_vects_stacked = np.stack(np.split(eig_vects, model.dynamics_lags, axis=0))
     eig_vects_comb_real = np.mean(np.real(eig_vects_stacked), axis=0)
     eig_vects_comb_abs = np.mean(np.abs(eig_vects_stacked), axis=0)
 
     plt.figure()
-    plt.subplot(1, 2, 1)
-    plt.plot(np.abs(eig_vals))
-    plt.xlabel('eigenvalue')
+    plt.plot(eig_vals_abs)
+    plt.xlabel('eigenvalue #')
+    plt.ylabel('eigenvalue magnitude')
 
-    plt.subplot(1, 2, 2)
-    plt.plot(np.abs(eig_vals[:100]))
-    plt.xlabel('eigenvalue')
-
+    # plot eigenvalue magnitude in decreasing magnitude
     fig = plt.figure()
+    x_circ = np.cos(np.linspace(0, 2 * np.pi, 100))
+    y_circ = np.sin(np.linspace(0, 2 * np.pi, 100))
+
+    # plot the eigenvalues real vs imaginary components
     ax = fig.add_subplot()
     plt.scatter(np.real(eig_vals), np.imag(eig_vals))
-    plt.plot(np.cos(np.linspace(0, 2 * np.pi, 100)), np.sin(np.linspace(0, 2 * np.pi, 100)))
+    plt.plot(x_circ, y_circ)
     plt.xlim([-1, 1])
     plt.ylim([-1, 1])
     ax.set_aspect('equal', 'box')
     plt.xlabel('real[eigenvalues]')
     plt.ylabel('imag[eigenvalues]')
 
+    # loop through each eigenvector and plot the top num_neuron_plot entries
     ylim_max = np.max(np.abs(eig_vects_comb_real))
     ylim_plot = (-ylim_max, ylim_max)
+    eig_cell_type = np.zeros(eig_vects_comb_abs.shape[1])
+    num_synap = np.zeros((eig_vects_comb_abs.shape[1], 2))
 
-    num_eigvects_to_plot = 10
-    num_eigvect_inds_to_plot = 20
-    plot_x = np.arange(num_eigvect_inds_to_plot)
-
-    for n in range(num_eigvects_to_plot):
-        cell_ids_plot = cell_ids['all'].copy()
+    for n in range(eig_vects_comb_abs.shape[1]):
+        cell_ids_plot = cell_ids_all.copy()
         this_eig_vect_comb_real = eig_vects_comb_real[:, n]
         this_eig_vect_comb_abs = eig_vects_comb_abs[:, n]
         this_eig_vect_stacked = eig_vects_stacked[:, :, n]
@@ -264,24 +278,152 @@ def plot_eigenvalues(models, cell_ids):
         this_eig_vect_comb_abs = this_eig_vect_comb_abs[cell_sort_inds]
         this_eig_vect_comb_real = this_eig_vect_comb_real[cell_sort_inds]
         this_eig_vect_stacked = this_eig_vect_stacked[:, cell_sort_inds]
+        this_eig_cell_types = cell_types[cell_sort_inds, :]
 
-        cell_ids_plot = [cell_ids_plot[i] for i in cell_sort_inds[:num_eigvect_inds_to_plot]]
+        eig_vect_cdf = np.cumsum(this_eig_vect_comb_abs) / np.sum(this_eig_vect_comb_abs)
+        cutoff = eig_vect_cdf > 0.5
+        num_neuron_plot = np.where(cutoff)[0][0] + 1
+        plot_x = np.arange(num_neuron_plot)
 
-        plt.figure()
-        plt.subplot(3, 1, 1)
-        plt.scatter(plot_x, this_eig_vect_comb_abs[:num_eigvect_inds_to_plot])
-        plt.ylim(ylim_plot)
-        # plt.xticks(plot_x, cell_ids_plot, rotation=90)
+        cell_ids_plot = [cell_ids_plot[i] for i in cell_sort_inds[:num_neuron_plot]]
 
-        plt.subplot(3, 1, 2)
-        plt.scatter(plot_x, this_eig_vect_comb_real[:num_eigvect_inds_to_plot])
-        plt.ylim(ylim_plot)
-        # plt.xticks(plot_x, cell_ids_plot, rotation=90)
+        this_eig_vect_comb_abs = this_eig_vect_comb_abs[:num_neuron_plot]
+        this_eig_vect_comb_real = this_eig_vect_comb_real[:num_neuron_plot]
+        this_eig_vect_stacked = this_eig_vect_stacked[:, :num_neuron_plot]
+        this_eig_cell_types = this_eig_cell_types[:num_neuron_plot, :]
+        eig_cell_type[n] = np.argmax(np.sum(this_eig_cell_types, axis=0))
 
-        plt.subplot(3, 1, 3)
-        plt.imshow(np.real(this_eig_vect_stacked[:, :num_eigvect_inds_to_plot]))
-        plt.xticks(plot_x, cell_ids_plot, rotation=90)
-        plt.ylabel('time lags')
+        # get the subnetwork defined by the eigenvector
+        neuron_inds = [cell_ids['all'].index(i) for i in cell_ids_plot]
+        network = masks['chem'] | masks['gap']
+        network_chem = masks['chem']
+        network_gap = masks['gap']
+        network[np.eye(network.shape[0], dtype=bool)] = False
+        network = network[neuron_inds, :][:, neuron_inds]
+        network_chem = network_chem[neuron_inds, :][:, neuron_inds]
+        network_gap = network_gap[neuron_inds, :][:, neuron_inds]
+
+        num_synap[n, 0] = np.sum(network_gap)
+        num_synap[n, 1] = np.sum(network_chem)
+
+        if n < num_vect_plot:
+            # plot the eigenvector
+            plt.figure()
+            plt.subplot(3, 1, 1)
+            plt.axhline(0, color='k', linestyle='--')
+            plt.scatter(plot_x, this_eig_vect_comb_abs[:num_neuron_plot])
+            plt.ylim(ylim_plot)
+
+            plt.subplot(3, 1, 2)
+            plt.axhline(0, color='k', linestyle='--')
+            plt.scatter(plot_x, this_eig_vect_comb_real[:num_neuron_plot])
+            plt.ylim(ylim_plot)
+
+            plt.subplot(3, 1, 3)
+            plt.imshow(np.real(this_eig_vect_stacked[:, :num_neuron_plot]))
+            plt.xticks(plot_x, cell_ids_plot, rotation=90)
+            plt.ylabel('time lags')
+
+            # plot the subnetwork that represents the eigenvector
+            plt.figure()
+            G = nx.DiGraph(network)
+
+            labels_dict = {}
+            for i in range(num_neuron_plot):
+                labels_dict[i] = cell_ids_plot[i]
+
+            nx.draw_kamada_kawai(G, labels=labels_dict)
+
+    # define 3 regions
+    # 1 large eig, real
+    # 2 medium eig, real
+    # 3 small eig, real
+    # 4 medium eig, complex 45 deg
+    # 5 medium eig, complex 90 deg
+
+    # define the eigenvalues in each section
+    section_names = ['large real', 'mid real', 'mid complex 45', 'mid complex 90']
+    # section_names = ['large real', 'mid real', 'small real', 'mid complex 45', 'mid complex 90']
+    def get_angle(eig_vals):
+        real_part = np.real(eig_vals)
+        abs_imag_part = np.abs(np.imag(eig_vals))
+        return (np.arctan(abs_imag_part / real_part) % np.pi) * 180 / np.pi
+
+    real_cutoff = 0.125
+    angle_cutoff = 60
+
+    eig_val_angle = get_angle(eig_vals)
+    sections = [(np.abs(eig_vals) > 0.95) & (np.abs(np.imag(eig_vals)) < real_cutoff),
+                (np.abs(eig_vals) < 0.95) & (np.abs(np.imag(eig_vals)) < real_cutoff),
+                #(np.abs(eig_vals) < 0.5) & (np.imag(eig_vals) < real_cutoff),
+                (np.abs(eig_vals) > 0.4) & (np.abs(eig_vals) < 0.9) & (eig_val_angle > 15) & (eig_val_angle < angle_cutoff),
+                (np.abs(eig_vals) > 0.4) & (np.abs(eig_vals) < 0.9) & (eig_val_angle > angle_cutoff) & (eig_val_angle < 150)]
+
+    # plot the eigenvalues in their sections
+    fig = plt.figure()
+    ax = fig.add_subplot()
+    for ii, i in enumerate(sections):
+        selected_vals = eig_vals[i]
+        plt.scatter(np.real(selected_vals), np.imag(selected_vals), label=section_names[ii])
+
+    plt.plot(x_circ, y_circ)
+    plt.xlim([-1.1, 1.1])
+    plt.ylim([-1.1, 1.1])
+    ax.set_aspect('equal', 'box')
+    plt.legend()
+
+    # get the counts of cell type in each section
+    bin_edges = np.linspace(-0.5, 4.5, 6)
+    all_counts = np.histogram(eig_cell_type, bins=bin_edges)[0].astype(float)
+
+    section_counts = []
+    synapse_counts = []
+
+    num_synap[:, 0] = num_synap[:, 0] > num_synap[:, 1]
+    num_synap[:, 1] = 1 - num_synap[:, 0]
+    for i in sections:
+        section_counts.append(np.histogram(eig_cell_type[i], bins=bin_edges)[0].astype(float))
+        section_counts[-1] /= (all_counts * np.sum(i))
+        synapse_counts.append(np.sum(num_synap[i, :], axis=0))
+        synapse_counts[-1] /= (np.sum(num_synap, axis=0) * np.sum(i))
+
+    chance = 1 / eig_vals.shape[0]
+
+    # plot cell types by group
+    plt.figure()
+    plot_x = np.arange(len(section_counts))
+    plt.figure()
+    plt.bar(plot_x, [np.mean(i) for i in section_counts])
+    plt.xticks(plot_x, section_names)
+
+    plt.figure()
+    plot_x = np.arange(bin_edges.shape[0] - 1)
+    for ii, i in enumerate(section_counts):
+        plt.scatter(plot_x, i / chance, label=section_names[ii])
+
+    plt.axhline(1, label='chance', color='k', linestyle='--')
+    plt.ylim([0, plt.ylim()[1]])
+    plt.xticks(np.arange(len(cell_type_labels)), cell_type_labels)
+    plt.legend()
+
+    # plot synapse count by group
+    synapse_names = ['gap', 'chemical']
+    plot_x = [1, 2]
+    plt.figure()
+    # plt.subplot(1, 2, 1)
+    plt.bar(plot_x, np.mean(num_synap, axis=0))
+    plt.xticks(plot_x, synapse_names)
+
+    plt.figure()
+    # plt.subplot(1, 2, 2)
+    plot_x = np.arange(2)
+    for ii, i in enumerate(synapse_counts):
+        plt.scatter(plot_x, i / chance, label=section_names[ii])
+
+    plt.axhline(1, label='chance', color='k', linestyle='--')
+    plt.ylim([0, plt.ylim()[1]])
+    plt.xticks(np.arange(len(synapse_names)), synapse_names)
+    plt.legend()
 
     plt.show()
 

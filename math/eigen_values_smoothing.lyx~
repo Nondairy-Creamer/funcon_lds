@@ -1,0 +1,252 @@
+#LyX 2.3 created this file. For more info see http://www.lyx.org/
+\lyxformat 544
+\begin_document
+\begin_header
+\save_transient_properties true
+\origin unavailable
+\textclass article
+\use_default_options true
+\maintain_unincluded_children false
+\language english
+\language_package default
+\inputencoding auto
+\fontencoding global
+\font_roman "default" "default"
+\font_sans "default" "default"
+\font_typewriter "default" "default"
+\font_math "auto" "auto"
+\font_default_family default
+\use_non_tex_fonts false
+\font_sc false
+\font_osf false
+\font_sf_scale 100 100
+\font_tt_scale 100 100
+\use_microtype false
+\use_dash_ligatures true
+\graphics default
+\default_output_format default
+\output_sync 0
+\bibtex_command default
+\index_command default
+\paperfontsize default
+\use_hyperref false
+\papersize default
+\use_geometry false
+\use_package amsmath 1
+\use_package amssymb 1
+\use_package cancel 1
+\use_package esint 1
+\use_package mathdots 1
+\use_package mathtools 1
+\use_package mhchem 1
+\use_package stackrel 1
+\use_package stmaryrd 1
+\use_package undertilde 1
+\cite_engine basic
+\cite_engine_type default
+\use_bibtopic false
+\use_indices false
+\paperorientation portrait
+\suppress_date false
+\justification true
+\use_refstyle 1
+\use_minted 0
+\index Index
+\shortcut idx
+\color #008000
+\end_index
+\secnumdepth 3
+\tocdepth 3
+\paragraph_separation indent
+\paragraph_indentation default
+\is_math_indent 0
+\math_numbering_side default
+\quotes_style english
+\dynamic_quotes 0
+\papercolumns 1
+\papersides 1
+\paperpagestyle default
+\tracking_changes false
+\output_changes false
+\html_math_output 0
+\html_css_as_file 0
+\html_be_strict false
+\end_header
+
+\begin_body
+
+\begin_layout Standard
+I want to compare the eigenvalues of a linear system compared to the same
+ linear system smoothed by a linear kernel
+\end_layout
+
+\begin_layout Standard
+Let 
+\begin_inset Formula $x_{t}$
+\end_inset
+
+ evolve according to linear dynamics
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $x_{t}=Ax_{t-1}$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Convolve 
+\begin_inset Formula $x_{t}$
+\end_inset
+
+ with filter 
+\begin_inset Formula $h$
+\end_inset
+
+ such that
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $h=\left[\begin{array}{c}
+\frac{8}{15}\\
+\frac{4}{15}\\
+\frac{2}{15}\\
+\frac{1}{15}
+\end{array}\right]$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $x_{t}\ast h=\frac{8}{15}x_{t}+\frac{4}{15}x_{t-1}+\frac{2}{15}x_{t-2}+\frac{1}{15}x_{t-3}$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $x_{t}\ast h=\frac{8}{15}Ax_{t-1}+\frac{4}{15}Ax_{t-2}+\frac{2}{15}Ax_{t-3}+\frac{1}{15}Ax_{t-4}$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $x_{t}\ast h$
+\end_inset
+
+ can be described as an AR(4) process with a delay embedding of 
+\begin_inset Formula $x_{t}$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\left[\begin{array}{c}
+x_{t}\\
+x_{t-1}\\
+x_{t-2}\\
+x_{t-3}
+\end{array}\right]=\left[\begin{array}{cccc}
+\frac{8}{15}A & \frac{4}{15}A & \frac{2}{15}A & \frac{1}{15}A\\
+I & 0 & 0 & 0\\
+0 & I & 0 & 0\\
+0 & 0 & I & 0
+\end{array}\right]\left[\begin{array}{c}
+x_{t-1}\\
+x_{t-2}\\
+x_{t-3}\\
+x_{t-4}
+\end{array}\right]$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Compare the eigenvalues of 
+\begin_inset Formula $x_{t}$
+\end_inset
+
+ and 
+\begin_inset Formula $x_{t}\ast h$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Eigenvalues of an AR(4) model (I derived this in lds_eigenvalues.lyx) where
+ 
+\begin_inset Formula $W_{i}$
+\end_inset
+
+ is the weights for each lag 
+\begin_inset Formula $i$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\left|\sum_{i=1}^{g}\frac{1}{\lambda^{i-1}}W_{i}-\lambda I\right|=0$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Eigenvalues for the original system are the eigenvalues of A
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\left|A-\lambda I\right|=0$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+The eigenvalues for the smoothed system are the solutions of
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\left|\frac{8}{15}A+\frac{4}{15\lambda}A+\frac{2}{15\lambda^{2}}A+\frac{1}{15\lambda^{3}}A-\lambda I\right|=0$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\left|\left(\frac{8}{15}+\frac{4}{15\lambda}+\frac{2}{15\lambda^{2}}+\frac{1}{15\lambda^{3}}\right)A-\lambda I\right|=0$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\left|\left(\frac{8\lambda^{3}}{15\lambda^{3}}+\frac{4\lambda^{2}}{15\lambda^{3}}+\frac{2\lambda}{15\lambda^{3}}+\frac{1}{15\lambda^{3}}\right)A-\lambda I\right|=0$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\left|\frac{8\lambda^{3}+4\lambda^{2}+2\lambda+1}{15\lambda^{3}}A-\lambda I\right|=0$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\left|\frac{(2\lambda+1)(4\lambda^{2}+1)}{15\lambda^{3}}A-\lambda I\right|=0$
+\end_inset
+
+
+\end_layout
+
+\end_body
+\end_document

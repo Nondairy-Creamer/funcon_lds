@@ -305,7 +305,7 @@ cell_ids['sorted'] = [cell_ids['all'][i] for i in stim_in_both_inds]
 # pf.plot_irfs(weights_masked, masks, cell_ids, window, num_plot=20, fig_save_path=fig_save_path)
 # pf.plot_irfs_train_test(weights_masked, masks, cell_ids, window, num_plot=5, fig_save_path=fig_save_path)
 
-pf.weight_prediction(weights_masked, masks, 'irms', fig_save_path=fig_save_path)
+# pf.weight_prediction(weights_masked, masks, 'irms', fig_save_path=fig_save_path)
 # pf.weight_prediction_sweep(weights_masked, masks, 'irms', fig_save_path=fig_save_path)
 # pf.weight_prediction(weights_masked, 'corr', fig_save_path=fig_save_path)
 # pf.weight_prediction_sweep(weights_masked, masks, 'corr', fig_save_path=fig_save_path)
@@ -330,7 +330,7 @@ pf.weight_prediction(weights_masked, masks, 'irms', fig_save_path=fig_save_path)
 
 # Figure 4
 # pf.corr_zimmer_paper(weights_masked, models, cell_ids)
-# pf.plot_eigenvalues(models, cell_ids)
+pf.plot_eigenvalues(models, masks, data_train['emissions'], cell_ids, num_vect_plot=0)
 
 ### Final verson of the figures
 pairs = np.array([['AVDR', 'AVJR'],
