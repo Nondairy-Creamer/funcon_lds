@@ -121,6 +121,23 @@ def plot_model_params(model, model_true=None, cell_ids_chosen=None):
     plt.tight_layout()
     plt.show()
 
+    # plot the derivative of the log likelihood
+    plt.figure()
+    plt.subplot(1, 2, 1)
+    num_iter = np.arange(len(model.log_likelihood)-1)
+    ll_diff = np.diff(model.log_likelihood)
+    plt.plot(num_iter, ll_diff, label='fit parameters')
+    plt.xlabel('EM iteration')
+    plt.ylabel('d/dt log likelihood')
+
+    plt.subplot(1, 2, 2)
+    subset = np.arange(int(len(num_iter) / 2), len(num_iter))
+    plt.plot(num_iter[subset], [ll_diff[i] for i in subset], label='fit parameters')
+    plt.xlabel('EM iteration')
+    plt.ylabel('d/dt log likelihood')
+    plt.tight_layout()
+    plt.show()
+
     # plot the dynamics weights
     A_full = model_params['trained']['dynamics_weights'][:model.dynamics_dim, :]
     A = np.split(A_full, model.dynamics_lags, axis=1)
@@ -158,7 +175,6 @@ def plot_model_params(model, model_true=None, cell_ids_chosen=None):
         eigvals_true, eigvects_true = np.linalg.eig(model_params_true['trained']['dynamics_weights'])
         plt.scatter(np.real(eigvals_true), np.imag(eigvals_true))
         plt.plot(x_circ, y_circ)
-        plt.plot(0.5*x_circ, 0.5*y_circ)
         ax.set_aspect('equal', 'box')
         plt.title('true eigvals')
         ax = plt.subplot(1, 2, 1)
