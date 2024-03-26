@@ -161,7 +161,7 @@ def get_impulse_response_functions(data, inputs, sample_rate=2, window=(15, 30),
     return ave_responses, ave_responses_sem, responses
 
 
-def calculate_irfs(model, rng=np.random.default_rng(), window=(15, 30)):
+def calculate_irfs(model, rng=np.random.default_rng(), window=(15, 30), verbose=False):
     # get irfs from Lgssm model
     num_t = int(window[1] * model.sample_rate)
     num_n = model.dynamics_dim
@@ -171,12 +171,21 @@ def calculate_irfs(model, rng=np.random.default_rng(), window=(15, 30)):
         inputs = np.zeros((num_t, num_n))
         inputs[0, s] = 1
         irfs[:, :, s] = model.sample(num_time=num_t, inputs=inputs, rng=rng, add_noise=False)['emissions']
-        print(s + 1, '/', num_n)
+
+        if verbose:
+            print(s + 1, '/', num_n)
 
     zero_pad = np.zeros((int(window[0] * model.sample_rate), num_n, num_n))
     irfs = np.concatenate((zero_pad, irfs), axis=0)
 
     return irfs
+
+
+def calculate_irms(model, rng=np.random.default_rng(), window=(15, 30), verbose=False):
+    irfs = calculate_irfs(model, rng=rng, window=window, verbose=verbose)
+    irms = np.sum(irfs[window[0]:, :, :], axis=0) / model.sample_rate
+
+    return irms
 
 
 def calculate_iirfs(model, rng=np.random.default_rng(), window=(15, 30)):
@@ -230,7 +239,7 @@ def calculate_dirfs(model, rng=np.random.default_rng(), window=(15, 30), add_rec
     return dirfs
 
 
-def calculate_eirfs(model, rng=np.random.default_rng(), window=(30, 60)):
+def calculate_eirfs(model, rng=np.random.default_rng(), window=(30, 60), verbose=False):
     # get eirfs from Lgssm model
     num_t = int(window[1] * model.sample_rate)
     num_n = model.dynamics_dim
@@ -250,12 +259,20 @@ def calculate_eirfs(model, rng=np.random.default_rng(), window=(30, 60)):
             eirfs[:, r, s] = sub_model.sample(num_time=num_t, init_mean=init_mean, inputs=inputs,
                                               rng=rng, add_noise=False)['emissions'][:, 1]
 
-        print(s + 1, '/', num_n)
+        if verbose:
+            print(s + 1, '/', num_n)
 
     zero_pad = np.zeros((int(window[0] * model.sample_rate), num_n, num_n))
     eirfs = np.concatenate((zero_pad, eirfs), axis=0)
 
     return eirfs
+
+
+def calculate_eirms(model, rng=np.random.default_rng(), window=(30, 60), verbose=False):
+    eirfs = calculate_eirfs(model, rng=rng, window=window, verbose=verbose)
+    eirms = np.sum(eirfs[window[0]:, :, :], axis=0) / model.sample_rate
+
+    return eirms
 
 
 def get_sub_model(model_original, s, r, add_recipricol=False):
