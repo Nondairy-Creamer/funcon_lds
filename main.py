@@ -9,7 +9,7 @@ from mpi4py import MPI
 from mpi4py.util import pkl5
 
 
-def main(param_name, folder_name=None, extra_train_steps=None):
+def main(param_name, folder_name=None, extra_train_steps=None, prune_frac=None):
     comm = pkl5.Intracomm(MPI.COMM_WORLD)
     cpu_id = comm.Get_rank()
 
@@ -19,7 +19,10 @@ def main(param_name, folder_name=None, extra_train_steps=None):
         if extra_train_steps is None:
             run_type = 'post'
         else:
-            run_type = 'cont'
+            if prune_frac is None:
+                run_type = 'cont'
+            else:
+                run_type = 'prune'
 
     param_name = Path(param_name)
     run_params = lu.get_run_params(param_name=param_name)
@@ -47,6 +50,9 @@ def main(param_name, folder_name=None, extra_train_steps=None):
             elif run_type == 'cont':
                 fit_model_command = 'run_inference.continue_fit(\'' + str(param_name) + '\',\'' + str(save_folder) + \
                                     '\',' + str(extra_train_steps) + ')\"'
+            elif run_type == 'prune':
+                fit_model_command = 'run_inference.prune_model(\'' + str(param_name) + '\',\'' + str(save_folder) + \
+                                    '\',' + str(extra_train_steps) + '\',\'' + str(prune_frac) + ')\"'
             else:
                 raise Exception('run type not recognized')
 
@@ -76,8 +82,11 @@ def main(param_name, folder_name=None, extra_train_steps=None):
             method = getattr(run_inference, 'infer_posterior')
             method(param_name, save_folder, infer_missing=True)
         elif run_type == 'cont':
-            method = getattr(run_inference, 'continue_fit')
+            method = getattr(run_inference, 'prune_model')
             method(param_name, save_folder, extra_train_steps=extra_train_steps)
+        elif run_type == 'prune':
+            method = getattr(run_inference, 'prune_model')
+            method(param_name, save_folder, extra_train_steps=extra_train_steps, prune_frac=prune_frac)
         else:
             raise Exception('run type not recognized')
 
@@ -92,20 +101,29 @@ if __name__ == '__main__':
         # param_name = 'submission_params/exp_test.yml'
         folder_name = None
         extra_train_steps = None
+        prune_frac = None
     elif num_args == 2:
         param_name = sys.argv[1]
         folder_name = None
         extra_train_steps = None
+        prune_frac = None
     elif num_args == 3:
         param_name = sys.argv[1]
         folder_name = sys.argv[2]
         extra_train_steps = None
+        prune_frac = None
     elif num_args == 4:
         param_name = sys.argv[1]
         folder_name = sys.argv[2]
         extra_train_steps = int(sys.argv[3])
+        prune_frac = None
+    elif num_args == 5:
+        param_name = sys.argv[1]
+        folder_name = sys.argv[2]
+        extra_train_steps = int(sys.argv[3])
+        prune_frac = float(sys.argv[4])
     else:
         raise Exception('Unsupported number of arguments: (' + str(num_args))
 
-    main(param_name, folder_name, extra_train_steps=extra_train_steps)
+    main(param_name, folder_name, extra_train_steps=extra_train_steps, prune_frac=prune_frac)
 

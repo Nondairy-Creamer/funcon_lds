@@ -9,6 +9,10 @@ import analysis_methods as am
 import os
 import pickle
 from pathlib import Path
+import lgssm_utilities as lgssmu
+import copy
+import metrics as met
+import shutil
 
 
 def fit_synthetic(param_name, save_folder):
@@ -70,6 +74,10 @@ def fit_synthetic(param_name, save_folder):
                 setattr(model_trained, init_key, getattr(model_true, init_key))
 
         model_trained.set_to_init()
+
+        # TODO REMOVE
+        model_trained.param_props['mask']['dynamics_weights'] = \
+            np.ones(model_trained.param_props['mask']['dynamics_weights'].shape) == 1
 
         lu.save_run(save_folder, model_true=model_true, model_trained=model_trained, ep=0, data_train=data_train,
                     data_test=data_test, params=run_params)
@@ -317,10 +325,149 @@ def continue_fit(param_name, save_folder, extra_train_steps):
                 init_cov_train=init_cov_train, init_cov_test=init_cov_test)
 
 
+def prune_model(param_name, save_folder, extra_train_steps, prune_frac):
+    # set up the option to parallelize the model fitting over CPUs
+    comm = pkl5.Intracomm(MPI.COMM_WORLD)
+    size = comm.Get_size()
+    cpu_id = comm.Get_rank()
+
+    # this code will load in an existing model then prune connections by removing the model weights closest to 0
+    error_frac = np.inf
+    min_score_frac = 0.9
+    window = (15, 30)  # window around which to calculate the eIRFs and IRFs
+    run_params = lu.get_run_params(param_name=param_name)
+    run_params['num_train_steps'] = extra_train_steps
+
+    # cpu_id 0 is the parent node which will send out the data to the children nodes
+    if cpu_id == 0:
+        save_folder = Path(save_folder)
+        # load in the data for the model and do any preprocessing here
+        data_train_path = save_folder / 'data_train.pkl'
+        data_train_file = open(data_train_path, 'rb')
+        data_train = pickle.load(data_train_file)
+        data_train_file.close()
+
+        data_test_path = save_folder / 'data_test.pkl'
+        data_test_file = open(data_test_path, 'rb')
+        data_test = pickle.load(data_test_file)
+        data_test_file.close()
+
+        data_irfs = lgssmu.get_impulse_response_functions(
+            data_test['emissions'], data_test['inputs'], sample_rate=data_test['sample_rate'],
+            window=window, sub_pre_stim=True)[0]
+        data_irms = np.sum(data_irfs, axis=0)
+        data_irms[np.eye(data_irms.shape[0], dtype=bool)] = np.nan
+
+        posterior_train_path = save_folder / 'posterior_train.pkl'
+        posterior_train_file = open(posterior_train_path, 'rb')
+        posterior_train = pickle.load(posterior_train_file)
+        posterior_train_file.close()
+
+        posterior_test_path = save_folder / 'posterior_test.pkl'
+        if posterior_test_path.exists():
+            posterior_test_file = open(posterior_test_path, 'rb')
+            posterior_test = pickle.load(posterior_test_file)
+            posterior_test_file.close()
+            emissions_offset_test = posterior_test['emissions_offset']
+            init_mean_test = posterior_test['init_mean']
+            init_cov_test = posterior_test['init_cov']
+        else:
+            emissions_offset_test = None
+            init_mean_test = None
+            init_cov_test = None
+
+        model_path = save_folder / 'models' / 'model_trained.pkl'
+        model_file = open(model_path, 'rb')
+        model_base = pickle.load(model_file)
+        model_file.close()
+
+        emissions_offset_train = posterior_train['emissions_offset']
+        init_mean_train = posterior_train['init_mean']
+        init_cov_train = posterior_train['init_cov']
+
+        model_irms_base = lgssmu.calculate_irms(model_base, window=window)
+        model_base_score = met.nan_corr(data_irms, model_irms_base)[0]
+
+        if (save_folder / 'pruning').exists():
+            shutil.rmtree(save_folder / 'pruning')
+
+        os.mkdir(save_folder / 'pruning')
+
+        dynamics_dim = model_base.dynamics_dim
+        dynamics_lags = model_base.dynamics_lags
+        model_dict = {'model': copy.deepcopy(model_base),
+                      'init_mean_train': init_mean_train.copy(),
+                      'init_mean_test': init_mean_test.copy(),
+                      'init_cov_train': init_cov_train.copy(),
+                      'init_cov_test': init_cov_test.copy(),
+                      'emissions_offset_train': emissions_offset_train.copy(),
+                      'emissions_offset_test': emissions_offset_test.copy(),
+                      }
+    else:
+        # if you are a child node, just set everything to None and only calculate your sufficient statistics
+        data_train = None
+        data_test = None
+        model_dict = {'model': None,
+                      'init_mean_train': None,
+                      'init_mean_test': None,
+                      'init_cov_train': None,
+                      'init_cov_test': None,
+                      'emissions_offset_train': None,
+                      'emissions_offset_test': None,
+                      }
+
+
+    num_iter = 0
+
+    while error_frac > min_score_frac:
+        if cpu_id == 0:
+            # prune the smallest weights
+            current_mask = model_dict['model'].param_props['mask']['dynamics_weights'][:, :dynamics_dim]
+            model_weights = lgssmu.calculate_eirms(model_dict['model'], window=window)
+            model_weights_no_masked = model_weights.copy()
+            model_weights_no_masked[~current_mask] = np.inf
+            model_weights_no_masked[np.eye(model_weights_no_masked.shape[0], dtype=bool)] = np.inf
+            num_weights_remove = np.ceil(prune_frac * np.sum(current_mask)).astype(int)
+            cutoff_value = np.sort(np.abs(model_weights_no_masked).reshape(-1))[num_weights_remove]
+            cutoff_bool = np.abs(model_weights) <= cutoff_value
+            model_dict['model'].dynamics_weights[:dynamics_dim, :][np.tile(cutoff_bool, (1, model_dict['model'].dynamics_lags))] = 0
+            model_dict['model'].param_props['mask']['dynamics_weights'] = np.tile(~cutoff_bool, (1, dynamics_lags))
+
+            save_path_iter = save_folder / 'pruning' / ('model_iter_' + f'{num_iter:03d}')
+            os.mkdir(save_path_iter)
+        else:
+            save_path_iter = None
+
+        # set all the learned data parameters
+        init_mean_train = model_dict['init_mean_train']
+        init_mean_test = model_dict['init_mean_test']
+        init_cov_train = model_dict['init_cov_train']
+        init_cov_test = model_dict['init_cov_test']
+        emissions_offset_train = model_dict['emissions_offset_train']
+        emissions_offset_test = model_dict['emissions_offset_test']
+
+        model_dict = \
+            run_fitting(run_params, model_dict['model'], data_train, data_test, save_path_iter,
+                        emissions_offset_train=emissions_offset_train, emissions_offset_test=emissions_offset_test,
+                        init_mean_train=init_mean_train, init_mean_test=init_mean_test,
+                        init_cov_train=init_cov_train, init_cov_test=init_cov_test, plot_figs=False)
+
+        if cpu_id == 0:
+            # get the predicted IRFs from the model and compare them to the data
+            model_irms = lgssmu.calculate_irms(model_dict['model'], window=window, verbose=False)
+            model_score = met.nan_corr(data_irms, model_irms)[0]
+
+            error_frac = model_score / model_base_score
+
+        error_frac = comm.bcast(error_frac, root=0)
+
+        num_iter += 1
+
+
 def run_fitting(run_params, model, data_train, data_test, save_folder, model_true=None, starting_step=0,
                 emissions_offset_train=None, emissions_offset_test=None,
                 init_mean_train=None, init_mean_test=None,
-                init_cov_train=None, init_cov_test=None):
+                init_cov_train=None, init_cov_test=None, plot_figs=True):
     comm = pkl5.Intracomm(MPI.COMM_WORLD)
     size = comm.Get_size()
     cpu_id = comm.Get_rank()
@@ -374,6 +521,27 @@ def run_fitting(run_params, model, data_train, data_test, save_folder, model_tru
             for i in range(size):
                 os.remove('/tmp/filtered_covs_' + str(i) + '.tmp')
 
-        if not is_parallel and run_params['plot_figures']:
+        if not is_parallel and run_params['plot_figures'] and plot_figs:
             am.plot_model_params(model, model_true=model_true)
+
+        model_trained = {'model': model,
+                         'init_mean_train': posterior_train['init_mean'],
+                         'init_mean_test': posterior_test['init_mean'],
+                         'init_cov_train': posterior_train['init_cov'],
+                         'init_cov_test': posterior_test['init_cov'],
+                         'emissions_offset_train': posterior_train['emissions_offset'],
+                         'emissions_offset_test': posterior_test['emissions_offset'],
+                         }
+
+    else:
+        model_trained = {'model': None,
+                         'init_mean_train': None,
+                         'init_mean_test': None,
+                         'init_cov_train': None,
+                         'init_cov_test': None,
+                         'emissions_offset_train': None,
+                         'emissions_offset_test': None,
+                         }
+
+    return model_trained
 

@@ -248,7 +248,8 @@ class Lgssm:
         dynamics_inputs = (self.dynamics_input_weights @ dynamics_inputs[:, :, None])[:, :, 0]
         emissions_inputs = (self.emissions_input_weights @ emissions_inputs[:, :, None])[:, :, 0]
 
-        latents[0, :] = rng.multivariate_normal(init_mean, add_noise * init_cov)
+        # TODO need to figure out if I need to change in this in the EM steps to expect inputs in the first latent
+        latents[0, :] = rng.multivariate_normal(init_mean, add_noise * init_cov) + dynamics_inputs[0, :]
 
         emissions[0, :] = self.emissions_weights @ latents[0, :] + \
                           emissions_inputs[0, :] + \
