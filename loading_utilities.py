@@ -208,7 +208,7 @@ def load_data(data_path, num_data_sets=None, neuron_freq=0.0, held_out_data=[],
     data_test['emissions'] = [i[:, neurons_to_keep] for i in data_test['emissions']]
     data_test['inputs'] = [i[:, neurons_to_keep] for i in data_test['inputs']]
     data_test['cell_ids'] = [data_test['cell_ids'][i] for i in range(len(data_test['cell_ids'])) if neurons_to_keep[i]]
-    data_train['sample_rate'] = sample_rate
+    data_test['sample_rate'] = sample_rate
 
     return data_train, data_test
 
