@@ -103,7 +103,7 @@ def load_data(data_path, num_data_sets=None, neuron_freq=0.0, held_out_data=[],
     inputs_train = []
     cell_ids_train = []
     path_name = []
-    sample_rate = 0.5 / upsample_factor  # seconds per sample DEFAULT
+    sample_rate = 2 / upsample_factor  # seconds per sample DEFAULT
 
     # find all files in the folder that have francesco_green.npy
     for i in sorted(data_path.rglob('francesco_green.npy'))[::-1]:
