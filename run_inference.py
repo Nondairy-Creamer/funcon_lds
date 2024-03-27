@@ -391,7 +391,8 @@ def prune_model(param_name, save_folder, extra_train_steps, prune_frac):
         if (save_folder / 'pruning').exists():
             shutil.rmtree(save_folder / 'pruning')
 
-        os.mkdir(save_folder / 'pruning')
+        prune_folder_str = 'pruning_es' + f'{int(extra_train_steps):03d}' + '_pf' + f'{int(prune_frac * 100):03d}'
+        os.mkdir(save_folder / prune_folder_str)
 
         dynamics_dim = model_base.dynamics_dim
         dynamics_lags = model_base.dynamics_lags
@@ -433,7 +434,7 @@ def prune_model(param_name, save_folder, extra_train_steps, prune_frac):
             model_dict['model'].dynamics_weights[:dynamics_dim, :][np.tile(cutoff_bool, (1, model_dict['model'].dynamics_lags))] = 0
             model_dict['model'].param_props['mask']['dynamics_weights'] = np.tile(~cutoff_bool, (1, dynamics_lags))
 
-            save_path_iter = save_folder / 'pruning' / ('model_iter_' + f'{num_iter:03d}')
+            save_path_iter = save_folder / prune_folder_str / ('model_iter_' + f'{num_iter:03d}')
             os.mkdir(save_path_iter)
         else:
             save_path_iter = None
