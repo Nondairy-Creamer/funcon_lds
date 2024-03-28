@@ -56,12 +56,12 @@ def main(param_name, folder_name=None, extra_train_steps=None, prune_frac=None):
             elif run_type == 'prune':
                 fit_model_command = 'run_inference.prune_model(\'' + str(param_name) + '\',\'' + str(save_folder) + \
                                     '\',' + str(extra_train_steps) + ',' + str(prune_frac) + ')\"'
-                run_type_append = 'es' + f'{int(extra_train_steps):03d}' + '_pf' + f'{int(prune_frac * 100):03d}'
+                run_type_append = '_es' + f'{int(extra_train_steps):03d}' + '_pf' + f'{int(prune_frac * 100):03d}'
             else:
                 raise Exception('run type not recognized')
 
             slurm_output_path = save_folder / ('slurm_%A_' + run_type + '.out')
-            job_name = param_name.stem + '_' + run_type + '_' + run_type_append
+            job_name = param_name.stem + '_' + run_type + run_type_append
 
             slurm_fit = Slurm(**run_params['slurm'], output=slurm_output_path, job_name=job_name)
             cpus_per_task = run_params['slurm']['cpus_per_task']
