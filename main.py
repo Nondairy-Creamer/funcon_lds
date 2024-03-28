@@ -44,6 +44,7 @@ def main(param_name, folder_name=None, extra_train_steps=None, prune_frac=None):
         run_type_append = ''
 
         if cpu_id == 0:
+            # these commands need to end with a " to complement the leading " in the run command
             if run_type == 'new':
                 fit_model_command = 'run_inference.' + run_params['fit_file'] + '(\'' + str(param_name) + '\',\'' + str(save_folder) + '\')\"'
             elif run_type == 'post':
@@ -54,7 +55,7 @@ def main(param_name, folder_name=None, extra_train_steps=None, prune_frac=None):
                                     '\',' + str(extra_train_steps) + ')\"'
             elif run_type == 'prune':
                 fit_model_command = 'run_inference.prune_model(\'' + str(param_name) + '\',\'' + str(save_folder) + \
-                                    '\',' + str(extra_train_steps) + '\',\'' + str(prune_frac) + ')\"'
+                                    '\',' + str(extra_train_steps) + ',' + str(prune_frac) + ')\"'
                 run_type_append = 'es' + f'{int(extra_train_steps):03d}' + '_pf' + f'{int(prune_frac * 100):03d}'
             else:
                 raise Exception('run type not recognized')
