@@ -4,9 +4,10 @@ import pickle
 from matplotlib import pyplot as plt
 import lgssm_utilities as lgssmu
 import metrics as met
+import analysis_utilities as au
+
 
 window = [2, 2]
-
 folder_path = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/syn_test/20240326_163641')
 pruned_model_path = folder_path / 'pruning'
 
@@ -20,15 +21,16 @@ data_irfs = lgssmu.get_impulse_response_functions(
     data_test['emissions'], data_test['inputs'], sample_rate=data_test['sample_rate'],
     window=window, sub_pre_stim=True)[0]
 data_irms = np.sum(data_irfs, axis=0)
+dynamics_dim = data_irms.shape[0]
 data_irms[np.eye(data_irms.shape[0], dtype=bool)] = np.nan
+# get rid of the diagonal
+data_irms = data_irms[~np.eye(dynamics_dim, dtype=bool)].reshape((dynamics_dim, dynamics_dim - 1))
 
-# load in the true model
-model_true_file = open(folder_path / 'models' / 'model_true.pkl', 'rb')
-model_true = pickle.load(model_true_file)
-model_true_file.close()
-
-dynamics_dim = model_true.dynamics_dim
-true_mask = model_true.param_props['mask']['dynamics_weights'][:, :dynamics_dim]
+# load in the true mask
+anatomy = au.load_anatomical_data(cell_ids=data_test['cell_ids'])
+true_mask = (anatomy['gap_conn'] + anatomy['chem_conn']) > 0
+# get rid of the diagonal
+true_mask = true_mask[~np.eye(dynamics_dim, dtype=bool)].reshape((dynamics_dim, dynamics_dim - 1))
 
 # find all pruned models and load them in
 model_pruned = []
@@ -45,12 +47,14 @@ for m in sorted(folder_path.rglob('model_trained.pkl')):
     model_file.close()
 
     model_irms = lgssmu.calculate_irms(model_pruned[-1], window=window, verbose=False)
+    # get rid of diagonal
+    model_irms = model_irms[~np.eye(dynamics_dim, dtype=bool)].reshape((dynamics_dim, dynamics_dim - 1))
+
     model_score.append(met.nan_corr(data_irms, model_irms)[0])
 
-    model_mask.append(model_pruned[-1].param_props['mask']['dynamics_weights'])
-
-    # plt.figure()
-    # plt.plot(model_pruned[-1].log_likelihood)
+    model_mask.append(model_pruned[-1].param_props['mask']['dynamics_weights'][:, :model_pruned[-1].dynamics_dim])
+    # get rid of the diagonal
+    model_mask[-1] = model_mask[-1][~np.eye(dynamics_dim, dtype=bool)].reshape((dynamics_dim, dynamics_dim-1))
 
 num_models = len(model_pruned)
 
@@ -59,7 +63,6 @@ prfa = np.zeros((num_models, 4))
 sparsity = np.zeros(num_models)
 
 for mmi, mm in enumerate(model_mask):
-    mm = mm[:, :dynamics_dim]
     prfa[mmi, 0] = np.mean(true_mask[mm])
     prfa[mmi, 1] = np.mean(mm[true_mask])
     prfa[mmi, 2] = 2 * prfa[mmi, 0] * prfa[mmi, 1] / (prfa[mmi, 0] + prfa[mmi, 1])
@@ -86,6 +89,7 @@ plt.plot(prfa[:, 1], label='recall')
 plt.plot(prfa[:, 2], label='f measure')
 plt.plot(prfa[:, 3], label='accuracy')
 plt.plot(model_score, label='model score')
+plt.ylim((0, 1))
 plt.legend()
 
 plt.figure()
@@ -94,6 +98,7 @@ plt.plot(prfa_data[:, 0], label='precision')
 plt.plot(prfa_data[:, 1], label='recall')
 plt.plot(prfa_data[:, 2], label='f measure')
 plt.plot(prfa_data[:, 3], label='accuracy')
+plt.ylim((0, 1))
 plt.legend()
 
 plt.figure()
