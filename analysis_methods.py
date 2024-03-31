@@ -183,7 +183,6 @@ def plot_model_params(model, model_true=None, cell_ids_chosen=None):
 
     plt.scatter(np.real(eigvals_trained), np.imag(eigvals_trained))
     plt.plot(x_circ, y_circ)
-    plt.plot(0.5*x_circ, 0.5*y_circ)
     ax.set_aspect('equal', 'box')
     plt.title('trained eigvals')
 

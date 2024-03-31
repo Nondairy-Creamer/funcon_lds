@@ -75,10 +75,6 @@ def fit_synthetic(param_name, save_folder):
 
         model_trained.set_to_init()
 
-        # TODO REMOVE
-        model_trained.param_props['mask']['dynamics_weights'] = \
-            np.ones(model_trained.param_props['mask']['dynamics_weights'].shape) == 1
-
         lu.save_run(save_folder, model_true=model_true, model_trained=model_trained, ep=0, data_train=data_train,
                     data_test=data_test, params=run_params)
     else:
@@ -333,6 +329,8 @@ def prune_model(param_name, save_folder, extra_train_steps, prune_frac):
 
     # this code will load in an existing model then prune connections by removing the model weights closest to 0
     error_frac = np.inf
+    pruning_method = ['exponential', 'linear']
+    pruning_method = pruning_method[1]
     min_score_frac = 0.9
     window = (15, 30)  # window around which to calculate the eIRFs and IRFs
     run_params = lu.get_run_params(param_name=param_name)
@@ -388,10 +386,9 @@ def prune_model(param_name, save_folder, extra_train_steps, prune_frac):
         model_irms_base = lgssmu.calculate_irms(model_base, window=window)
         model_base_score = met.nan_corr(data_irms, model_irms_base)[0]
 
-        if (save_folder / 'pruning').exists():
-            shutil.rmtree(save_folder / 'pruning')
-
         prune_folder_str = 'pruning_es' + f'{int(extra_train_steps):03d}' + '_pf' + f'{int(prune_frac * 100):03d}'
+        if (save_folder / prune_folder_str).exists():
+            shutil.rmtree(save_folder / prune_folder_str)
         os.mkdir(save_folder / prune_folder_str)
 
         dynamics_dim = model_base.dynamics_dim
@@ -420,19 +417,36 @@ def prune_model(param_name, save_folder, extra_train_steps, prune_frac):
 
     num_iter = 0
 
-    while error_frac > min_score_frac:
+    while (error_frac > min_score_frac):
         if cpu_id == 0:
             # prune the smallest weights
             current_mask = model_dict['model'].param_props['mask']['dynamics_weights'][:, :dynamics_dim]
             model_weights = lgssmu.calculate_eirms(model_dict['model'], window=window)
             model_weights_no_masked = model_weights.copy()
-            model_weights_no_masked[~current_mask] = np.inf
+
+            # set the diagonal to inf so we always fit it
             model_weights_no_masked[np.eye(model_weights_no_masked.shape[0], dtype=bool)] = np.inf
-            num_weights_remove = np.ceil(prune_frac * np.sum(current_mask)).astype(int)
-            cutoff_value = np.sort(np.abs(model_weights_no_masked).reshape(-1))[num_weights_remove]
-            cutoff_bool = np.abs(model_weights) <= cutoff_value
-            model_dict['model'].dynamics_weights[:dynamics_dim, :][np.tile(cutoff_bool, (1, model_dict['model'].dynamics_lags))] = 0
-            model_dict['model'].param_props['mask']['dynamics_weights'] = np.tile(~cutoff_bool, (1, dynamics_lags))
+
+            if pruning_method == 'exponential':
+                # find how many weights to remove as a fraction of the remaining values not masked
+                num_weights_remove = np.ceil(prune_frac * np.sum(current_mask)).astype(int)
+                # set the current masked weights to inf so that they're not counted among the smallest weights
+                model_weights_no_masked[~current_mask] = np.inf
+            elif pruning_method == 'linear':
+                # find the number of weights to remove as a linear fraction of all the weights in the mask
+                num_weights_remove = np.ceil((num_iter + 1) * prune_frac * current_mask.size).astype(int)
+            else:
+                raise Exception('pruning method not recognized')
+
+            # sort the absolute value of the weights and get the num-weights_remove smallest
+            cutoff_value = np.sort(np.abs(model_weights_no_masked).reshape(-1))[num_weights_remove - 1]
+            # keep all values larger than the cutoff
+            new_mask = np.abs(model_weights) > cutoff_value
+            new_mask[np.eye(new_mask.shape[0], dtype=bool)] = True
+
+            # set the masked values to 0 and update the mask
+            model_dict['model'].dynamics_weights[:dynamics_dim, :][np.tile(~new_mask, (1, model_dict['model'].dynamics_lags))] = 0
+            model_dict['model'].param_props['mask']['dynamics_weights'] = np.tile(new_mask, (1, dynamics_lags))
 
             save_path_iter = save_folder / prune_folder_str / ('model_iter_' + f'{num_iter:03d}')
             os.mkdir(save_path_iter)
