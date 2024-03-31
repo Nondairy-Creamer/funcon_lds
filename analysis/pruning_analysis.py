@@ -6,10 +6,10 @@ import lgssm_utilities as lgssmu
 import metrics as met
 import analysis_utilities as au
 
-
-window = [2, 2]
-folder_path = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/syn_test/20240326_163641')
-pruned_model_path = folder_path / 'pruning'
+window = (15, 30)
+folder_path = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/exp_DL4_IL45_N80_R0_nf10/20240312_204358')
+# pruned_model_path = folder_path / 'pruning_es010_pf015'
+pruned_model_path = folder_path / 'pruning_es020_pf010'
 
 # load in the data
 data_test_file = open(folder_path / 'data_test.pkl', 'rb')
@@ -25,6 +25,7 @@ dynamics_dim = data_irms.shape[0]
 data_irms[np.eye(data_irms.shape[0], dtype=bool)] = np.nan
 # get rid of the diagonal
 data_irms = data_irms[~np.eye(dynamics_dim, dtype=bool)].reshape((dynamics_dim, dynamics_dim - 1))
+nan_loc = np.isnan(data_irms)
 
 # load in the true mask
 anatomy = au.load_anatomical_data(cell_ids=data_test['cell_ids'])
@@ -37,7 +38,10 @@ model_pruned = []
 model_score = []
 model_mask = []
 
-for m in sorted(folder_path.rglob('model_trained.pkl')):
+for m in sorted(pruned_model_path.rglob('model_trained.pkl')):
+    if not (m.parent.parent / 'posterior_test.pkl').exists():
+        continue
+
     model_file = open(m, 'rb')
     a = pickle.load(model_file)
     model_file.close()
@@ -46,7 +50,22 @@ for m in sorted(folder_path.rglob('model_trained.pkl')):
     model_pruned.append(pickle.load(model_file))
     model_file.close()
 
-    model_irms = lgssmu.calculate_irms(model_pruned[-1], window=window, verbose=False)
+    post_file = open(m.parent.parent / 'posterior_test.pkl', 'rb')
+    posterior_dict = pickle.load(post_file)
+    post_file.close()
+
+    if 'irfs' not in posterior_dict:
+        model_irfs = lgssmu.calculate_irfs(model_pruned[-1], window=window, verbose=False)
+
+        posterior_dict['irfs'] = model_irfs
+        post_file = open(m.parent.parent / 'posterior_test.pkl', 'wb')
+        pickle.dump(posterior_dict, post_file)
+        post_file.close()
+    else:
+        model_irfs = posterior_dict['irfs']
+
+    model_irms = np.sum(model_irfs, axis=0) / model_pruned[-1].sample_rate
+
     # get rid of diagonal
     model_irms = model_irms[~np.eye(dynamics_dim, dtype=bool)].reshape((dynamics_dim, dynamics_dim - 1))
 
@@ -55,6 +74,7 @@ for m in sorted(folder_path.rglob('model_trained.pkl')):
     model_mask.append(model_pruned[-1].param_props['mask']['dynamics_weights'][:, :model_pruned[-1].dynamics_dim])
     # get rid of the diagonal
     model_mask[-1] = model_mask[-1][~np.eye(dynamics_dim, dtype=bool)].reshape((dynamics_dim, dynamics_dim-1))
+
 
 num_models = len(model_pruned)
 
@@ -75,10 +95,11 @@ prfa_data = np.zeros((len(data_irf_threshold), 4))
 
 for dti, dt in enumerate(data_irf_threshold):
     cutoff = np.nanpercentile(data_irms, dt)
+
     data_guess = data_irms <= cutoff
 
-    prfa_data[dti, 0] = np.mean(true_mask[data_guess])
-    prfa_data[dti, 1] = np.mean(data_guess[true_mask])
+    prfa_data[dti, 0] = np.mean(true_mask[data_guess & ~nan_loc])
+    prfa_data[dti, 1] = np.mean(data_guess[true_mask & ~nan_loc])
     prfa_data[dti, 2] = 2 * prfa_data[dti, 0] * prfa_data[dti, 1] / (prfa_data[dti, 0] + prfa_data[dti, 1])
     prfa_data[dti, 3] = np.mean(true_mask == data_guess)
 
