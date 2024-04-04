@@ -175,14 +175,6 @@ def weight_prediction_sweep(weights, masks, weight_name, fig_save_path=None):
 def weights_vs_connectome(weights, masks, cell_ids, metric=met.f_measure, rng=np.random.default_rng(), fig_save_path=None):
     # weights = ssmu.mask_weights_to_nan(weights, masks['irm_nans'], masks['corr_nans'], combine_masks=True)
 
-    cell_ids[cell_ids.index('DA1')] = 'DA01'
-    cell_ids[cell_ids.index('DB1')] = 'DB01'
-    cell_ids[cell_ids.index('DB2')] = 'DB02'
-    cell_ids[cell_ids.index('DD1')] = 'DD01'
-    cell_ids[cell_ids.index('VA1')] = 'VA01'
-    cell_ids[cell_ids.index('VB1')] = 'VB01'
-    cell_ids[cell_ids.index('VB2')] = 'VB02'
-
     model_weights_conn, model_weights_conn_ci = met.metric_ci(metric, masks['synap'], weights['models']['synap']['eirms_binarized'], rng=rng)
     data_corr_conn, data_corr_conn_ci = met.nan_corr(masks['synap'], weights['data']['train']['corr_binarized'])
     data_irm_conn, data_irm_conn_ci = met.nan_corr(masks['synap'], weights['data']['train']['q'])
@@ -192,31 +184,7 @@ def weights_vs_connectome(weights, masks, cell_ids, metric=met.f_measure, rng=np
     model_weights = model_weights / np.nansum(model_weights, axis=1, keepdims=True)
     model_weights = model_weights[masks['synap']]
 
-    from pathlib import Path
-    import csv
-
-    path_to_cook = Path('/home/mcreamer/Documents/python/funcon_lds/anatomical_data/cook_synapse_size_connectome.csv')
-    with open(path_to_cook, 'r') as f:
-        synapse_size_data_in = list(csv.reader(f, delimiter=","))
-
-    postsynaptic_cell_ids = synapse_size_data_in[2][3:]
-    synapse_size_data = synapse_size_data_in[3:-1]
-    presynaptic_cell_ids = [i[2] for i in synapse_size_data]
-    synapse_size_data = [i[3:-1] for i in synapse_size_data]
-    synapse_size_data = np.array(synapse_size_data)
-    synapse_size_data[synapse_size_data == ''] = '0'
-    synapse_size_data = synapse_size_data.astype(int)
-
-    synapse_size = np.zeros_like(weights['anatomy']['chem_conn'])
-    postsynaptic_cell_indicies = np.zeros(len(cell_ids), dtype=int)
-    for ii, i in enumerate(cell_ids):
-        postsynaptic_cell_indicies[ii] = postsynaptic_cell_ids.index(i)
-
-    for ii, i in enumerate(cell_ids):
-        synapse_size[ii, :] = synapse_size_data[presynaptic_cell_ids.index(i), postsynaptic_cell_indicies]
-
     synapse_counts = weights['anatomy']['chem_conn'] + weights['anatomy']['gap_conn']
-    # synapse_counts = synapse_size + weights['anatomy']['gap_conn']
     synapse_counts = synapse_counts / np.nansum(synapse_counts, axis=1, keepdims=True)
     synapse_counts = synapse_counts[masks['synap']]
 
