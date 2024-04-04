@@ -56,7 +56,11 @@ def accuracy(y_true, y_hat):
     y_true = y_true[~nan_loc]
     y_hat = y_hat[~nan_loc]
 
-    return np.mean(y_true == y_hat)
+    true_positives = np.sum((y_true == 1) & (y_hat == 1))
+    true_negatives = np.sum((y_true == 0) & (y_hat == 0))
+    total = y_true.shape[0]
+
+    return (true_positives + true_negatives) / total
 
 
 def precision(y_true, y_hat):

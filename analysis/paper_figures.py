@@ -5,7 +5,7 @@ import metrics as met
 import lgssm_utilities as ssmu
 import matplotlib as mpl
 import analysis_utilities as au
-import scipy.cluster.hierarchy as sch
+import scipy
 import networkx as nx
 
 
@@ -172,16 +172,54 @@ def weight_prediction_sweep(weights, masks, weight_name, fig_save_path=None):
     plt.show()
 
 
-def weights_vs_connectome(weights, masks, metric=met.f_measure, rng=np.random.default_rng(), fig_save_path=None):
+def weights_vs_connectome(weights, masks, cell_ids, metric=met.f_measure, rng=np.random.default_rng(), fig_save_path=None):
     # weights = ssmu.mask_weights_to_nan(weights, masks['irm_nans'], masks['corr_nans'], combine_masks=True)
+
+    cell_ids[cell_ids.index('DA1')] = 'DA01'
+    cell_ids[cell_ids.index('DB1')] = 'DB01'
+    cell_ids[cell_ids.index('DB2')] = 'DB02'
+    cell_ids[cell_ids.index('DD1')] = 'DD01'
+    cell_ids[cell_ids.index('VA1')] = 'VA01'
+    cell_ids[cell_ids.index('VB1')] = 'VB01'
+    cell_ids[cell_ids.index('VB2')] = 'VB02'
 
     model_weights_conn, model_weights_conn_ci = met.metric_ci(metric, masks['synap'], weights['models']['synap']['eirms_binarized'], rng=rng)
     data_corr_conn, data_corr_conn_ci = met.nan_corr(masks['synap'], weights['data']['train']['corr_binarized'])
     data_irm_conn, data_irm_conn_ci = met.nan_corr(masks['synap'], weights['data']['train']['q'])
     conn_null = met.metric_null(metric, masks['synap'])
 
-    model_weights = np.abs(weights['models']['synap']['eirms'][masks['synap']])
-    synapse_counts = (weights['anatomy']['chem_conn'] + weights['anatomy']['gap_conn'])[masks['synap']]
+    model_weights = np.abs(weights['models']['synap']['eirms'])
+    model_weights = model_weights / np.nansum(model_weights, axis=1, keepdims=True)
+    model_weights = model_weights[masks['synap']]
+
+    from pathlib import Path
+    import csv
+
+    path_to_cook = Path('/home/mcreamer/Documents/python/funcon_lds/anatomical_data/cook_synapse_size_connectome.csv')
+    with open(path_to_cook, 'r') as f:
+        synapse_size_data_in = list(csv.reader(f, delimiter=","))
+
+    postsynaptic_cell_ids = synapse_size_data_in[2][3:]
+    synapse_size_data = synapse_size_data_in[3:-1]
+    presynaptic_cell_ids = [i[2] for i in synapse_size_data]
+    synapse_size_data = [i[3:-1] for i in synapse_size_data]
+    synapse_size_data = np.array(synapse_size_data)
+    synapse_size_data[synapse_size_data == ''] = '0'
+    synapse_size_data = synapse_size_data.astype(int)
+
+    synapse_size = np.zeros_like(weights['anatomy']['chem_conn'])
+    postsynaptic_cell_indicies = np.zeros(len(cell_ids), dtype=int)
+    for ii, i in enumerate(cell_ids):
+        postsynaptic_cell_indicies[ii] = postsynaptic_cell_ids.index(i)
+
+    for ii, i in enumerate(cell_ids):
+        synapse_size[ii, :] = synapse_size_data[presynaptic_cell_ids.index(i), postsynaptic_cell_indicies]
+
+    synapse_counts = weights['anatomy']['chem_conn'] + weights['anatomy']['gap_conn']
+    # synapse_counts = synapse_size + weights['anatomy']['gap_conn']
+    synapse_counts = synapse_counts / np.nansum(synapse_counts, axis=1, keepdims=True)
+    synapse_counts = synapse_counts[masks['synap']]
+
     weights_counts_corr, weights_counts_corr_ci = met.nan_corr(model_weights, synapse_counts)
 
     plt.figure()
@@ -206,6 +244,65 @@ def weights_vs_connectome(weights, masks, metric=met.f_measure, rng=np.random.de
 
     if fig_save_path is not None:
         plt.savefig(fig_save_path / 'weights_vs_connectome.pdf')
+
+    plt.show()
+
+
+def compare_model_vs_connectome_eig(models, masks, data, cell_ids, num_vect_plot=5, neuron_freq=0.1):
+    sample_rate = 0.5
+    anatomy = au.load_anatomical_data(cell_ids=cell_ids['all'])
+
+    model = models['synap']
+    chem_conn = anatomy['chem_conn']
+    gap_conn = anatomy['gap_conn']
+    dynamics_lags = model.dynamics_lags
+
+    is_gaba = au.get_neurotransmitters(cell_ids['all'])
+    chem_with_gaba = chem_conn.copy()
+    chem_with_gaba[:, is_gaba] *= -1
+    laplacian = gap_conn - np.diag(np.sum(gap_conn, axis=0))
+
+    lag_factor = 2
+    dynamics_tau = dynamics_lags / lag_factor
+    dynamics_const = (np.exp(lag_factor) - 1) * np.exp(1 / dynamics_tau - lag_factor) / (np.exp(1 / dynamics_tau) - 1)
+    dynamics_time_decay = np.exp(-np.arange(dynamics_lags) / dynamics_tau) / dynamics_const
+
+    # TODO we need to add sign to the chemical connections
+    anatomy_A = laplacian + chem_with_gaba
+    anatomy_A_disc = anatomy_A
+    anatomy_A_bar = np.tile(anatomy_A_disc[None, :, :], (dynamics_lags, 1, 1)) * dynamics_time_decay[:, None, None]
+    anatomy_A_bar = model._get_lagged_weights(anatomy_A_bar, dynamics_lags, fill='eye')
+
+    model_A = model.dynamics_weights
+
+    eig_vals_model, eig_vects_model = np.linalg.eig(model_A)
+    eig_vals_anatomy, eig_vects_anatomy = np.linalg.eig(anatomy_A_bar)
+
+    sorted_eig_vals_model = np.sort(np.abs(eig_vals_model))[::-1]
+    sorted_eig_vals_anatomy = np.sort(np.abs(eig_vals_anatomy))[::-1]
+
+    # value_norm = sorted_eig_vals_anatomy[0]
+    # eig_vals_anatomy = eig_vals_anatomy / value_norm
+    # sorted_eig_vals_anatomy = sorted_eig_vals_anatomy / value_norm
+
+    plt.figure()
+    plt.plot(sorted_eig_vals_model, label='model')
+    plt.plot(sorted_eig_vals_anatomy, label='anatomy')
+    plt.legend()
+
+    plt.figure()
+    ax = plt.subplot(1, 2, 1)
+    plt.scatter(np.real(eig_vals_model), np.imag(eig_vals_model))
+    ax.set_aspect('equal')
+    plt.title('model')
+    # plt.xlim((-1, 1))
+    # plt.ylim((-1, 1))
+    ax = plt.subplot(1, 2, 2)
+    plt.scatter(np.real(eig_vals_anatomy), np.imag(eig_vals_anatomy))
+    ax.set_aspect('equal')
+    plt.title('anatomy')
+    # plt.xlim((-1, 1))
+    # plt.ylim((-1, 1))
 
     plt.show()
 

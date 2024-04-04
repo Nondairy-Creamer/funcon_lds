@@ -230,10 +230,10 @@ def nan_corr_data(data, alpha=0.05):
 
 
 def get_neuron_types(cell_ids):
-    try:
-        neuron_types_str = np.loadtxt('anatomical_data/neuron_type.csv', delimiter=',', dtype=str, usecols=[0, 1])
-    except:
-        neuron_types_str = np.loadtxt('../anatomical_data/neuron_type.csv', delimiter=',', dtype=str, usecols=[0, 1])
+    file_name = Path('anatomical_data/neuron_type.csv')
+    if ~file_name.exists():
+        file_name = Path('..') / file_name
+    neuron_types_str = np.loadtxt(file_name, delimiter=',', dtype=str, usecols=[0, 1])
 
     file_cell_names = list(neuron_types_str[:, 0])
     file_cell_descriptions = list(neuron_types_str[:, 1])
@@ -251,6 +251,28 @@ def get_neuron_types(cell_ids):
                         neuron_types[cii, cci] = True
 
     return neuron_types, cell_classifications
+
+
+def get_neurotransmitters(cell_ids):
+    file_name = Path('anatomical_data/neurotransmitters.csv')
+    if ~file_name.exists():
+        file_name = Path('..') / file_name
+
+    neuron_types_str = np.loadtxt(file_name, delimiter=',', dtype=str, usecols=[1, 2])
+
+    file_cell_names = list(neuron_types_str[:, 0])
+    file_cell_descriptions = list(neuron_types_str[:, 1])
+
+    is_gabaergic = np.zeros(len(cell_ids)).astype(bool)
+
+    for cii, ci in enumerate(cell_ids):
+        if ci in file_cell_names:
+            file_index = file_cell_names.index(ci)
+
+        cell_description = file_cell_descriptions[file_index]
+        is_gabaergic[cii] = cell_description == 'GABA'
+
+    return is_gabaergic
 
 
 def single_sample_boostrap_p(data, metric=np.mean, n_boot=10000, rng=np.random.default_rng()):

@@ -239,7 +239,7 @@ def calculate_dirfs(model, rng=np.random.default_rng(), window=(15, 30), add_rec
     return dirfs
 
 
-def calculate_eirfs(model, rng=np.random.default_rng(), window=(30, 60), verbose=False):
+def calculate_eirfs(model, rng=np.random.default_rng(), window=(15, 30), verbose=False):
     # get eirfs from Lgssm model
     num_t = int(window[1] * model.sample_rate)
     num_n = model.dynamics_dim
@@ -268,7 +268,7 @@ def calculate_eirfs(model, rng=np.random.default_rng(), window=(30, 60), verbose
     return eirfs
 
 
-def calculate_eirms(model, rng=np.random.default_rng(), window=(30, 60), verbose=False):
+def calculate_eirms(model, rng=np.random.default_rng(), window=(15, 30), verbose=False):
     eirfs = calculate_eirfs(model, rng=rng, window=window, verbose=verbose)
     eirms = np.sum(eirfs[window[0]:, :, :], axis=0) / model.sample_rate
 

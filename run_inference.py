@@ -353,7 +353,7 @@ def prune_model(param_name, save_folder, extra_train_steps, prune_frac):
         data_irfs = lgssmu.get_impulse_response_functions(
             data_test['emissions'], data_test['inputs'], sample_rate=data_test['sample_rate'],
             window=window, sub_pre_stim=True)[0]
-        data_irms = np.sum(data_irfs, axis=0)
+        data_irms = np.sum(data_irfs[window[0]:, :, :], axis=0)
         data_irms[np.eye(data_irms.shape[0], dtype=bool)] = np.nan
 
         posterior_train_path = save_folder / 'posterior_train.pkl'

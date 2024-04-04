@@ -718,7 +718,7 @@ def compare_measured_and_model_irm(model_weights, model_corr, measured_irm, mode
     return irm_scores
 
 
-def plot_irf(measured_irf, measured_irf_sem, model_irf, cell_ids, cell_ids_chosen, window=(30, 60),
+def plot_irf(measured_irf, measured_irf_sem, model_irf, cell_ids, cell_ids_chosen, window=(15, 30),
              sample_rate=2, num_plot=5, fig_save_path=None):
 
     chosen_neuron_inds = [cell_ids.index(i) for i in cell_ids_chosen]
