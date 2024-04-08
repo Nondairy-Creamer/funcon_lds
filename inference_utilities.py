@@ -306,6 +306,21 @@ def parallel_get_post(model, data, emissions_offset=None, init_mean=None, init_c
                     if np.any(~np.isnan(emissions[:, n])):
                         emissions_missing = emissions.copy()
                         emissions_missing[:, n] = np.nan
+
+                        # check if this neuron has a sister pair. If it does, silence it too
+                        neuron_name = model.cell_ids[n]
+                        if neuron_name[-1] == 'L':
+                            sister_pair = neuron_name[:-1] + 'R'
+
+                            if sister_pair in model.cell_ids:
+                                emissions_missing[:, model.cell_ids.index(sister_pair)] = np.nan
+
+                        elif neuron_name[-1] == 'R':
+                            sister_pair = neuron_name[:-1] + 'L'
+
+                            if sister_pair in model.cell_ids:
+                                emissions_missing[:, model.cell_ids.index(sister_pair)] = np.nan
+
                         ll_missing_this, posterior_recon = \
                             model.lgssm_smoother(emissions_missing, inputs,
                                                  emissions_offset, init_mean, init_cov,
