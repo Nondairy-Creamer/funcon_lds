@@ -159,6 +159,14 @@ def fit_experimental(param_name, save_folder):
                 new_mask = old_mask[np.ix_(new_inds_row, new_inds_col)]
                 model_trained.param_props['mask']['dynamics_weights'] = new_mask
 
+        # permute the mask for the dynamics weights so that it is a randomized version
+        if 'randomize_weights' in run_params:
+            if run_params['randomize_weights']:
+                if 'myVar' not in locals():
+                    rng = np.random.default_rng(run_params['random_seed'])
+
+                model_trained.randomize_weights(rng=rng)
+
         lu.save_run(save_folder, model_trained=model_trained, ep=0, data_train=data_train, data_test=data_test, params=run_params)
 
     else:

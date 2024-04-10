@@ -264,10 +264,8 @@ def plot_matrix(param_trained, param_true=None, labels_x=None, labels_y=None, ab
     plt.title('fit weights')
     plt.xlabel('input neurons')
     plt.ylabel('output neurons')
+    plt.colorbar()
     plt.clim((-abs_max, abs_max))
-
-    if param_true is None:
-        plt.colorbar()
 
     if labels_x is not None:
         plt.xticks(np.arange(param_trained.shape[1]), labels_x, rotation=90)
