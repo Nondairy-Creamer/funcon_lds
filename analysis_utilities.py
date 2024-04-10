@@ -160,7 +160,6 @@ def get_example_data_set(inputs, mask=None, emissions=None, chosen_neuron_ind=No
             has_emissions = np.all(np.mean(np.isnan(e), axis=0) < 0.5)
         else:
             has_emissions = True
-        has_emissions = True
 
         this_max_val = np.max(total_stim)
         this_max_ind = np.argmax(total_stim)

@@ -7,6 +7,8 @@ import matplotlib as mpl
 import analysis_utilities as au
 import scipy
 import networkx as nx
+import time
+import pickle
 
 
 # colormap = mpl.colormaps['RdBu_r']
@@ -45,7 +47,7 @@ def weight_prediction(weights, masks, weight_name, fig_save_path=None):
     # across all data
     irms_baseline = met.nan_corr(test_weights, train_weights)[0]
 
-    weights_to_compare = [weights['anatomy']['chem_conn'] + weights['anatomy']['gap_conn'],
+    weights_to_compare = [weights['anatomy']['chem_conn']*0 + weights['anatomy']['gap_conn'],
                           weights['models']['synap_randC'][weight_name],
                           weights['models']['synap'][weight_name],
                           ]
@@ -172,48 +174,114 @@ def weight_prediction_sweep(weights, masks, weight_name, fig_save_path=None):
     plt.show()
 
 
-def weights_vs_connectome(weights, masks, cell_ids, metric=met.f_measure, rng=np.random.default_rng(), fig_save_path=None):
-    # weights = ssmu.mask_weights_to_nan(weights, masks['irm_nans'], masks['corr_nans'], combine_masks=True)
+def weights_vs_connectome(weights, masks, fig_save_path=None):
+    # pull out the weights we will compare to the synapse counts
+    gap_counts = weights['anatomy']['chem_conn']
+    chem_counts = weights['anatomy']['gap_conn']
+    gap_mask = masks['gap']
+    chem_mask = masks['chem']
+    diag_bool = np.eye(gap_mask.shape[0], dtype=bool)
+    gap_mask[diag_bool] = False
+    chem_mask[diag_bool] = False
 
-    model_weights_conn, model_weights_conn_ci = met.metric_ci(metric, masks['synap'], weights['models']['synap']['eirms_binarized'], rng=rng)
-    data_corr_conn, data_corr_conn_ci = met.nan_corr(masks['synap'], weights['data']['train']['corr_binarized'])
-    data_irm_conn, data_irm_conn_ci = met.nan_corr(masks['synap'], weights['data']['train']['q'])
-    conn_null = met.metric_null(metric, masks['synap'])
+    data_irms = np.abs(weights['data']['train']['irms'])
+    model_uncon_weights = np.abs(weights['models']['unconstrained']['eirms'])
+    model_synap_weights = np.abs(weights['models']['synap']['eirms'])
 
-    model_weights = np.abs(weights['models']['synap']['eirms'])
-    model_weights = model_weights / np.nansum(model_weights, axis=1, keepdims=True)
-    model_weights = model_weights[masks['synap']]
+    # sample the weights using the connectome
+    synapse_counts_gap = gap_counts[gap_mask]
+    data_irms_gap = data_irms[gap_mask]
+    model_uncon_weights_gap = model_uncon_weights[gap_mask]
+    model_synap_weights_gap = model_synap_weights[gap_mask]
 
-    synapse_counts = weights['anatomy']['chem_conn'] + weights['anatomy']['gap_conn']
-    synapse_counts = synapse_counts / np.nansum(synapse_counts, axis=1, keepdims=True)
-    synapse_counts = synapse_counts[masks['synap']]
+    synapse_counts_chem = chem_counts[chem_mask]
+    data_irms_chem = data_irms[chem_mask]
+    model_uncon_weights_chem = model_uncon_weights[chem_mask]
+    model_synap_weights_chem = model_synap_weights[chem_mask]
 
-    weights_counts_corr, weights_counts_corr_ci = met.nan_corr(model_weights, synapse_counts)
+    # compare all the weights to the synapse counts
+    data_irms_gap_corr, data_irms_gap_corr_ci = met.nan_corr(synapse_counts_gap, data_irms_gap)
+    model_uncon_gap_corr, model_uncon_gap_corr_ci = met.nan_corr(synapse_counts_gap, model_uncon_weights_gap)
+    model_synap_gap_corr, model_synap_gap_corr_ci = met.nan_corr(synapse_counts_gap, model_synap_weights_gap)
 
-    plt.figure()
-    plt.scatter(model_weights.reshape(-1), synapse_counts.reshape(-1))
-    plt.title(weights_counts_corr)
-    plt.show()
+    data_irms_chem_corr, data_irms_chem_corr_ci = met.nan_corr(synapse_counts_chem, data_irms_chem)
+    model_uncon_chem_corr, model_uncon_chem_corr_ci = met.nan_corr(synapse_counts_chem, model_uncon_weights_chem)
+    model_synap_chem_corr, model_synap_chem_corr_ci = met.nan_corr(synapse_counts_chem, model_synap_weights_chem)
 
-    # plot model weight similarity to connectome
-    plt.figure()
-    y_val = np.array([data_corr_conn, data_irm_conn])
-    y_val_ci = np.stack([data_corr_conn_ci, data_irm_conn_ci]).T
-    # y_val = np.array([data_corr_conn, data_irm_conn, model_weights_conn])
-    # y_val_ci = np.stack([data_corr_conn_ci, data_irm_conn_ci, model_weights_conn_ci]).T
+    y_val = np.array([data_irms_gap_corr, model_uncon_gap_corr, model_synap_gap_corr])
+    y_val_ci = np.stack([data_irms_gap_corr_ci, model_uncon_gap_corr_ci, model_synap_gap_corr_ci]).T
     plot_x = np.arange(y_val.shape[0])
-    plt.bar(plot_x, y_val)
+    bar_colors = [plot_color['anatomy'], plot_color['unconstrained'],  plot_color['synap']]
+    plt.figure()
+    plt.bar(plot_x, y_val, color=bar_colors)
     plt.errorbar(plot_x, y_val, y_val_ci, fmt='none', color='k')
-    plt.ylim([0, 1])
-    # plt.axhline(conn_null, color='k', linestyle='--')
-    plt.xticks(plot_x, labels=['data correlation', 'data STAMs'])
-    plt.ylabel('similarity to connectome')
-    plt.tight_layout()
+    plt.ylim((-0.1, 0.3))
 
     if fig_save_path is not None:
-        plt.savefig(fig_save_path / 'weights_vs_connectome.pdf')
+        plt.savefig(fig_save_path / 'weights_vs_gap.pdf')
+
+    y_val = np.array([data_irms_chem_corr, model_uncon_chem_corr, model_synap_chem_corr])
+    y_val_ci = np.stack([data_irms_chem_corr_ci, model_uncon_chem_corr_ci, model_synap_chem_corr_ci]).T
+    plot_x = np.arange(y_val.shape[0])
+    bar_colors = [plot_color['anatomy'], plot_color['unconstrained'],  plot_color['synap']]
+    plt.figure()
+    plt.bar(plot_x, y_val, color=bar_colors)
+    plt.errorbar(plot_x, y_val, y_val_ci, fmt='none', color='k')
+    plt.ylim((-0.1, 0.3))
+
+    if fig_save_path is not None:
+        plt.savefig(fig_save_path / 'weights_vs_chem.pdf')
 
     plt.show()
+
+
+def uncon_vs_connectome(weights, masks, fig_save_path=None):
+    model_weights = np.abs(weights['models']['unconstrained']['eirms'])
+    data_irms = np.abs(weights['data']['train']['irms'])
+    nan_loc_data = np.isnan(data_irms)
+    nan_loc_model = np.isnan(model_weights)
+
+    connectome_mask = masks['synap']
+    connectome_mask[np.eye(connectome_mask.shape[0], dtype=bool)] = False
+    sparsity = np.mean(connectome_mask)
+    cutoffs = np.linspace(0, 99, 100)
+
+    aprf_data = np.zeros((cutoffs.shape[0], 4))
+    aprf_uncon = np.zeros((cutoffs.shape[0], 4))
+
+    for ci, c in enumerate(cutoffs):
+        data_irms_cutoff = np.nanpercentile(data_irms, c)
+        data_mask = (data_irms > data_irms_cutoff).astype(float)
+        data_mask[nan_loc_data] = np.nan
+
+        aprf_data[ci, 0] = met.accuracy(connectome_mask, data_mask)
+        aprf_data[ci, 1] = met.precision(connectome_mask, data_mask)
+        aprf_data[ci, 2] = met.recall(connectome_mask, data_mask)
+        aprf_data[ci, 3] = met.f_measure(connectome_mask, data_mask)
+
+        model_weight_cutoff = np.nanpercentile(model_weights, c)
+        model_mask = (model_weights > model_weight_cutoff).astype(float)
+        data_mask[nan_loc_model] = np.nan
+
+        aprf_uncon[ci, 0] = met.accuracy(connectome_mask, model_mask)
+        aprf_uncon[ci, 1] = met.precision(connectome_mask, model_mask)
+        aprf_uncon[ci, 2] = met.recall(connectome_mask, model_mask)
+        aprf_uncon[ci, 3] = met.f_measure(connectome_mask, model_mask)
+
+    # plot the sparsity sweep of the data
+    plt.figure()
+    plt.plot(aprf_data)
+    plt.axvline(100 * (1 - sparsity), color='k', linestyle='--')
+    plt.legend(['accuracy', 'precision', 'recall', 'f measure'])
+
+    plt.figure()
+    plt.plot(aprf_uncon)
+    plt.axvline(100 * (1 - sparsity), color='k', linestyle='--')
+    plt.legend(['accuracy', 'precision', 'recall', 'f measure'])
+
+    plt.show()
+
+    return
 
 
 def compare_model_vs_connectome_eig(models, masks, data, cell_ids, num_vect_plot=5, neuron_freq=0.1):
@@ -237,9 +305,11 @@ def compare_model_vs_connectome_eig(models, masks, data, cell_ids, num_vect_plot
 
     # TODO we need to add sign to the chemical connections
     anatomy_A = laplacian + chem_with_gaba
-    anatomy_A_disc = anatomy_A
-    anatomy_A_bar = np.tile(anatomy_A_disc[None, :, :], (dynamics_lags, 1, 1)) * dynamics_time_decay[:, None, None]
-    anatomy_A_bar = model._get_lagged_weights(anatomy_A_bar, dynamics_lags, fill='eye')
+    anatomy_A_norm = anatomy_A / (np.sum(np.abs(anatomy_A), axis=0, keepdims=True) * np.sum(np.abs(anatomy_A), axis=1, keepdims=True) + 1)
+    anatomy_A_disc = scipy.linalg.expm(anatomy_A_norm) * sample_rate
+    # anatomy_A_bar = np.tile(anatomy_A_disc[None, :, :], (dynamics_lags, 1, 1)) * dynamics_time_decay[:, None, None]
+    # anatomy_A_bar = model._get_lagged_weights(anatomy_A_bar, dynamics_lags, fill='eye')
+    anatomy_A_bar = anatomy_A_disc
 
     model_A = model.dynamics_weights
 
@@ -1392,10 +1462,11 @@ def corr_zimmer_paper(weights, models, cell_ids):
     plt.show()
 
 
-def plot_missing_neuron(data, posterior_dict, sample_rate=2, fig_save_path=None):
+def plot_missing_neuron(models, data, posterior_dict, post_save_path=None, sample_rate=2, fig_save_path=None):
     cell_ids = data['cell_ids']
     posterior_missing = posterior_dict['posterior_missing']
     emissions = data['emissions']
+    inputs = data['inputs']
     rng = np.random.default_rng(0)
 
     # calculate the correlation of the missing to measured neurons
@@ -1421,20 +1492,21 @@ def plot_missing_neuron(data, posterior_dict, sample_rate=2, fig_save_path=None)
     # get the p value that the reconstructed neuron accuracy is significantly different than the null
     p = au.single_sample_boostrap_p(missing_corr - missing_corr_null, n_boot=1000)
 
-    plt.figure()
-    plt.hist(missing_corr_null.reshape(-1), label='null', alpha=0.5, color='k')
-    plt.hist(missing_corr.reshape(-1), label='missing data', alpha=0.5, color=plot_color['synap'])
-    plt.title('p = ' + str(p))
-    plt.legend()
-    plt.xlabel('correlation')
-    plt.ylabel('count')
-
-    if fig_save_path is not None:
-        plt.savefig(fig_save_path / 'recon_histogram.pdf')
+    # plt.figure()
+    # plt.hist(missing_corr_null.reshape(-1), label='null', alpha=0.5, color='k')
+    # plt.hist(missing_corr.reshape(-1), label='missing data', alpha=0.5, color=plot_color['synap'])
+    # plt.title('p = ' + str(p))
+    # plt.legend()
+    # plt.xlabel('correlation')
+    # plt.ylabel('count')
+    #
+    # if fig_save_path is not None:
+    #     plt.savefig(fig_save_path / 'recon_histogram.pdf')
 
     sorted_corr_inds = au.nan_argsort(missing_corr.reshape(-1))
-    best_offset = -3  # AVER
-    median_offset = 5  # URYDL
+    # best_offset = -5  # AVER
+    best_offset = -2  # AVER
+    median_offset = 0  # URYDL
     best_neuron = np.unravel_index(sorted_corr_inds[-1 + best_offset], missing_corr.shape)
     median_neuron = np.unravel_index(sorted_corr_inds[int(sorted_corr_inds.shape[0] / 2) + median_offset], missing_corr.shape)
 
@@ -1447,23 +1519,29 @@ def plot_missing_neuron(data, posterior_dict, sample_rate=2, fig_save_path=None)
     display_x = np.arange(0, emissions[best_data_ind].shape[0], 5*60*sample_rate) / sample_rate
     plt.figure()
     plt.subplot(2, 1, 1)
-    plt.title('best held out neuron: ' + cell_ids[best_neuron_ind])
     plt.plot(plot_x, emissions[best_data_ind][:, best_neuron_ind], label='data', color=plot_color['data'])
     plt.plot(plot_x, posterior_missing[best_data_ind][:, best_neuron_ind], label='posterior', color=plot_color['synap'])
+
+    # for i in range(inputs[best_data_ind].shape[0]):
+    #     this_inputs = inputs[best_data_ind][i, :]
+    #
+    #     if not np.all(this_inputs == 0):
+    #         plt.axvline(plot_x[i], color='k', linestyle='--')
+    #         plt.text(plot_x[i], 1.5, cell_ids[np.where(this_inputs)[0][0]], rotation=90)
+
     plt.xlabel('time (s)')
     plt.xticks(display_x)
-    plt.ylabel('neural activity')
+    plt.ylabel('neural activity (' + cell_ids[best_neuron_ind] + ')')
 
     plot_x = np.arange(emissions[median_data_ind].shape[0]) / sample_rate
     display_x = np.arange(0, emissions[median_data_ind].shape[0], 5*60*sample_rate) / sample_rate
     plt.subplot(2, 1, 2)
-    plt.title('median held out neuron: ' + cell_ids[median_neuron_ind])
     plt.plot(plot_x, emissions[median_data_ind][:, median_neuron_ind], label='data', color=plot_color['data'])
     plt.plot(plot_x, posterior_missing[median_data_ind][:, median_neuron_ind], label='posterior', color=plot_color['synap'])
     plt.ylim(plt.ylim()[0], 1.2)
     plt.xlabel('time (s)')
     plt.xticks(display_x)
-    plt.ylabel('neural activity')
+    plt.ylabel('neural activity (' + cell_ids[median_neuron_ind] + ')')
 
     plt.tight_layout()
 
@@ -1471,6 +1549,90 @@ def plot_missing_neuron(data, posterior_dict, sample_rate=2, fig_save_path=None)
         plt.savefig(fig_save_path / 'recon_examples.pdf')
 
     plt.show()
+
+    # loop through the best R2 neuron and eliminate each other neuron individually
+    # and see how that changes the prediction
+    # get the data and remove the neuron and its sister pair
+    best_neuron = cell_ids[best_neuron_ind]
+    best_data = emissions[best_data_ind].copy()
+    best_inputs = inputs[best_data_ind]
+    best_offset = posterior_dict['emissions_offset'][best_data_ind]
+    best_init_mean = posterior_dict['init_mean'][best_data_ind]
+    best_init_cov = posterior_dict['init_cov'][best_data_ind]
+    num_neurons = best_data.shape[1]
+    best_data[:, best_neuron_ind] = np.nan
+    true_activity = emissions[best_data_ind][:, best_neuron_ind]
+    recon_score_filter = np.zeros(num_neurons)
+    recon_score_smoother = np.zeros(num_neurons)
+    recon_filter = np.zeros_like(best_data)
+    recon_smoother = np.zeros_like(best_data)
+
+    best_score = met.nan_corr(true_activity, posterior_missing[best_data_ind][:, best_neuron_ind])[0]
+
+    # silence the sister pair so that reconstruction isn't trivial
+    if best_neuron[-1] == 'L':
+        sister_pair = best_neuron[:-1] + 'R'
+        best_data[:, cell_ids.index(sister_pair)] = np.nan
+    elif best_neuron[-1] == 'R':
+        sister_pair = best_neuron[:-1] + 'L'
+        best_data[:, cell_ids.index(sister_pair)] = np.nan
+
+    start = time.time()
+    # loop through each neuron in the silenced data and silence that neuron as well.
+    # Then see how well you can reconstruct
+    for i in range(num_neurons):
+        best_data_silenced = best_data.copy()
+
+        if (recon_score_filter[i] != 0) and (recon_score_smoother[i] != 0):
+            continue
+
+        if np.all(np.isnan(best_data_silenced[:, i])):
+            recon_score_filter[i] = best_score
+            recon_score_smoother[i] = best_score
+            continue
+        else:
+            best_data_silenced[:, i] = np.nan
+
+        if cell_ids[i][-1] == 'L':
+            sister_pair = cell_ids[i][:-1] + 'R'
+        elif cell_ids[i][-1] == 'R':
+            sister_pair = cell_ids[i][:-1] + 'L'
+        else:
+            sister_pair = None
+
+        if sister_pair is not None:
+            if sister_pair in cell_ids:
+                best_data_silenced[:, cell_ids.index(sister_pair)] = np.nan
+            else:
+                sister_pair = None
+
+        _, recon_smoother_out, _, recon_filter_out = models['synap'].lgssm_smoother(best_data_silenced, best_inputs, best_offset, best_init_mean, best_init_cov)
+        recon_filter[:, i] = recon_filter_out[:, best_neuron_ind]
+        recon_smoother[:, i] = recon_smoother_out[:, best_neuron_ind]
+        recon_score_filter[i] = met.nan_corr(true_activity, recon_filter_out[:, best_neuron_ind])[0]
+        recon_score_smoother[i] = met.nan_corr(true_activity, recon_smoother_out[:, best_neuron_ind])[0]
+
+        if sister_pair is not None:
+            recon_score_filter[cell_ids.index(sister_pair)] = recon_score_filter[i]
+            recon_score_smoother[cell_ids.index(sister_pair)] = recon_score_smoother[i]
+            recon_filter[:, cell_ids.index(sister_pair)] = recon_filter_out[:, best_neuron_ind]
+            recon_smoother[:, cell_ids.index(sister_pair)] = recon_smoother_out[:, best_neuron_ind]
+
+        if post_save_path is not None:
+            posterior_dict['neuron_recon'] = {'data_ind': best_data_ind,
+                                              'chosen_neuron': best_neuron,
+                                              'recon_score_filter': recon_score_filter,
+                                              'recon_score_smoother': recon_score_smoother,
+                                              'recon_filter': recon_filter,
+                                              'recon_smoother': recon_smoother,
+                                              }
+            post_file = open(post_save_path, 'wb')
+            pickle.dump(posterior_dict, post_file)
+            post_file.close()
+
+        end = time.time() - start
+        print('completed ' + str(i + 1) + '/' + str(num_neurons))
+        print('expected ' + str(end / (i + 1) * (num_neurons - i - 1)) + ' s remaining')
 
     return
 
@@ -1483,21 +1645,20 @@ def plot_sampled_model(data, posterior_dict, cell_ids, sample_rate=2, num_neuron
     # model_sampled = posterior_dict['model_sampled_noise']
     model_sampled = posterior_dict['model_sampled']
 
-    cell_ids_chosen = sorted(cell_ids['sorted'][:num_neurons+1])
-    del cell_ids_chosen[cell_ids_chosen.index('AVEL')]
+    cell_ids_chosen = sorted(cell_ids['chosen'])
     neuron_inds_chosen = np.array([cell_ids['all'].index(i) for i in cell_ids_chosen])
 
     # get all the inputs but with only the chosen neurons
     inputs_truncated = [i[:, neuron_inds_chosen] for i in inputs]
     emissions_truncated = [e[:, neuron_inds_chosen] for e in emissions]
-    data_ind_chosen, time_window = au.get_example_data_set(inputs_truncated, emissions_truncated, window_size=window_size)
+    # data_ind_chosen, time_window = au.get_example_data_set(inputs_truncated, emissions=emissions_truncated, window_size=window_size)
+    data_ind_chosen, time_window = au.get_example_data_set(inputs, emissions=emissions_truncated, window_size=window_size)
 
     emissions_chosen = emissions[data_ind_chosen][time_window[0]:time_window[1], neuron_inds_chosen]
     inputs_chosen = inputs[data_ind_chosen][time_window[0]:time_window[1], neuron_inds_chosen]
     all_inputs = inputs[data_ind_chosen][time_window[0]:time_window[1], :]
     posterior_chosen = posterior[data_ind_chosen][time_window[0]:time_window[1], neuron_inds_chosen]
     model_sampled_chosen = model_sampled[data_ind_chosen][time_window[0]:time_window[1], neuron_inds_chosen]
-
 
     stim_events = np.where(np.sum(all_inputs, axis=1) > 0)[0]
     stim_ids = [cell_ids['all'][np.where(all_inputs[i, :])[0][0]] for i in stim_events]
