@@ -722,7 +722,7 @@ class Lgssm:
     def get_suff_stats(self, emissions, inputs, emissions_offset, init_mean, init_cov, memmap_cpu_id=None):
         nt = emissions.shape[0]
 
-        ll, suff_stats, smoothed_means = \
+        ll, smoothed_means, suff_stats = \
             self.lgssm_smoother(emissions, inputs, emissions_offset, init_mean, init_cov, memmap_cpu_id=memmap_cpu_id)[:3]
 
         dynamics_inputs = self.get_lagged_data(inputs, self.dynamics_input_lags)

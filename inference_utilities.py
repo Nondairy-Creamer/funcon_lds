@@ -256,7 +256,7 @@ def parallel_get_post(model, data, emissions_offset=None, init_mean=None, init_c
             iter_num = 1
 
             while not converged and iter_num <= max_iter:
-                ll, suff_stats, smoothed_means = model.lgssm_smoother(emissions, inputs, emissions_offset,
+                ll, smoothed_means, suff_stats = model.lgssm_smoother(emissions, inputs, emissions_offset,
                                                                       init_mean, init_cov,
                                                                       memmap_cpu_id=memmap_cpu_id)[:3]
 
