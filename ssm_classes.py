@@ -479,7 +479,7 @@ class Lgssm:
         suff_stats['my_correction'] = my_correction
         suff_stats['mzy_correction'] = mzy_correction
 
-        return ll, smoothed_means, suff_stats
+        return ll, smoothed_means, suff_stats, filtered_means
 
     def get_ll(self, emissions, inputs, emissions_offset, init_mean, init_cov):
         # get the log-likelihood of the data
@@ -722,8 +722,8 @@ class Lgssm:
     def get_suff_stats(self, emissions, inputs, emissions_offset, init_mean, init_cov, memmap_cpu_id=None):
         nt = emissions.shape[0]
 
-        ll, smoothed_means, suff_stats = \
-            self.lgssm_smoother(emissions, inputs, emissions_offset, init_mean, init_cov, memmap_cpu_id=memmap_cpu_id)
+        ll, suff_stats, smoothed_means = \
+            self.lgssm_smoother(emissions, inputs, emissions_offset, init_mean, init_cov, memmap_cpu_id=memmap_cpu_id)[:3]
 
         dynamics_inputs = self.get_lagged_data(inputs, self.dynamics_input_lags)
         emissions_inputs = self.get_lagged_data(inputs, self.emissions_input_lags)
