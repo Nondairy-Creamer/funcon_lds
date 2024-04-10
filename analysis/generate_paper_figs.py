@@ -85,6 +85,7 @@ else:
     data_test_file.close()
 
 cell_ids = {'all': data_test['cell_ids']}
+
 sample_rate = models['synap'].sample_rate
 
 # get data IRMs before interpolation
@@ -290,6 +291,34 @@ stim_in_both = num_stim_train.diagonal() * num_stim_test.diagonal()
 stim_in_both_inds = np.argsort(stim_in_both)[::-1]
 cell_ids['sorted'] = [cell_ids['all'][i] for i in stim_in_both_inds]
 
+# choose a set of cells which are stimulated frequently and highly interconnected
+top_n = 30
+cell_pool = cell_ids['sorted'][:top_n]
+cell_pool_inds = np.array([cell_ids['all'].index(i) for i in cell_pool])
+top_n_network = masks['synap'][:, cell_pool_inds][cell_pool_inds, :]
+top_n_degree = np.sum(top_n_network, axis=0) + np.sum(top_n_network, axis=1)
+most_connected = cell_pool[np.argmax(top_n_degree)]
+
+target_n = 5
+top_cells = [most_connected]
+
+for i in range(target_n - 1):
+    connections = np.zeros(top_n)
+    # get all neurons connected to the neurons in the network
+    for tc in top_cells:
+        connections += top_n_network[:, cell_pool.index(tc)] + top_n_network[cell_pool.index(tc), :]
+
+    # weight connections the degree of the next neuron down. this way unconnected neurons get 0
+    connections_weighted = connections * top_n_degree
+
+    for tc in top_cells:
+        connections_weighted[cell_pool.index(tc)] = 0
+
+    next_cell = cell_pool[np.argmax(connections_weighted)]
+    top_cells.append(next_cell)
+
+cell_ids['chosen'] = top_cells
+
 ### Exploration
 # Figure 1
 # pf.plot_irms(weights, cell_ids, use_chosen_ids=False, fig_save_path=fig_save_path)
@@ -310,7 +339,6 @@ cell_ids['sorted'] = [cell_ids['all'][i] for i in stim_in_both_inds]
 # pf.weight_prediction(weights_masked, 'corr', fig_save_path=fig_save_path)
 # pf.weight_prediction_sweep(weights_masked, masks, 'corr', fig_save_path=fig_save_path)
 #
-# pf.weights_vs_connectome(weights, masks, metric=metric, fig_save_path=fig_save_path)
 
 # Figure 2
 # pf.plot_dirfs(weights_masked, masks, cell_ids, window, chosen_mask=masks['synap'], num_plot=20, fig_save_path=fig_save_path)
@@ -330,7 +358,8 @@ cell_ids['sorted'] = [cell_ids['all'][i] for i in stim_in_both_inds]
 
 # Figure 4
 # pf.corr_zimmer_paper(weights_masked, models, cell_ids)
-pf.plot_eigenvalues(models, masks, data_train['emissions'], cell_ids, num_vect_plot=0)
+# pf.plot_eigenvalues(models, masks, data_train['emissions'], cell_ids, num_vect_plot=0)
+# pf.compare_model_vs_connectome_eig(models, masks, data_train['emissions'], cell_ids, num_vect_plot=5, neuron_freq=0.1)
 
 ### Final verson of the figures
 pairs = np.array([['AVDR', 'AVJR'],
@@ -360,8 +389,12 @@ pairs = np.array([['AVDR', 'AVJR'],
 #                       num_neurons=10, fig_save_path=fig_save_path / 'fig_1')
 
 # Figure 2
+# pf.weights_vs_connectome(weights, masks, fig_save_path=fig_save_path)
+# pf.uncon_vs_connectome(weights, masks, fig_save_path=fig_save_path)
+
 
 # Figure 3
-# pf.plot_missing_neuron(data_test, posterior_dicts['synap'], sample_rate=sample_rate, fig_save_path=fig_save_path / 'fig_3')
+pf.plot_missing_neuron(models, data_test, posterior_dicts['synap'], post_save_path=(saved_run_folder / model_folders['synap'] / 'posterior_test.pkl'),
+                       sample_rate=sample_rate, fig_save_path=fig_save_path / 'fig_3')
 
 
