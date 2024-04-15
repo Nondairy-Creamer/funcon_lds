@@ -159,21 +159,28 @@ class Lgssm:
             self.dynamics_cov_init = noise_std * (self.dynamics_cov_init.T @ self.dynamics_cov_init / self.dynamics_dim + np.eye(self.dynamics_dim))
 
         # randomize emissions weights
-        self.emissions_weights_init = np.abs(rng.standard_normal((self.emissions_dim, self.dynamics_dim_full)))
-        self.emissions_weights_init = self.emissions_weights_init / np.sum(self.emissions_weights_init, axis=1)[:, None]
+        if self.param_props['update']['emissions_weights']:
+            self.emissions_weights_init = np.abs(rng.standard_normal((self.emissions_dim, self.dynamics_dim_full)))
+            self.emissions_weights_init = self.emissions_weights_init / np.sum(self.emissions_weights_init, axis=1)[:, None]
+        else:
+            self.emissions_weights_init = np.eye(self.emissions_dim, self.dynamics_dim_full)
+            self.emissions_input_weights_init = np.zeros((self.emissions_input_lags, self.emissions_dim, self.input_dim))
 
         # randomize emission input weights but with decaying weights into the past
-        emissions_input_tau = self.emissions_input_lags / lag_factor
-        emissions_input_const = (np.exp(lag_factor) - 1) * np.exp(1 / emissions_input_tau - lag_factor) / (np.exp(1 / emissions_input_tau) - 1)
-        emissions_input_time_decay = np.exp(-np.arange(self.emissions_input_lags) / emissions_input_tau) / emissions_input_const
-        if self.param_props['shape']['emissions_input_weights'] == 'diag':
-            emissions_input_weights_init_diag = input_weights_std * np.tile(np.exp(rng.standard_normal(self.input_dim)), (self.emissions_input_lags, 1))
-            self.emissions_input_weights_init = np.zeros((self.emissions_input_lags, self.emissions_dim, self.input_dim))
-            for i in range(self.emissions_input_lags):
-                self.emissions_input_weights_init[i, :self.input_dim, :] = np.diag(emissions_input_weights_init_diag[i, :])
+        if self.param_props['update']['emissions_input_weights']:
+            emissions_input_tau = self.emissions_input_lags / lag_factor
+            emissions_input_const = (np.exp(lag_factor) - 1) * np.exp(1 / emissions_input_tau - lag_factor) / (np.exp(1 / emissions_input_tau) - 1)
+            emissions_input_time_decay = np.exp(-np.arange(self.emissions_input_lags) / emissions_input_tau) / emissions_input_const
+            if self.param_props['shape']['emissions_input_weights'] == 'diag':
+                emissions_input_weights_init_diag = input_weights_std * np.tile(np.exp(rng.standard_normal(self.input_dim)), (self.emissions_input_lags, 1))
+                self.emissions_input_weights_init = np.zeros((self.emissions_input_lags, self.emissions_dim, self.input_dim))
+                for i in range(self.emissions_input_lags):
+                    self.emissions_input_weights_init[i, :self.input_dim, :] = np.diag(emissions_input_weights_init_diag[i, :])
+            else:
+                self.emissions_input_weights_init = input_weights_std * rng.standard_normal((self.emissions_input_lags, self.emissions_dim, self.input_dim))
+            self.emissions_input_weights_init = self.emissions_input_weights_init * emissions_input_time_decay[:, None, None]
         else:
-            self.emissions_input_weights_init = input_weights_std * rng.standard_normal((self.emissions_input_lags, self.emissions_dim, self.input_dim))
-        self.emissions_input_weights_init = self.emissions_input_weights_init * emissions_input_time_decay[:, None, None]
+            self.emissions_input_weights_init = np.zeros((self.emissions_input_lags, self.emissions_dim, self.input_dim))
 
         if self.param_props['shape']['emissions_cov'] == 'diag':
             self.emissions_cov_init = np.diag(np.exp(noise_std * rng.standard_normal(self.emissions_dim)))
