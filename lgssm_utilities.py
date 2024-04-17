@@ -110,6 +110,7 @@ def get_silenced_model(model_original, neurons_to_silence):
         y_vals = np.arange(model_silenced.dynamics_dim)
         y_vals = np.delete(y_vals, ns_ind)
         model_silenced.dynamics_weights[np.ix_(y_vals, silence_inds)] = 0
+        model_silenced.dynamics_weights[ns_ind, :] = 0
 
     return model_silenced
 
