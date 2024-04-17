@@ -3,6 +3,7 @@ from mpi4py import MPI
 from mpi4py.util import pkl5
 import numpy as np
 import loading_utilities as lu
+import lgssm_utilities as ssmu
 
 
 def block(block_list, dims=(2, 1)):
@@ -363,6 +364,12 @@ def parallel_get_post(model, data, emissions_offset=None, init_mean=None, init_c
         posterior_missing = [i[7] for i in ll_smeans]
         ll_missing = [i[8] for i in ll_smeans]
 
+        print('calculating IRFs')
+        window = (15, 30)
+        irfs = ssmu.calculate_irfs(model, window=window)
+        dirfs = ssmu.calculate_dirfs(model, window=window)
+        eirfs = ssmu.calculate_eirfs(model, window=window)
+
         inference_test = {'ll': ll,
                           'posterior': smoothed_means,
                           'model_sampled': model_sampled,
@@ -373,6 +380,9 @@ def parallel_get_post(model, data, emissions_offset=None, init_mean=None, init_c
                           'cell_ids': model.cell_ids,
                           'posterior_missing': posterior_missing,
                           'll_missing': ll_missing,
+                          'irfs': irfs,
+                          'dirfs': dirfs,
+                          'eirfs': eirfs,
                           }
 
         print('gathered')
