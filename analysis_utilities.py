@@ -130,6 +130,20 @@ def interleave(a, b):
     return c
 
 
+def get_sister_cell(chosen_cell, cell_ids):
+    if chosen_cell[-1] == 'L':
+        sister_cell = chosen_cell[:-1] + 'R'
+    elif chosen_cell[-1] == 'R':
+        sister_cell = chosen_cell[:-1] + 'L'
+    else:
+        sister_cell = None
+
+    if sister_cell not in cell_ids:
+        sister_cell = None
+
+    return sister_cell
+
+
 def get_example_data_set(inputs, mask=None, emissions=None, chosen_neuron_ind=None, window_size=1000):
     max_data_set = 0
     max_ind = 0
@@ -292,42 +306,4 @@ def single_sample_boostrap_p(data, metric=np.mean, n_boot=10000, rng=np.random.d
     p = 2 * np.mean(booted_metric <= 0)
 
     return p
-
-
-def two_sample_boostrap_corr_p(target, data_1, data_2, alpha=0.05, n_boot=1000, rng=np.random.default_rng()):
-    booted_metric = np.zeros(n_boot)
-
-    # get rid of nans
-    target = target.reshape(-1).astype(float)
-    data_1 = data_1.reshape(-1).astype(float)
-    data_2 = data_2.reshape(-1).astype(float)
-
-    nan_loc = np.isnan(target) | np.isnan(data_1) | np.isnan(data_2)
-    target = target[~nan_loc]
-    data_1 = data_1[~nan_loc]
-    data_2 = data_2[~nan_loc]
-    n_data = target.shape[0]
-
-    for n in range(n_boot):
-        sample_inds = rng.integers(0, high=n_data, size=n_data)
-        target_resampled = target[sample_inds]
-        data_1_resampled = data_1[sample_inds]
-        data_2_resampled = data_2[sample_inds]
-
-        data_1_corr = met.nan_corr(target_resampled, data_1_resampled)[0]
-        data_2_corr = met.nan_corr(target_resampled, data_2_resampled)[0]
-
-        booted_metric[n] = data_1_corr - data_2_corr
-
-    data_mean = met.nan_corr(target, data_1)[0] - met.nan_corr(target, data_2)[0]
-    ci = [np.percentile(booted_metric, alpha / 2 * 100),
-          np.percentile(booted_metric, (1 - alpha / 2) * 100)]
-    ci = np.abs(np.array(ci) - data_mean)
-
-    if np.median(booted_metric) < 0:
-        booted_metric *= -1
-
-    p = 2 * np.mean(booted_metric <= 0)
-
-    return p, data_mean, ci
 

@@ -207,10 +207,6 @@ for m in models:
         posterior_dicts[m]['dirfs'] = ssmu.calculate_dirfs(models[m], window=window)
         save_post = True
 
-    if 'rdirfs' not in posterior_dicts[m] or posterior_dicts[m]['rdirfs'].shape[0] != window_size:
-        posterior_dicts[m]['rdirfs'] = ssmu.calculate_dirfs(models[m], add_recipricol=True, window=window)
-        save_post = True
-
     if 'eirfs' not in posterior_dicts[m] or posterior_dicts[m]['eirfs'].shape[0] != window_size:
         posterior_dicts[m]['eirfs'] = ssmu.calculate_eirfs(models[m], window=window)
         save_post = True
@@ -218,7 +214,6 @@ for m in models:
     weights['models'][m] = {'irfs': posterior_dicts[m]['irfs'],
                             'irms': np.sum(posterior_dicts[m]['irfs'], axis=0) / sample_rate,
                             'dirfs': posterior_dicts[m]['dirfs'],
-                            'rdirfs': posterior_dicts[m]['rdirfs'],
                             'dirms': np.sum(posterior_dicts[m]['dirfs'], axis=0) / sample_rate,
                             'eirfs': posterior_dicts[m]['eirfs'],
                             'eirms': np.sum(posterior_dicts[m]['eirfs'], axis=0) / sample_rate,
