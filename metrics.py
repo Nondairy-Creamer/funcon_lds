@@ -18,6 +18,70 @@ def nan_r2(y_true, y_hat):
     return r2
 
 
+def two_sample_bootstrap_paired(x, y, func=np.mean, n_boot=1000, rng=np.random.default_rng(0)):
+    # get rid of nans
+    x = x.reshape(-1)
+    y = y.reshape(-1)
+    nan_loc = np.isnan(x) | np.isnan(y)
+    x = x[~nan_loc]
+    y = y[~nan_loc]
+
+    n_data = x.shape[0]
+
+    stat = np.zeros(n_boot)
+    for n in range(n_boot):
+        sample_inds = rng.integers(0, high=n_data, size=n_data)
+        x_sampled = x[sample_inds]
+        y_sampled = y[sample_inds]
+
+        stat[n] = func(x_sampled) - func(y_sampled)
+
+    if np.mean(stat < 0):
+        stat *= -1
+
+    p = np.mean(stat < 0) * 2
+
+    return p
+
+
+def two_sample_boostrap_corr_p(target, data_1, data_2, alpha=0.05, n_boot=1000, rng=np.random.default_rng()):
+    booted_metric = np.zeros(n_boot)
+
+    # get rid of nans
+    target = target.reshape(-1).astype(float)
+    data_1 = data_1.reshape(-1).astype(float)
+    data_2 = data_2.reshape(-1).astype(float)
+
+    nan_loc = np.isnan(target) | np.isnan(data_1) | np.isnan(data_2)
+    target = target[~nan_loc]
+    data_1 = data_1[~nan_loc]
+    data_2 = data_2[~nan_loc]
+    n_data = target.shape[0]
+
+    for n in range(n_boot):
+        sample_inds = rng.integers(0, high=n_data, size=n_data)
+        target_resampled = target[sample_inds]
+        data_1_resampled = data_1[sample_inds]
+        data_2_resampled = data_2[sample_inds]
+
+        data_1_corr = nan_corr(target_resampled, data_1_resampled)[0]
+        data_2_corr = nan_corr(target_resampled, data_2_resampled)[0]
+
+        booted_metric[n] = data_1_corr - data_2_corr
+
+    data_mean = nan_corr(target, data_1)[0] - nan_corr(target, data_2)[0]
+    ci = [np.percentile(booted_metric, alpha / 2 * 100),
+          np.percentile(booted_metric, (1 - alpha / 2) * 100)]
+    ci = np.abs(np.array(ci) - data_mean)
+
+    if np.median(booted_metric) < 0:
+        booted_metric *= -1
+
+    p = 2 * np.mean(booted_metric <= 0)
+
+    return p, data_mean, ci
+
+
 def nan_corr(y_true, y_hat, alpha=0.05, mean_sub=True):
     y_true = y_true.reshape(-1)
     y_hat = y_hat.reshape(-1)
