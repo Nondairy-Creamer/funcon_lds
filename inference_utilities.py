@@ -238,6 +238,12 @@ def parallel_get_post(model, data, emissions_offset=None, init_mean=None, init_c
             init_cov = model.estimate_init_cov(emissions)
 
         test_data_packaged = model.package_data_mpi(emissions, inputs, emissions_offset, init_mean, init_cov, size)
+
+        print('calculating IRFs')
+        window = (15, 30)
+        irfs = ssmu.calculate_irfs(model, window=window)
+        dirfs = ssmu.calculate_dirfs(model, window=window)
+        eirfs = ssmu.calculate_eirfs(model, window=window)
     else:
         test_data_packaged = None
 
@@ -363,12 +369,6 @@ def parallel_get_post(model, data, emissions_offset=None, init_mean=None, init_c
         init_cov = [i[6] for i in ll_smeans]
         posterior_missing = [i[7] for i in ll_smeans]
         ll_missing = [i[8] for i in ll_smeans]
-
-        print('calculating IRFs')
-        window = (15, 30)
-        irfs = ssmu.calculate_irfs(model, window=window)
-        dirfs = ssmu.calculate_dirfs(model, window=window)
-        eirfs = ssmu.calculate_eirfs(model, window=window)
 
         inference_test = {'ll': ll,
                           'posterior': smoothed_means,
