@@ -785,7 +785,7 @@ def plot_irms(weights, cell_ids, num_neurons=None, fig_save_path=None):
         plt.savefig(fig_save_path / 'sampled_data_corr.pdf')
 
     for m in ['synap', 'unconstrained', 'synap_randA']:
-        neurons_to_mask = ['AIAL']
+        neurons_to_mask = []
         model_irms = weights['models'][m]['irms'].copy()
         model_corr = weights['models'][m]['corr'].copy()
 
@@ -936,6 +936,10 @@ def plot_dirfs(weights, masks, cell_ids, window, chosen_mask=None, num_plot=10, 
 
     no_nan_irfs = ssmu.remove_nan_irfs(weights, cell_ids, chosen_mask=chosen_mask)
 
+    # TODO potentially remove this, it limits all interactions to AVER
+    # select all interactions that involved AVER
+    # cell_inds = np.array([i for i in range(len(no_nan_irfs['cell_ids'])) if 'AVER' == no_nan_irfs['cell_ids'][i][0]])
+    #
     data_irfs = no_nan_irfs['data_irfs']
     data_irfs_sem = no_nan_irfs['data_irfs_sem']
     model_irfs = no_nan_irfs['model_irfs']
@@ -943,6 +947,7 @@ def plot_dirfs(weights, masks, cell_ids, window, chosen_mask=None, num_plot=10, 
     model_eirfs = no_nan_irfs['model_eirfs']
     model_irms = no_nan_irfs['model_irms']
     cell_ids = no_nan_irfs['cell_ids']
+
 
     # get the IRFs with the highest correlation to the data
     irm_corr = np.zeros(data_irfs.shape[1])

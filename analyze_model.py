@@ -5,9 +5,11 @@ import loading_utilities as lu
 from pathlib import Path
 import lgssm_utilities as ssmu
 
-run_params = lu.get_run_params(param_name='analysis_params/ana_test.yml')
+# run_params = lu.get_run_params(param_name='analysis_params/ana_test.yml')
 # run_params = lu.get_run_params(param_name='analysis_params/ana_exp_DL.yml')
+run_params = lu.get_run_params(param_name='analysis_params/ana_exp_IL.yml')
 # run_params = lu.get_run_params(param_name='analysis_params/ana_exp_DL_synap.yml')
+# run_params = lu.get_run_params(param_name='analysis_params/ana_exp_ridge.yml')
 
 window = run_params['window']
 sub_pre_stim = run_params['sub_pre_stim']
@@ -87,14 +89,6 @@ for i in range(len(model_weights)):
 # run analysis methods on the data
 if run_params['plot_model_params']:
     am.plot_model_params(model=model, model_true=model_true, cell_ids_chosen=cell_ids_chosen)
-
-# from matplotlib import pyplot as plt
-#
-# for i in range(len(emissions)):
-#     plt.figure()
-#     plt.plot(data['emissions_offset'][i])
-#     plt.plot(posterior_dict['emissions_offset'][i])
-# plt.show()
 
 if run_params['plot_eigen_values']:
     am.plot_dynamics_eigs(model=model)

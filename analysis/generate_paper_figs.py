@@ -94,14 +94,14 @@ data_irfs_train, data_irfs_sem_train, data_irfs_train_all = \
     ssmu.get_impulse_response_functions(data_train['emissions'], data_train['inputs'],
                                         sample_rate=sample_rate, window=window, sub_pre_stim=sub_pre_stim)
 nan_loc = np.all(np.isnan(data_irfs_train), axis=0)
-data_irms_train = np.nansum(data_irfs_train[window[0]:], axis=0) * sample_rate
+data_irms_train = np.nansum(data_irfs_train[int(window[0]*sample_rate):], axis=0) * sample_rate
 data_irms_train[nan_loc] = np.nan
 
 data_irfs_test, data_irfs_sem_test, data_irfs_test_all = \
     ssmu.get_impulse_response_functions(data_test['emissions'], data_test['inputs'],
                                         sample_rate=sample_rate, window=window, sub_pre_stim=sub_pre_stim)
 nan_loc = np.all(np.isnan(data_irfs_test), axis=0)
-data_irms_test = np.nansum(data_irfs_test[window[0]:], axis=0) / sample_rate
+data_irms_test = np.nansum(data_irfs_test[int(window[0]*sample_rate):], axis=0) / sample_rate
 data_irms_test[nan_loc] = np.nan
 
 num_neurons = data_irfs_test.shape[1]
@@ -109,11 +109,11 @@ num_stim_train = np.zeros((num_neurons, num_neurons))
 num_stim_test = np.zeros((num_neurons, num_neurons))
 for ni in range(num_neurons):
     for nj in range(num_neurons):
-        resp_to_stim_train = data_irfs_train_all[ni][:, window[0]:, nj]
+        resp_to_stim_train = data_irfs_train_all[ni][:, int(window[0]*sample_rate):, nj]
         num_obs_when_stim_train = np.sum(np.any(~np.isnan(resp_to_stim_train), axis=1))
         num_stim_train[nj, ni] += num_obs_when_stim_train
 
-        resp_to_stim_test = data_irfs_test_all[ni][:, window[0]:, nj]
+        resp_to_stim_test = data_irfs_test_all[ni][:, int(window[0]*sample_rate):, nj]
         num_obs_when_stim_test = np.sum(np.any(~np.isnan(resp_to_stim_test), axis=1))
         num_stim_test[nj, ni] += num_obs_when_stim_test
 
@@ -336,7 +336,7 @@ cell_ids['chosen'] = top_cells
 #
 
 # Figure 2
-# pf.plot_dirfs(weights_masked, masks, cell_ids, window, chosen_mask=masks['synap'], num_plot=20, fig_save_path=fig_save_path)
+pf.plot_dirfs(weights_masked, masks, cell_ids, window, chosen_mask=masks['synap'], num_plot=20, fig_save_path=fig_save_path)
 # pf.plot_dirfs(weights_masked, masks, cell_ids, window, chosen_mask=masks['unconnected'], num_plot=20, fig_save_path=fig_save_path)
 # pf.plot_dirfs_train_test(weights_masked, masks, cell_ids, window, chosen_mask=masks['synap'], num_plot=10, fig_save_path=fig_save_path)
 # pf.plot_dirfs_train_test(weights_masked, masks, cell_ids, window, chosen_mask=masks['unconnected'], num_plot=10, fig_save_path=fig_save_path)
@@ -354,7 +354,6 @@ cell_ids['chosen'] = top_cells
 # Figure 4
 # pf.corr_zimmer_paper(weights_masked, models, cell_ids)
 # pf.plot_eigenvalues(models, masks, data_train['emissions'], cell_ids, num_vect_plot=0)
-# pf.compare_model_vs_connectome_eig(models, masks, data_train['emissions'], cell_ids, num_vect_plot=5, neuron_freq=0.1)
 
 ### Final verson of the figures
 pairs = np.array([['AVDR', 'AVJR'],
@@ -375,10 +374,16 @@ pairs = np.array([['AVDR', 'AVJR'],
 
 # pf.weights_vs_connectome(weights, masks, metric=metric, fig_save_path=fig_save_path / 'fig_1')
 
-# pf.weight_prediction(weights, masks, 'irms', fig_save_path=fig_save_path / 'fig_1')
+# pf.weight_prediction(weights_masked, masks, 'irms', fig_save_path=fig_save_path / 'fig_1')
 # pf.weight_prediction_sweep(weights_masked, masks, 'irms', fig_save_path=fig_save_path / 'fig_1')
 # pf.weight_prediction(weights_masked, masks, 'corr', fig_save_path=fig_save_path / 'fig_1')
 # pf.weight_prediction_sweep(weights_masked, masks, 'corr', fig_save_path=fig_save_path / 'fig_1')
+
+# pf.direct_vs_indirect(weights_masked, masks, fig_save_path=None, rng=rng)
+
+
+# pf.weight_prediction(weights_masked, masks, 'irms', fig_save_path=fig_save_path / 'fig_1')
+
 
 # pf.plot_sampled_model(data_test, posterior_dicts['synap'], sample_rate=sample_rate, cell_ids=cell_ids,
 #                       num_neurons=10, fig_save_path=fig_save_path / 'fig_1')
@@ -386,10 +391,14 @@ pairs = np.array([['AVDR', 'AVJR'],
 # Figure 2
 # pf.weights_vs_connectome(weights, masks, fig_save_path=fig_save_path)
 # pf.uncon_vs_connectome(weights, masks, fig_save_path=fig_save_path)
+# pf.uncon_vs_synap(models, fig_save_path=fig_save_path)
 
 
 # Figure 3
-pf.plot_missing_neuron(models, data_test, posterior_dicts['synap'], post_save_path=(saved_run_folder / model_folders['synap'] / 'posterior_test.pkl'),
-                       sample_rate=sample_rate, fig_save_path=fig_save_path / 'fig_3')
+# pf.plot_missing_neuron(models, data_test, posterior_dicts['synap'], post_save_path=(saved_run_folder / model_folders['synap'] / 'posterior_test.pkl'),
+#                        sample_rate=sample_rate, fig_save_path=fig_save_path / 'fig_3')
+
+# figure 4
+# pf.compare_model_vs_connectome_eig(models, masks, data_train['emissions'], cell_ids, num_vect_plot=5, neuron_freq=0.1)
 
 

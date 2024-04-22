@@ -51,7 +51,6 @@ def remove_nan_irfs(weights, cell_ids, data_type='test', chosen_mask=None):
     data_irfs_sem = weights['data'][data_type]['irfs_sem'][:, chosen_mask]
     model_irfs = weights['models']['synap']['irfs'][:, chosen_mask]
     model_dirfs = weights['models']['synap']['dirfs'][:, chosen_mask]
-    model_rdirfs = weights['models']['synap']['rdirfs'][:, chosen_mask]
     model_eirfs = weights['models']['synap']['eirfs'][:, chosen_mask]
 
     data_irms = weights['data'][data_type]['irms'][chosen_mask]
@@ -76,7 +75,6 @@ def remove_nan_irfs(weights, cell_ids, data_type='test', chosen_mask=None):
     data_irfs_sem = data_irfs_sem[:, ~nan_loc]
     model_irfs = model_irfs[:, ~nan_loc]
     model_dirfs = model_dirfs[:, ~nan_loc]
-    model_rdirfs = model_rdirfs[:, ~nan_loc]
     model_eirfs = model_eirfs[:, ~nan_loc]
 
     model_irms = model_irms[~nan_loc]
@@ -87,7 +85,6 @@ def remove_nan_irfs(weights, cell_ids, data_type='test', chosen_mask=None):
                      'data_irfs_sem': data_irfs_sem,
                      'model_irfs': model_irfs,
                      'model_dirfs': model_dirfs,
-                     'model_rdirfs': model_rdirfs,
                      'model_eirfs': model_eirfs,
                      'model_irms': model_irms,
                      'model_dirms': model_dirms,

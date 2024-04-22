@@ -99,6 +99,37 @@ def plot_model_params(model, model_true=None, cell_ids_chosen=None):
     # limit the matrix to the chosen neurons
     neuron_inds_chosen = np.array([cell_ids.index(i) for i in cell_ids_chosen])
 
+    # import lgssm_utilities as ssmu
+    # conn = au.load_anatomical_data(cell_ids)
+    # conn_mask = (conn['gap_conn'] + conn['chem_conn']) > 0
+    # window = (15, 30)
+    # cutoff_percent = 5
+    # eirms = ssmu.calculate_eirms(model, window=window, verbose=True)
+    # eirms_abs = np.abs(eirms)
+    # cutoff = np.nanpercentile(eirms_abs, cutoff_percent)
+    # connected = eirms_abs[conn_mask]
+    # unconnected = eirms_abs[~conn_mask]
+    #
+    # plt.figure()
+    # plt.subplot(1, 2, 1)
+    # plot_max = np.nanpercentile(eirms_abs, 95)
+    # bins = np.linspace(0, plot_max, 101)
+    # plt.hist(connected, bins=bins, density=True, label='connected', alpha=0.5)
+    # plt.hist(unconnected, bins=bins, density=True, label='unconnected', alpha=0.5)
+    # plt.axvline(cutoff, linestyle='--', color='k')
+    # plt.xlim((0, plot_max))
+    # plt.legend()
+    #
+    # plt.subplot(1, 2, 2)
+    # plot_x = np.arange(2)
+    # plot_y = [np.sum(connected < cutoff) / np.sum(conn_mask), np.sum(unconnected < cutoff) / np.sum(~conn_mask)]
+    # plt.bar(plot_x, plot_y)
+    # plt.xticks(plot_x, ['connected', 'unconnected'])
+    # plt.ylabel('frequency in bottom ' + str(cutoff_percent) + '%')
+    # plt.tight_layout()
+    #
+    # plt.show()
+
     # plot the log likelihood
     plt.figure()
     plt.subplot(1, 2, 1)

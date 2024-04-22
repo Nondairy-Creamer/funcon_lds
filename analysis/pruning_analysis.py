@@ -7,7 +7,7 @@ import metrics as met
 import analysis_utilities as au
 
 window = (15, 30)
-folder_path = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/exp_DL4_IL45_N80_R0_nf10/20240312_204358')
+folder_path = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/exp_DL4_IL45_N80_R0_nf10_Re+1/20240410_164824')
 # pruned_model_path = folder_path / 'pruning_es010_pf015'
 # pruned_model_path = folder_path / 'pruning_es020_pf010'
 pruned_model_path = folder_path / 'pruning_es040_pf005'
@@ -128,6 +128,8 @@ plt.plot(prfa[:, 1], label='recall')
 plt.plot(prfa[:, 2], label='f measure')
 plt.plot(prfa[:, 3], label='accuracy')
 plt.plot(model_score, label='model score')
+plt.xticks(np.arange(prfa_data.shape[0]), (np.arange(prfa_data.shape[0]) + 1)*5)
+plt.xlabel('sparsity')
 plt.ylim((0, 1))
 plt.legend()
 
@@ -137,6 +139,8 @@ plt.plot(prfa_data[:, 0], label='precision')
 plt.plot(prfa_data[:, 1], label='recall')
 plt.plot(prfa_data[:, 2], label='f measure')
 plt.plot(prfa_data[:, 3], label='accuracy')
+plt.xticks(np.arange(prfa_data.shape[0]), (np.arange(prfa_data.shape[0]) + 1)*5)
+plt.xlabel('sparsity')
 plt.ylim((0, 1))
 plt.legend()
 
