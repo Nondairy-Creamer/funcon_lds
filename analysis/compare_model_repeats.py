@@ -12,6 +12,7 @@ run_params = lu.get_run_params(param_name='../analysis_params/paper_figures.yml'
 model_repeat_paths = run_params['model_repeats']
 saved_run_folder = Path(run_params['saved_run_folder'])
 window = run_params['window']
+fig_save_path = Path(run_params['fig_save_path'])
 
 # all the data should be the same, load it once
 # test data
@@ -34,6 +35,35 @@ data_file = open(saved_run_folder / model_repeat_paths['synap'][0] / 'data_train
 data_train = pickle.load(data_file)
 data_file.close()
 
+if 'data_corr_ci' in data_test:
+    data_corr_test = data_test['data_corr']
+    data_corr_test_ci = data_test['data_corr_ci']
+else:
+    data_corr_test, data_corr_test_ci = au.nan_corr_data(data_test['emissions'])
+
+    data_test['data_corr'] = data_corr_test
+    data_test['data_corr_ci'] = data_corr_test_ci
+
+    data_test_file = open(saved_run_folder / model_repeat_paths['synap'][0] / 'data_test.pkl', 'wb')
+    pickle.dump(data_test, data_test_file)
+    data_test_file.close()
+
+if 'data_corr_ci' in data_train:
+    data_corr_train = data_train['data_corr']
+    data_corr_train_ci = data_train['data_corr_ci']
+else:
+    data_corr_train, data_corr_train_ci = au.nan_corr_data(data_train['emissions'])
+
+    data_train['data_corr'] = data_corr_train
+    data_train['data_corr_ci'] = data_corr_train_ci
+
+    data_train_file = open(saved_run_folder / model_repeat_paths['synap'][0] / 'data_train.pkl', 'wb')
+    pickle.dump(data_train, data_train_file)
+    data_train_file.close()
+
+data_corr_test[np.eye(data_corr_test.shape[0], dtype=bool)] = np.nan
+data_corr_train[np.eye(data_corr_train.shape[0], dtype=bool)] = np.nan
+
 data_irfs_train, data_irfs_sem_train, data_irfs_train_all = \
     ssmu.get_impulse_response_functions(data_train['emissions'], data_train['inputs'],
                                         sample_rate=sample_rate, window=window, sub_pre_stim=True)
@@ -41,13 +71,17 @@ nan_loc = np.all(np.isnan(data_irfs_train), axis=0) | np.eye(num_neurons, dtype=
 data_irms_train = np.nansum(data_irfs_train[int(window[0]*sample_rate):], axis=0) / sample_rate
 data_irms_train[nan_loc] = np.nan
 
-train_test_corr = met.nan_corr(data_irms_train, data_irms_test)[0]
+train_test_corr_irms = met.nan_corr(data_irms_train, data_irms_test)[0]
+train_test_corr_corr = met.nan_corr(data_corr_train, data_corr_test)[0]
 
 models = {}
 posterior_dicts = {}
 model_irms = {}
+model_corr = {}
 model_score = {}
 model_score_ci = {}
+model_corr_score = {}
+model_corr_score_ci = {}
 model_ll = {}
 model_eigs = {}
 
@@ -55,8 +89,11 @@ for model_name in model_repeat_paths:
     models[model_name] = []
     posterior_dicts[model_name] = []
     model_irms[model_name] = []
+    model_corr[model_name] = []
     model_score[model_name] = []
     model_score_ci[model_name] = []
+    model_corr_score[model_name] = []
+    model_corr_score_ci[model_name] = []
     model_ll[model_name] = []
     model_eigs[model_name] = []
 
@@ -84,9 +121,16 @@ for model_name in model_repeat_paths:
         model_irms_this = posterior_dicts[model_name][-1]['irfs'][int(window[0]*sample_rate):].sum(0) / sample_rate
         model_irms[model_name].append(model_irms_this)
 
+        model_corr_this = ssmu.predict_model_corr_coef(models[model_name][-1])
+        model_corr[model_name].append(model_corr_this)
+
         model_score_this, model_score_this_ci = met.nan_corr(data_irms_test, model_irms[model_name][-1])
         model_score[model_name].append(model_score_this)
         model_score_ci[model_name].append(model_score_this_ci)
+
+        model_corr_score_this, model_corr_score_this_ci = met.nan_corr(data_corr_test, model_corr[model_name][-1])
+        model_corr_score[model_name].append(model_corr_score_this)
+        model_corr_score_ci[model_name].append(model_corr_score_this_ci)
 
         # num_lags = models[model_name][-1].dynamics_lags
         # mask = models[model_name][-1].param_props['mask']['dynamics_weights']
@@ -100,44 +144,59 @@ for model_name in model_repeat_paths:
         model_eigs[model_name].append(eigs_this)
 
 # plot the model score and the test log likelihood
-model_list = ['synap', 'synap_randA', 'unconstrained']
+model_list = ['synap', 'unconstrained', 'synap_randA']
 plt.figure()
 plt.subplot(1, 2, 1)
 for mi, m in enumerate(model_list):
     plot_x = np.ones(len(model_score[m])) * mi
-    plt.scatter(plot_x, model_score[m] / train_test_corr)
-
+    plt.scatter(plot_x, model_score[m] / train_test_corr_irms)
+plt.xlim((-0.5, 2.5))
+plt.ylim((0, 1))
 plt.ylabel('relative correlation')
 plt.xticks(np.arange(len(model_list)), model_list, rotation=45)
 
-plt.subplot(1, 2, 2)
+ax = plt.subplot(1, 2, 2)
 for mi, m in enumerate(model_list):
     plot_x = np.ones(len(model_ll[m])) * mi
     plt.scatter(plot_x, model_ll[m])
-
+plt.xlim((-0.5, 2.5))
 plt.ylabel('test log-likelihood')
 plt.xticks(np.arange(len(model_list)), model_list, rotation=45)
-
 plt.tight_layout()
+plt.savefig(fig_save_path / 'fig_2' / 'stam_ll_rand_init.pdf')
 
-# plot log likelihood and score across different lags
 plt.figure()
-plt.subplot(1, 2, 1)
-plot_x = np.arange(len(model_score['synap_sweep']))
-plt.scatter(plot_x, np.array(model_score['synap_sweep']) / train_test_corr)
+for mi, m in enumerate(model_list):
+    plot_x = np.ones(len(model_corr_score[m])) * mi
+    plt.scatter(plot_x, model_corr_score[m] / train_test_corr_corr)
+plt.xlim((-0.5, 2.5))
 plt.ylim((0, 1))
 plt.ylabel('relative correlation')
-plt.xlabel('dynamics lags')
-plt.title('unconstrained')
-
-plt.subplot(1, 2, 2)
-plot_x = np.arange(len(model_ll['synap_sweep']))
-plt.scatter(plot_x, model_ll['synap_sweep'])
-plt.ylabel('test log-likelihood')
-plt.xlabel('dynamics lags')
-
+plt.xticks(np.arange(len(model_list)), model_list, rotation=45)
 plt.tight_layout()
+plt.savefig(fig_save_path / 'fig_2' / 'corr_rand_init.pdf')
+
+plt.show()
+a=1
+# plot log likelihood and score across different lags
+# plt.figure()
+# plt.subplot(1, 2, 1)
+# plot_x = np.arange(len(model_score['synap_sweep']))
+# plot_x = np.array([1, 5, 10, 15, 30, 45, 60])
+# plt.scatter(plot_x, np.array(model_score['synap_sweep']) / train_test_corr)
+# plt.ylim((0, 1))
+# plt.ylabel('relative correlation')
+# plt.xlabel('dynamics input lags')
+# plt.title('unconstrained')
 #
+# plt.subplot(1, 2, 2)
+# plot_x = np.arange(len(model_ll['synap_sweep']))
+# plt.scatter(plot_x, model_ll['synap_sweep'])
+# plt.ylabel('test log-likelihood')
+# plt.xlabel('dynamics input lags')
+#
+# plt.tight_layout()
+
 # for i in model_eigs['synap_sweep']:
 #     plt.figure()
 #     plt.subplot(1, 2, 1)

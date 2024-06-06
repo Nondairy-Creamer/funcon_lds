@@ -4,6 +4,7 @@ import pickle
 from pathlib import Path
 import metrics as met
 import itertools
+import csv
 
 
 def auto_select_ids(inputs, cell_ids, num_neurons=10):
@@ -80,6 +81,8 @@ def load_anatomical_data(cell_ids=None):
     peptide_connectome = pickle.load(peptide_file)
     peptide_file.close()
 
+    syn_size_connectome = load_synapse_size(cell_ids.copy())
+
     ids_path = Path('anatomical_data/cell_ids.pkl')
     if not ids_path.exists():
         ids_path = Path('../') / ids_path
@@ -100,9 +103,46 @@ def load_anatomical_data(cell_ids=None):
 
     anatomy_dict = {'chem_conn': chemical_synapse_connectome,
                     'gap_conn': gap_junction_connectome,
-                    'pep_conn': peptide_connectome}
+                    'pep_conn': peptide_connectome,
+                    'chem_size': syn_size_connectome}
 
     return anatomy_dict
+
+
+def load_synapse_size(cell_ids):
+    syn_size_path = Path('anatomical_data/cook_synapse_size_connectome.csv')
+    if not syn_size_path.exists():
+        syn_size_path = Path('../') / syn_size_path
+
+    cell_ids[cell_ids.index('DA1')] = 'DA01'
+    cell_ids[cell_ids.index('DB1')] = 'DB01'
+    cell_ids[cell_ids.index('DB2')] = 'DB02'
+    cell_ids[cell_ids.index('DD1')] = 'DD01'
+    cell_ids[cell_ids.index('VA1')] = 'VA01'
+    cell_ids[cell_ids.index('VB1')] = 'VB01'
+    cell_ids[cell_ids.index('VB2')] = 'VB02'
+
+    num_neurons = len(cell_ids)
+    with open(syn_size_path, 'r') as f:
+        synapse_size_data_in = list(csv.reader(f, delimiter=","))
+
+    postsynaptic_cell_ids = synapse_size_data_in[2][3:]
+    synapse_size_data = synapse_size_data_in[3:-1]
+    presynaptic_cell_ids = [i[2] for i in synapse_size_data]
+    synapse_size_data = [i[3:-1] for i in synapse_size_data]
+    synapse_size_data = np.array(synapse_size_data)
+    synapse_size_data[synapse_size_data == ''] = '0'
+    synapse_size_data = synapse_size_data.astype(int)
+
+    synapse_size = np.zeros((num_neurons, num_neurons))
+    postsynaptic_cell_indicies = np.zeros(num_neurons, dtype=int)
+    for ii, i in enumerate(cell_ids):
+        postsynaptic_cell_indicies[ii] = postsynaptic_cell_ids.index(i)
+
+    for ii, i in enumerate(cell_ids):
+        synapse_size[ii, :] = synapse_size_data[presynaptic_cell_ids.index(i), postsynaptic_cell_indicies]
+
+    return synapse_size
 
 
 def get_anatomical_data(cell_ids):
@@ -151,6 +191,9 @@ def get_example_data_set(inputs, mask=None, emissions=None, chosen_neuron_ind=No
     max_window = 0
 
     for ii, i in enumerate(inputs):
+        if ii in [28]:
+            continue
+
         # some data sets might be smaller than window size
         this_window_size = np.min((window_size, i.shape[0]))
 
@@ -180,7 +223,7 @@ def get_example_data_set(inputs, mask=None, emissions=None, chosen_neuron_ind=No
 
         if (ii == 0) or (this_max_val > max_val and has_emissions):
             max_val = this_max_val
-            max_ind = this_max_ind
+            max_ind = this_max_ind + 240
             max_data_set = ii
             max_window = this_window_size
             print(ii)

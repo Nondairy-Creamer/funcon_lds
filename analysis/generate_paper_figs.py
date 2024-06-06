@@ -100,6 +100,7 @@ data_irms_train[nan_loc] = np.nan
 data_irfs_test, data_irfs_sem_test, data_irfs_test_all = \
     ssmu.get_impulse_response_functions(data_test['emissions'], data_test['inputs'],
                                         sample_rate=sample_rate, window=window, sub_pre_stim=sub_pre_stim)
+
 nan_loc = np.all(np.isnan(data_irfs_test), axis=0)
 data_irms_test = np.nansum(data_irfs_test[int(window[0]*sample_rate):], axis=0) / sample_rate
 data_irms_test[nan_loc] = np.nan
@@ -153,9 +154,9 @@ if filter_tau > 0:
             posterior_dicts[p]['model_sampled_noise'][di] = ss.convolve2d(d, filt_shape[:, None], mode='full')[:-filt_shape.size+1, :]
 
 # get data IRFs after interpolation
-data_irfs_train, data_irfs_sem_train = \
+data_irfs_train, data_irfs_sem_train, data_irfs_train_all = \
     ssmu.get_impulse_response_functions(data_train['emissions'], data_train['inputs'],
-                                        sample_rate=sample_rate, window=window, sub_pre_stim=sub_pre_stim)[:2]
+                                        sample_rate=sample_rate, window=window, sub_pre_stim=sub_pre_stim)[:3]
 
 data_irfs_test, data_irfs_sem_test = \
     ssmu.get_impulse_response_functions(data_test['emissions'], data_test['inputs'],
@@ -217,6 +218,7 @@ for m in models:
                             'dirms': np.sum(posterior_dicts[m]['dirfs'], axis=0) / sample_rate,
                             'eirfs': posterior_dicts[m]['eirfs'],
                             'eirms': np.sum(posterior_dicts[m]['eirfs'], axis=0) / sample_rate,
+                            'weights': models[m].dynamics_weights
                             }
 
     abs_eirms = np.abs(weights['models'][m]['dirms'])
@@ -285,16 +287,18 @@ weights_masked = ssmu.mask_weights_to_nan(weights, masks['irm_nans'], masks['cor
 stim_in_both = num_stim_train.diagonal() * num_stim_test.diagonal()
 stim_in_both_inds = np.argsort(stim_in_both)[::-1]
 cell_ids['sorted'] = [cell_ids['all'][i] for i in stim_in_both_inds]
+# TODO consider removing or finding a better way to choose a data set without missing data
+cell_ids['sorted'].pop(cell_ids['sorted'].index('AVER'))
 
 # choose a set of cells which are stimulated frequently and highly interconnected
-top_n = 30
+top_n = 20
 cell_pool = cell_ids['sorted'][:top_n]
 cell_pool_inds = np.array([cell_ids['all'].index(i) for i in cell_pool])
 top_n_network = masks['synap'][:, cell_pool_inds][cell_pool_inds, :]
 top_n_degree = np.sum(top_n_network, axis=0) + np.sum(top_n_network, axis=1)
 most_connected = cell_pool[np.argmax(top_n_degree)]
 
-target_n = 5
+target_n = 10
 top_cells = [most_connected]
 
 for i in range(target_n - 1):
@@ -316,15 +320,9 @@ cell_ids['chosen'] = top_cells
 
 ### Exploration
 # Figure 1
+# pf.plot_irms(weights, cell_ids, fig_save_path=fig_save_path)
 # pf.plot_irms(weights, cell_ids, use_chosen_ids=False, fig_save_path=fig_save_path)
 # pf.plot_irms(weights, cell_ids, use_chosen_ids=True, fig_save_path=fig_save_path)
-
-# am.plot_irm(model_weights=weights_masked['models']['synap']['dirms'],
-#             measured_irm=weights_masked['data']['test']['irms'],
-#             model_irm=weights_masked['models']['synap']['irms'],
-#             data_corr=weights_masked['data']['train']['corr'],
-#             cell_ids=cell_ids['all'], cell_ids_chosen=cell_ids['sorted'],
-#             fig_save_path=fig_save_path)
 
 # pf.plot_irfs(weights_masked, masks, cell_ids, window, num_plot=20, fig_save_path=fig_save_path)
 # pf.plot_irfs_train_test(weights_masked, masks, cell_ids, window, num_plot=5, fig_save_path=fig_save_path)
@@ -336,7 +334,7 @@ cell_ids['chosen'] = top_cells
 #
 
 # Figure 2
-pf.plot_dirfs(weights_masked, masks, cell_ids, window, chosen_mask=masks['synap'], num_plot=20, fig_save_path=fig_save_path)
+# pf.plot_dirfs(weights_masked, masks, cell_ids, window, chosen_mask=masks['synap'], num_plot=20, fig_save_path=fig_save_path)
 # pf.plot_dirfs(weights_masked, masks, cell_ids, window, chosen_mask=masks['unconnected'], num_plot=20, fig_save_path=fig_save_path)
 # pf.plot_dirfs_train_test(weights_masked, masks, cell_ids, window, chosen_mask=masks['synap'], num_plot=10, fig_save_path=fig_save_path)
 # pf.plot_dirfs_train_test(weights_masked, masks, cell_ids, window, chosen_mask=masks['unconnected'], num_plot=10, fig_save_path=fig_save_path)
@@ -348,57 +346,46 @@ pf.plot_dirfs(weights_masked, masks, cell_ids, window, chosen_mask=masks['synap'
 # Figure 3
 # pf.predict_chem_synapse_sign(weights_masked, masks, cell_ids, metric=metric, rng=rng, fig_save_path=fig_save_path)
 # pf.predict_gap_synapse_sign(weights_masked, masks, metric=metric, rng=rng, fig_save_path=fig_save_path)
-# pf.unconstrained_vs_constrained_model(weights_masked, fig_save_path=fig_save_path)
-# pf.unconstrained_model_vs_connectome(weights_masked, masks, fig_save_path=fig_save_path)
+# pf.unconstrained_vs_constrained_model(weights_masked, fig_save_path=fig_save_path/'fig_3')
+# pf.uncon_vs_synap(models, fig_save_path=fig_save_path/'fig_3')
+# pf.unconstrained_model_vs_connectome(weights_masked, masks, fig_save_path=fig_save_path/'fig_3')
+# pf.plot_silencing_results(models['synap'], cell_ids, weights['models']['synap'], fig_save_path=None)
+# pf.uncon_vs_connectome(weights, masks, fig_save_path=fig_save_path/'fig_3')
+# pf.direct_vs_indirect(weights_masked, masks, fig_save_path=fig_save_path/'fig_4', rng=rng)
 
 # Figure 4
 # pf.corr_zimmer_paper(weights_masked, models, cell_ids)
-# pf.plot_eigenvalues(models, masks, data_train['emissions'], cell_ids, num_vect_plot=0)
+# pf.plot_eigenvalues_find_enrichment(models, masks, data_train['emissions'], cell_ids, num_vect_plot=0)
+# pf.compare_model_vs_connectome_eig(models, masks, data_train['emissions'], cell_ids, num_vect_plot=5, neuron_freq=0.1)
+# pf.plot_model_eig(models, fig_save_path=fig_save_path/'fig_4')
 
 ### Final verson of the figures
-pairs = np.array([['AVDR', 'AVJR'],
-                  ['SAADR', 'RMDDL'],
-
-                  ['AVAL', 'AVEL'],
-                  ['RMDDR', 'RMDDL'],
-
-                  ['AWBR', 'AWAL'],
-                  ['CEPVL', 'CEPDR'],
+pairs = np.array([['RMDDR', 'RMDDL'],
+                  ['AVEL', 'SAADL'],
                   ])
 
 # Figure 1
-# pf.plot_irms(weights, cell_ids, num_neurons=None, fig_save_path=fig_save_path / 'fig_1')
-# pf.plot_irms(weights, cell_ids, num_neurons=20, fig_save_path=fig_save_path / 'fig_1')
-
-# pf.plot_specific_dirfs(weights_masked, masks, cell_ids, pairs, window, fig_save_path=fig_save_path / 'fig_1')
-
-# pf.weights_vs_connectome(weights, masks, metric=metric, fig_save_path=fig_save_path / 'fig_1')
-
-# pf.weight_prediction(weights_masked, masks, 'irms', fig_save_path=fig_save_path / 'fig_1')
-# pf.weight_prediction_sweep(weights_masked, masks, 'irms', fig_save_path=fig_save_path / 'fig_1')
-# pf.weight_prediction(weights_masked, masks, 'corr', fig_save_path=fig_save_path / 'fig_1')
-# pf.weight_prediction_sweep(weights_masked, masks, 'corr', fig_save_path=fig_save_path / 'fig_1')
-
-# pf.direct_vs_indirect(weights_masked, masks, fig_save_path=None, rng=rng)
-
-
-# pf.weight_prediction(weights_masked, masks, 'irms', fig_save_path=fig_save_path / 'fig_1')
-
-
 # pf.plot_sampled_model(data_test, posterior_dicts['synap'], sample_rate=sample_rate, cell_ids=cell_ids,
-#                       num_neurons=10, fig_save_path=fig_save_path / 'fig_1')
+#                       num_neurons=10, fig_save_path=fig_save_path/'fig_1')
+#
+# pf.plot_specific_dirfs(weights_masked, masks, cell_ids, pairs, window, fig_save_path=fig_save_path/'fig_1')
+
+# pf.weight_prediction_sweep(weights_masked, masks, 'irms', fig_save_path=fig_save_path/'fig_1')
+pf.weight_prediction(weights_masked, masks, 'irms', fig_save_path=fig_save_path/'fig_1')
 
 # Figure 2
-# pf.weights_vs_connectome(weights, masks, fig_save_path=fig_save_path)
-# pf.uncon_vs_connectome(weights, masks, fig_save_path=fig_save_path)
-# pf.uncon_vs_synap(models, fig_save_path=fig_save_path)
-
+# pf.plot_irms(weights, cell_ids, num_neurons=20, fig_save_path=fig_save_path/'fig_2')
+# pf.compare_model_irms(weights, masks, 'irms', fig_save_path=fig_save_path/'fig_2')
+# pf.compare_model_irms(weights, masks, 'corr', fig_save_path=fig_save_path/'fig_2')
 
 # Figure 3
-# pf.plot_missing_neuron(models, data_test, posterior_dicts['synap'], post_save_path=(saved_run_folder / model_folders['synap'] / 'posterior_test.pkl'),
-#                        sample_rate=sample_rate, fig_save_path=fig_save_path / 'fig_3')
+# pf.break_down_irf(models['synap'], weights, masks, cell_ids, window, fig_save_path=fig_save_path/'fig_3')
+# pf.weights_vs_connectome(weights, masks, fig_save_path=fig_save_path/'fig_3')
 
-# figure 4
-# pf.compare_model_vs_connectome_eig(models, masks, data_train['emissions'], cell_ids, num_vect_plot=5, neuron_freq=0.1)
+# Figure 4
+# pf.plot_missing_neuron(models, data_test, posterior_dicts['synap'], post_save_path=(saved_run_folder / model_folders['synap'] / 'posterior_test.pkl'),
+#                        sample_rate=sample_rate, fig_save_path=fig_save_path/'fig_4')
+
+
 
 

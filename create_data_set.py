@@ -14,6 +14,8 @@ filter_size = run_params['filter_size']
 correct_photobleach = run_params['correct_photobleach']
 interpolate_nans = run_params['interpolate_nans']
 upsample_factor = run_params['upsample_factor']
+randomize_cell_ids = run_params['randomize_cell_ids']
+rng = np.random.default_rng(run_params['random_seed'])
 sample_rate = 2 * upsample_factor
 
 preprocess_filename = 'funcon_preprocessed_data.pkl'
@@ -43,6 +45,21 @@ for i in sorted(data_path.rglob('francesco_green.npy'))[::-1]:
     this_emissions, this_inputs = lu.preprocess_data(this_emissions, this_inputs, start_index=start_index,
                                                      correct_photobleach=correct_photobleach,
                                                      filter_size=filter_size, upsample_factor=upsample_factor)
+
+    if randomize_cell_ids:
+        measured_neurons = np.mean(np.isnan(this_emissions), axis=0) <= 0.5
+
+        # scramble IDs, but preserve scramble between measured and unmeasured neurons
+        measured_neuron_inds = np.where(measured_neurons)[0]
+        measured_neuron_inds_scrambled = rng.permutation(measured_neuron_inds)
+        unmeasured_neuron_inds = np.where(~measured_neurons)[0]
+        unmeasured_neuron_inds_scrambled = rng.permutation(unmeasured_neuron_inds)
+
+        new_cell_ids = np.array(this_cell_ids.copy())
+        this_cell_ids_array = np.array(this_cell_ids.copy())
+        new_cell_ids[measured_neuron_inds] = this_cell_ids_array[measured_neuron_inds_scrambled]
+        new_cell_ids[unmeasured_neuron_inds] = this_cell_ids_array[unmeasured_neuron_inds_scrambled]
+        this_cell_ids = list(new_cell_ids)
 
     if interpolate_nans:
         full_nan_loc = np.all(np.isnan(this_emissions), axis=0)
