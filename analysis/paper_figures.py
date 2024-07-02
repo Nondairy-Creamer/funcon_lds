@@ -7,6 +7,7 @@ import matplotlib as mpl
 import analysis_utilities as au
 import scipy
 from copy import deepcopy
+import csv
 
 
 # colormap = mpl.colormaps['RdBu_r']
@@ -331,6 +332,7 @@ def weights_vs_connectome(weights, masks, fig_save_path=None):
 
     plt.figure()
     plt.scatter(np.log(model_synap_weights_gap), np.log(synapse_counts_gap), color=plot_color['synap'])
+    # plt.hexbin(np.log(model_synap_weights_gap), np.log(synapse_counts_gap), gridsize=10)
     plt.title('correlation = ' + str(model_synap_gap_corr))
     plt.xlabel('log model weights')
     plt.ylabel('log gap junction counts')
@@ -340,6 +342,7 @@ def weights_vs_connectome(weights, masks, fig_save_path=None):
 
     plt.figure()
     plt.scatter(np.log(model_synap_weights_chem), np.log(synapse_counts_chem), color=plot_color['synap'])
+    # plt.hexbin(np.log(model_synap_weights_chem), np.log(synapse_counts_chem), gridsize=10)
     plt.title('correlation = ' + str(model_synap_chem_corr))
     plt.xlabel('log model weights')
     plt.ylabel('log chemical synapse counts')
@@ -1188,23 +1191,26 @@ def plot_silencing_results(model, cell_ids, weights, fig_save_path=None, silence
 
 
 def break_down_irf(model, weights, masks, cell_ids, window, fig_save_path=None):
+    # format is [responding neuron, stimulated neuron]
     chosen_pairs = np.array([['AVAL', 'AVEL'],
                              ['AVDL', 'AIML']])
                              #['RMDDR', 'RMDDL']])
+    # size multiplier to make it look better in illustrator
+    i_mult = 0.5
+    fontsize = 12 * i_mult
     n_best_connections = 5
     num_neurons = model.dynamics_dim
     sample_rate = model.sample_rate
+    num_t = int(window[1] * sample_rate)
 
-    connection_map = masks['synap']
-    connection_map[np.eye(connection_map.shape[0], dtype=bool)] = False
-    broken_down_irfs = []
-    top_cell_ids = []
-    data = []
-    connectome_sub = []
-    model_weights_sub = []
-    width_mult = [[50, 0.25],
-                  [100, 0.5],
-                  [50, 0.25]]
+    # here we are going to go through every incoming synapse to the responding neuron and individually
+    connectome = masks['synap']
+    connectome[np.eye(connectome.shape[0], dtype=bool)] = False  # don't consider self terms
+    broken_down_irfs = []  # list of the IRFs when each synapse is silenced
+    top_cell_ids = []  # list of the synapses that most contributed
+    data = []  # list of the actual measured perturbation response
+    width_mult = [[50 * i_mult, 0.25 * i_mult],
+                  [100 * i_mult, 1 * i_mult]]
     counter = -1
 
     # find the postsynaptic sites that contribute most in the responding neuron when the stimulated neuron is activated
@@ -1212,12 +1218,10 @@ def break_down_irf(model, weights, masks, cell_ids, window, fig_save_path=None):
         counter += 1
         resp_ind = cell_ids['all'].index(resp)
         stim_ind = cell_ids['all'].index(stim)
-
         data.append(weights['data']['test']['irfs'][:, resp_ind, stim_ind])
 
-        num_t = int(window[1] * sample_rate)
-        connections_in = connection_map[resp_ind, :]
-        connections_inds = connections_in.nonzero()[0]
+        connections_in = connectome[resp_ind, :]  # boolean vector of connections
+        connections_inds = connections_in.nonzero()[0]  # indices of presynaptic cells
 
         # find the n best connections
         # loop through every neuron find the post synapic site in the responding neuron that contributes most when
@@ -1240,44 +1244,54 @@ def break_down_irf(model, weights, masks, cell_ids, window, fig_save_path=None):
             inputs[0, stim_ind] = 1
             predicted_irf = new_model.sample(num_time=num_t, inputs=inputs, add_noise=False)['emissions'][:, resp_ind]
 
-            response[ci] = np.sum(np.abs(predicted_irf))
+            response[ci] = np.sum(np.abs(predicted_irf))  # get the direct STAM for this connection
 
         # get the largest responses
         # keep adding in more synapses and calculating the IRF
         num_t_all = int(np.sum(window) * sample_rate)
 
-        broken_down_irf_this = np.zeros((num_t_all, n_best_connections + 1))
-        sorted_connections = connections_inds[np.argsort(response)[::-1]]
-        top_resp = list(sorted_connections[:n_best_connections])
-        top_cell_ids.append([cell_ids['all'][i] for i in top_resp])
-        top_cell_ids[-1].append('all inputs')
-        top_resp.append(-1)
-        best_connections = [resp_ind]
-        for tri, tr in enumerate(top_resp):
+        # IRF components is each IRF with a subset of the synapses active. +1 to include the IRF with all synapses
+        irf_components = np.zeros((num_t_all, n_best_connections + 1))
+        sorted_connections = connections_inds[np.argsort(response)[::-1]]  # list of connections sorted by response size
+
+        # get the top best connections and their cell IDs
+        top_resp_inds = list(sorted_connections[:n_best_connections])
+        top_cell_ids.append([cell_ids['all'][i] for i in top_resp_inds])
+        enabled_synapses = [resp_ind]  # start with the responding cells self term enabled
+        inputs = np.zeros((num_t, num_neurons))
+        inputs[0, stim_ind] = 1
+        for tri, tr in enumerate(top_resp_inds):
             new_model = deepcopy(model)
 
-            if tri < len(top_resp) - 1:
-                best_connections.append(tr)
-                # silence all neurons not in best_connections
-                all_resp_inds = np.arange(model.dynamics_dim)
-                all_resp_inds = np.delete(all_resp_inds, best_connections)
+            enabled_synapses.append(tr)  # add in the next synapse in the list
+            # get the indicies of every potential incoming connection
+            # silence all neurons not in best_connections by deleting them from the array
+            all_resp_inds = np.arange(model.dynamics_dim)
+            all_resp_inds = np.delete(all_resp_inds, enabled_synapses)
+            new_model.dynamics_weights[resp_ind, all_resp_inds] = 0
 
-                new_model.dynamics_weights[resp_ind, all_resp_inds] = 0
+            irf_components[-num_t:, tri] = new_model.sample(num_time=num_t, inputs=inputs, add_noise=False)['emissions'][:, resp_ind]
 
-            inputs = np.zeros((num_t, num_neurons))
-            inputs[0, stim_ind] = 1
-            broken_down_irf_this[-num_t:, tri] = new_model.sample(num_time=num_t, inputs=inputs, add_noise=False)['emissions'][:, resp_ind]
+        # add in the normal model response
+        irf_components[-num_t:, -1] = model.sample(num_time=num_t, inputs=inputs, add_noise=False)['emissions'][:, resp_ind]
+        top_cell_ids[-1].append('all synapses')
 
-        broken_down_irfs.append(broken_down_irf_this)
+        broken_down_irfs.append(irf_components)
 
-        # get the subnetworks defined by the neurons
-        sub_net_inds = np.array(top_resp[1:-1] + [stim_ind] + [resp_ind])
-        sub_net_ids = top_cell_ids[-1][1:-1] + [stim] + [resp]
-        weights_sub = np.abs(model.dynamics_weights[sub_net_inds, :][:, sub_net_inds])
+        # now we want to plot the graph of the network
+        # get the outgoing connections from the stimulating cell
+        subnet_inds = np.array(top_resp_inds[1:-1] + [0] + [stim_ind] + [resp_ind])
+        subnet_ids = top_cell_ids[-1][1:-1] + ['other'] + [stim] + [resp]
+        weights_sub = np.abs(model.dynamics_weights[subnet_inds, :][:, subnet_inds])
         weights_sub[np.eye(weights_sub.shape[0], dtype=bool)] = 0
+        # weights_sub = np.concatenate((weights_sub, np.zeros((weights_sub.shape[0], 1))), axis=1)
+        # weights_sub = np.concatenate((weights_sub, np.zeros((1, weights_sub.shape[1]))), axis=0)
+
         connectome_sub = weights['anatomy']['chem_conn'] + weights['anatomy']['gap_conn']
-        connectome_sub = connectome_sub[sub_net_inds, :][:, sub_net_inds]
-        connectome_sub[np.eye(weights_sub.shape[0], dtype=bool)] = 0
+        connectome_sub = connectome_sub[subnet_inds, :][:, subnet_inds]
+        connectome_sub[np.eye(connectome_sub.shape[0], dtype=bool)] = 0
+        # connectome_sub = np.concatenate((connectome_sub, np.zeros((connectome_sub.shape[0], 1))), axis=1)
+        # connectome_sub = np.concatenate((connectome_sub, np.zeros((1, connectome_sub.shape[1]))), axis=0)
 
         # mask out irrelevant connections
         mask = np.zeros_like(connectome_sub)
@@ -1290,16 +1304,33 @@ def break_down_irf(model, weights, masks, cell_ids, window, fig_save_path=None):
         name = ['model', 'connectome']
 
         pos_dict = []
-        pos_dict.append((0, -2))
-        pos_dict.append((0, -1))
-        pos_dict.append((0, 1))
-        pos_dict.append((0, 2))
-        pos_dict.append((-2, 0))
-        pos_dict.append((2, 0))
+        pos_dict.append((0, -2 * i_mult))
+        pos_dict.append((0, -1 * i_mult))
+        pos_dict.append((0, 1 * i_mult))
+        pos_dict.append((0, 2 * i_mult))
+        pos_dict.append((0, 3 * i_mult))
+        pos_dict.append((-2 * i_mult, 0))
+        pos_dict.append((2 * i_mult, 0))
+        angles = [-np.arctan(2/2), -np.arctan(1/2), np.arctan(1/2), np.arctan(2/2), np.arctan(3/2)]
 
-        circle_size = 0.3
-        line_width = 1
+        circle_size = 0.35 * i_mult
+        line_width = 2 * i_mult
         head_width_mult = 1 / 20
+
+        # save the connection data so we can put it into graph making software
+        save_path = fig_save_path / ('resp_' + resp + '_stim_' + stim + '_model_weights.csv')
+        with open(save_path, 'w', newline='') as myfile:
+            wr = csv.writer(myfile, quoting=csv.QUOTE_ALL)
+            wr.writerow([''] + subnet_ids)
+            for i in range(connectome_sub.shape[0]):
+                wr.writerow([subnet_ids[i]] + list(weights_sub[i, :]))
+
+        save_path = fig_save_path / ('resp_' + resp + '_stim_' + stim + '_connectome_weights.csv')
+        with open(save_path, 'w', newline='') as myfile:
+            wr = csv.writer(myfile, quoting=csv.QUOTE_ALL)
+            wr.writerow([''] + subnet_ids)
+            for i in range(connectome_sub.shape[0]):
+                wr.writerow([subnet_ids[i]] + list(connectome_sub[i, :]))
 
         for ni, n in enumerate([weights_sub, connectome_sub]):
             fig, ax = plt.subplots()
@@ -1307,17 +1338,13 @@ def break_down_irf(model, weights, masks, cell_ids, window, fig_save_path=None):
             x_circ = np.cos(np.linspace(0, 2 * np.pi, 100))
             y_circ = np.sin(np.linspace(0, 2 * np.pi, 100))
 
-            for pdi, pd in enumerate(pos_dict):
-                plt.text(pd[0]-circle_size, pd[1]-0.075, sub_net_ids[pdi])
-                plt.plot(circle_size * x_circ + pd[0], circle_size * y_circ + pd[1], linewidth=line_width, color='k')
-
             # all the outgoing connections from the stimulated neuron
-            for stim_out in range(4):
+            for stim_out in range(len(pos_dict)-2):
                 thickness = n[stim_out, -2] * width_mult[counter][ni]
-                x = pos_dict[-2][0] + circle_size
-                y = pos_dict[-2][1]
-                dy = pos_dict[stim_out][1] - y + ((stim_out < 2)*2-1) * thickness*0.05
-                dx = pos_dict[stim_out][0] - x - circle_size - line_width*0.01 - thickness*0.05
+                x = pos_dict[-2][0] + circle_size * np.cos(angles[stim_out])
+                y = pos_dict[-2][1] + circle_size * np.sin(angles[stim_out])
+                dy = pos_dict[stim_out][1] - y
+                dx = pos_dict[stim_out][0] - x - (circle_size + thickness * 0.03)
 
                 plt.arrow(x, y, dx, dy, head_width=thickness * head_width_mult, linewidth=thickness, color='k', length_includes_head=True)
 
@@ -1325,21 +1352,29 @@ def break_down_irf(model, weights, masks, cell_ids, window, fig_save_path=None):
             thickness = n[-1, -2] * width_mult[counter][ni]
             x = pos_dict[-2][0] + circle_size
             y = pos_dict[-2][1]
-            dx = pos_dict[-1][0] - x - circle_size - line_width*0.01 - thickness*0.05
+            dx = pos_dict[-1][0] - x - (circle_size + thickness * 0.03)
             dy = pos_dict[-1][1] - y
             plt.arrow(x, y, dx, dy, head_width=thickness * head_width_mult, linewidth=thickness, color='k', length_includes_head=True)
 
             # all the incoming connections for the responding neuron
-            for stim_out in range(4):
+            for stim_out in range(len(pos_dict)-2):
                 thickness = n[-1, stim_out] * width_mult[counter][ni]
                 x = pos_dict[stim_out][0] + circle_size
                 y = pos_dict[stim_out][1]
-                dx = pos_dict[-1][0] - x - circle_size - line_width*0.01 - thickness*0.05
-                dy = pos_dict[-1][1] - y - ((stim_out < 2)*2-1) * thickness*0.05
+                dx = pos_dict[-1][0] - x - (circle_size + thickness * 0.03) * np.cos(angles[::-1][stim_out])
+                dy = pos_dict[-1][1] - y - (circle_size + thickness * 0.03) * np.sin(angles[::-1][stim_out])
                 plt.arrow(x, y, dx, dy, head_width=thickness * head_width_mult, linewidth=thickness, color='k', length_includes_head=True)
-            plt.xlim((-3, 3))
-            plt.ylim(-3, 3)
+            plt.xlim((-2, 2))
+            plt.ylim(-2, 2)
+
+            for pdi, pd in enumerate(pos_dict):
+                plt.text(pd[0] - len(subnet_ids[pdi]) / 2 * fontsize * 0.009, pd[1] - 0.04, subnet_ids[pdi], fontsize=fontsize)
+                circ = plt.Circle((pd[0], pd[1]), circle_size, color=[0.7, 0.7, 0.7])
+                ax.add_patch(circ)
+                plt.plot(circle_size * x_circ + pd[0], circle_size * y_circ + pd[1], linewidth=line_width, color='k')
+
             ax.set_aspect('equal', 'box')
+            ax.axis('off')
 
             plt.savefig(fig_save_path / ('network_graph_' + stim + '_to_' + resp + '_' + name[ni] + '.pdf'))
 
@@ -2268,7 +2303,9 @@ def plot_sampled_model(data, posterior_dict, cell_ids, sample_rate=2, num_neuron
     inputs_truncated = [i[:, neuron_inds_chosen] for i in inputs]
     emissions_truncated = [e[:, neuron_inds_chosen] for e in emissions]
     # data_ind_chosen, time_window = au.get_example_data_set(inputs_truncated, emissions=emissions_truncated, window_size=window_size)
-    data_ind_chosen, time_window = au.get_example_data_set(inputs, emissions=emissions_truncated, window_size=window_size)
+    # data_ind_chosen, time_window = au.get_example_data_set(inputs, emissions=emissions_truncated, window_size=window_size)
+    specific_neuron_ind = cell_ids_chosen.index('RMDDL')
+    data_ind_chosen, time_window = au.get_example_data_set_simple(inputs_truncated, emissions_truncated, specific_neuron_ind, cell_ids, sample_rate)
 
     emissions_chosen = emissions[data_ind_chosen][time_window[0]:time_window[1], neuron_inds_chosen]
     inputs_chosen = inputs[data_ind_chosen][time_window[0]:time_window[1], neuron_inds_chosen]
@@ -2346,7 +2383,7 @@ def plot_sampled_model(data, posterior_dict, cell_ids, sample_rate=2, num_neuron
     # for stim_time, stim_name in zip(stim_events, stim_ids):
     #     plt.axvline(stim_time, color=[0.6, 0.6, 0.6], linestyle='--')
     #     plt.text(stim_time, 1.5, stim_name, rotation=90)
-    plt.plot(model_sampled_chosen, alpha=0.5)
+    # plt.plot(model_sampled_chosen, alpha=0.5)
     # plt.ylim([data_offset[-1] - 1, 1])
     # plt.yticks(data_offset, cell_ids_chosen)
     # plt.xticks(plot_x, (plot_x / sample_rate).astype(int))

@@ -365,22 +365,24 @@ pairs = np.array([['RMDDR', 'RMDDL'],
                   ])
 
 # Figure 1
-# pf.plot_sampled_model(data_test, posterior_dicts['synap'], sample_rate=sample_rate, cell_ids=cell_ids,
+# pf.plot_sampled_model(data_train, posterior_dicts['synap'], sample_rate=sample_rate, cell_ids=cell_ids,
 #                       num_neurons=10, fig_save_path=fig_save_path/'fig_1')
 #
 # pf.plot_specific_dirfs(weights_masked, masks, cell_ids, pairs, window, fig_save_path=fig_save_path/'fig_1')
 
-# pf.weight_prediction_sweep(weights_masked, masks, 'irms', fig_save_path=fig_save_path/'fig_1')
-pf.weight_prediction(weights_masked, masks, 'irms', fig_save_path=fig_save_path/'fig_1')
+# pf.weight_prediction_sweep(weights_masked, masks, weight_name='irms', fig_save_path=fig_save_path/'fig_1')
+# pf.weight_prediction_sweep(weights_masked, masks, weight_name='corr', fig_save_path=fig_save_path/'fig_1')
+# pf.weight_prediction(weights_masked, masks, weight_name='irms', fig_save_path=fig_save_path/'fig_1')
+# pf.weight_prediction(weights_masked, masks, weight_name='corr', fig_save_path=fig_save_path/'fig_1')
 
 # Figure 2
-# pf.plot_irms(weights, cell_ids, num_neurons=20, fig_save_path=fig_save_path/'fig_2')
-# pf.compare_model_irms(weights, masks, 'irms', fig_save_path=fig_save_path/'fig_2')
-# pf.compare_model_irms(weights, masks, 'corr', fig_save_path=fig_save_path/'fig_2')
+pf.break_down_irf(models['synap'], weights, masks, cell_ids, window, fig_save_path=fig_save_path/'fig_2')
+# pf.weights_vs_connectome(weights, masks, fig_save_path=fig_save_path/'fig_2')
 
 # Figure 3
-# pf.break_down_irf(models['synap'], weights, masks, cell_ids, window, fig_save_path=fig_save_path/'fig_3')
-# pf.weights_vs_connectome(weights, masks, fig_save_path=fig_save_path/'fig_3')
+# pf.plot_irms(weights, cell_ids, num_neurons=20, fig_save_path=fig_save_path/'fig_3')
+# pf.compare_model_irms(weights, masks, 'irms', fig_save_path=fig_save_path/'fig_3')
+# pf.compare_model_irms(weights, masks, 'corr', fig_save_path=fig_save_path/'fig_3')
 
 # Figure 4
 # pf.plot_missing_neuron(models, data_test, posterior_dicts['synap'], post_save_path=(saved_run_folder / model_folders['synap'] / 'posterior_test.pkl'),

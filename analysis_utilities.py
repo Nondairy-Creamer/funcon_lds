@@ -184,6 +184,37 @@ def get_sister_cell(chosen_cell, cell_ids):
     return sister_cell
 
 
+def get_example_data_set_simple(inputs, emissions, neuron_ind, cell_ids, sample_rate):
+    from matplotlib import pyplot as plt
+    # consider 1, (1717) <- good
+    # 3 (2457, 2519)
+    # 4 (2120)
+    # 5 (2120)
+
+    chosen_ind = 1
+    stim_ind = 1717
+    num_time = 480 * sample_rate
+    chosen_window = (int(stim_ind - num_time / 2), int(stim_ind + num_time / 2))
+
+    for ii, (i, e) in enumerate(zip(inputs, emissions)):
+        stim_locations = np.where(i[:, neuron_ind])[0]
+
+        for sl in stim_locations:
+            range_to_plot = (int(sl - num_time / 2), int(sl + num_time / 2))
+            snip = e[range_to_plot[0]:range_to_plot[1], :]
+            if np.any(np.isnan(snip)):
+                continue
+
+            if snip.shape[0] < num_time / 2:
+                continue
+            #
+            # plt.figure()
+            # plt.imshow(snip.T)
+            # plt.show()
+
+    return chosen_ind, chosen_window
+
+
 def get_example_data_set(inputs, mask=None, emissions=None, chosen_neuron_ind=None, window_size=1000):
     max_data_set = 0
     max_ind = 0
@@ -191,9 +222,6 @@ def get_example_data_set(inputs, mask=None, emissions=None, chosen_neuron_ind=No
     max_window = 0
 
     for ii, i in enumerate(inputs):
-        if ii in [28]:
-            continue
-
         # some data sets might be smaller than window size
         this_window_size = np.min((window_size, i.shape[0]))
 
@@ -223,7 +251,7 @@ def get_example_data_set(inputs, mask=None, emissions=None, chosen_neuron_ind=No
 
         if (ii == 0) or (this_max_val > max_val and has_emissions):
             max_val = this_max_val
-            max_ind = this_max_ind + 240
+            max_ind = this_max_ind
             max_data_set = ii
             max_window = this_window_size
             print(ii)
