@@ -99,6 +99,10 @@ class Lgssm:
             anat = au.load_anatomical_data(self.cell_ids)
             combined_mask = (anat['chem_conn'] + anat['gap_conn'] + np.eye(self.dynamics_dim)) > 0
             self.param_props['mask']['dynamics_weights'] = np.tile(combined_mask, (1, self.dynamics_lags))
+        elif self.param_props['shape']['dynamics_weights'] == 'not_synaptic':
+            anat = au.load_anatomical_data(self.cell_ids)
+            combined_mask = ~(anat['chem_conn'] > 0) & ~(anat['gap_conn'] > 0) | np.eye(self.dynamics_dim, dtype=bool)
+            self.param_props['mask']['dynamics_weights'] = np.tile(combined_mask, (1, self.dynamics_lags))
         elif self.param_props['shape']['dynamics_weights'] == 'full':
             self.param_props['mask']['dynamics_weights'] = np.ones((self.dynamics_dim, self.dynamics_dim_full)) == 1
         else:
