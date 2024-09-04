@@ -7,6 +7,15 @@ import lgssm_utilities as ssmu
 import metrics as met
 from matplotlib import pyplot as plt
 
+plot_color = {'data': np.array([217, 95, 2]) / 255,
+              'synap': np.array([27, 158, 119]) / 255,
+              'unconstrained': np.array([117, 112, 179]) / 255,
+              'synap_randA': np.array([231, 41, 138]) / 255,
+              # 'synap_randC': np.array([102, 166, 30]) / 255,
+              'synap_randC': np.array([128, 128, 128]) / 255,
+              'anatomy': np.array([64, 64, 64]) / 255,
+              }
+
 likelihood_divisor = 1
 run_params = lu.get_run_params(param_name='../analysis_params/paper_figures.yml')
 model_repeat_paths = run_params['model_repeats']
@@ -149,7 +158,7 @@ plt.figure()
 plt.subplot(1, 2, 1)
 for mi, m in enumerate(model_list):
     plot_x = np.ones(len(model_score[m])) * mi
-    plt.scatter(plot_x, model_score[m] / train_test_corr_irms)
+    plt.scatter(plot_x, model_score[m] / train_test_corr_irms, color=plot_color[m])
 plt.xlim((-0.5, 2.5))
 plt.ylim((0, 1))
 plt.ylabel('relative correlation')
@@ -158,23 +167,23 @@ plt.xticks(np.arange(len(model_list)), model_list, rotation=45)
 ax = plt.subplot(1, 2, 2)
 for mi, m in enumerate(model_list):
     plot_x = np.ones(len(model_ll[m])) * mi
-    plt.scatter(plot_x, model_ll[m])
+    plt.scatter(plot_x, model_ll[m], color=plot_color[m] )
 plt.xlim((-0.5, 2.5))
 plt.ylabel('test log-likelihood')
 plt.xticks(np.arange(len(model_list)), model_list, rotation=45)
 plt.tight_layout()
-plt.savefig(fig_save_path / 'fig_2' / 'stam_ll_rand_init.pdf')
+plt.savefig(fig_save_path / 'fig_s2' / 'stam_ll_rand_init.pdf')
 
 plt.figure()
 for mi, m in enumerate(model_list):
     plot_x = np.ones(len(model_corr_score[m])) * mi
-    plt.scatter(plot_x, model_corr_score[m] / train_test_corr_corr)
+    plt.scatter(plot_x, model_corr_score[m] / train_test_corr_corr, color=plot_color[m])
 plt.xlim((-0.5, 2.5))
 plt.ylim((0, 1))
 plt.ylabel('relative correlation')
 plt.xticks(np.arange(len(model_list)), model_list, rotation=45)
 plt.tight_layout()
-plt.savefig(fig_save_path / 'fig_2' / 'corr_rand_init.pdf')
+plt.savefig(fig_save_path / 'fig_s2' / 'corr_rand_init.pdf')
 
 plt.show()
 a=1

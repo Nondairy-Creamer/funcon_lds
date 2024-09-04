@@ -81,7 +81,7 @@ def load_anatomical_data(cell_ids=None):
     peptide_connectome = pickle.load(peptide_file)
     peptide_file.close()
 
-    syn_size_connectome = load_synapse_size(cell_ids.copy())
+    # syn_size_connectome = load_synapse_size(cell_ids.copy())
 
     ids_path = Path('anatomical_data/cell_ids.pkl')
     if not ids_path.exists():
@@ -103,8 +103,7 @@ def load_anatomical_data(cell_ids=None):
 
     anatomy_dict = {'chem_conn': chemical_synapse_connectome,
                     'gap_conn': gap_junction_connectome,
-                    'pep_conn': peptide_connectome,
-                    'chem_size': syn_size_connectome}
+                    'pep_conn': peptide_connectome}
 
     return anatomy_dict
 

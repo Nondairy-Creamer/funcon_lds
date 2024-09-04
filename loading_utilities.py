@@ -40,7 +40,7 @@ def preprocess_data(emissions, inputs, start_index=0, correct_photobleach=False,
         emissions_filtered = np.zeros((emissions.shape[0] - filter_size + 1, emissions.shape[1]))
 
         for c in range(emissions.shape[1]):
-            emissions_filtered[:, c] = au.nan_convolve(emissions[:, c], filter_shape)
+            emissions_filtered[:, c] = au.nan_convolve(emissions[:, c].copy(), filter_shape)
     else:
         emissions_filtered = emissions.copy()
 
@@ -65,7 +65,7 @@ def preprocess_data(emissions, inputs, start_index=0, correct_photobleach=False,
                 warnings.warn('Photobleach correction problems found in neurons ' + str(bad_fits_1xp) + ' setting to nan')
                 emissions_filtered_corrected[:, bad_fits_1xp] = np.nan
 
-            # divide by the mean and subtract 1. Will throw warnings on the all nan data, ignore htem
+            # divide by the mean and subtract 1. Will throw warnings on the all nan data, ignore them
             emissions_time_mean = np.nanmean(emissions_filtered_corrected, axis=0)
             emissions_filtered_corrected = emissions_filtered_corrected / emissions_time_mean - 1
 

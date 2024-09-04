@@ -94,7 +94,7 @@ data_irfs_train, data_irfs_sem_train, data_irfs_train_all = \
     ssmu.get_impulse_response_functions(data_train['emissions'], data_train['inputs'],
                                         sample_rate=sample_rate, window=window, sub_pre_stim=sub_pre_stim)
 nan_loc = np.all(np.isnan(data_irfs_train), axis=0)
-data_irms_train = np.nansum(data_irfs_train[int(window[0]*sample_rate):], axis=0) * sample_rate
+data_irms_train = np.nansum(data_irfs_train[int(window[0]*sample_rate):], axis=0) / sample_rate
 data_irms_train[nan_loc] = np.nan
 
 data_irfs_test, data_irfs_sem_test, data_irfs_test_all = \
@@ -323,10 +323,10 @@ cell_ids['chosen'] = top_cells
 # pf.plot_irms(weights, cell_ids, fig_save_path=fig_save_path)
 # pf.plot_irms(weights, cell_ids, use_chosen_ids=False, fig_save_path=fig_save_path)
 # pf.plot_irms(weights, cell_ids, use_chosen_ids=True, fig_save_path=fig_save_path)
-
+# #
 # pf.plot_irfs(weights_masked, masks, cell_ids, window, num_plot=20, fig_save_path=fig_save_path)
 # pf.plot_irfs_train_test(weights_masked, masks, cell_ids, window, num_plot=5, fig_save_path=fig_save_path)
-
+#
 # pf.weight_prediction(weights_masked, masks, 'irms', fig_save_path=fig_save_path)
 # pf.weight_prediction_sweep(weights_masked, masks, 'irms', fig_save_path=fig_save_path)
 # pf.weight_prediction(weights_masked, 'corr', fig_save_path=fig_save_path)
@@ -360,24 +360,27 @@ cell_ids['chosen'] = top_cells
 # pf.plot_model_eig(models, fig_save_path=fig_save_path/'fig_4')
 
 ### Final verson of the figures
+# format is responding, stimulated
 pairs = np.array([['RMDDR', 'RMDDL'],
                   ['AVEL', 'SAADL'],
+                  ['AVDR', 'AVJR']
                   ])
 
 # Figure 1
 # pf.plot_sampled_model(data_train, posterior_dicts['synap'], sample_rate=sample_rate, cell_ids=cell_ids,
 #                       num_neurons=10, fig_save_path=fig_save_path/'fig_1')
 #
-# pf.plot_specific_dirfs(weights_masked, masks, cell_ids, pairs, window, fig_save_path=fig_save_path/'fig_1')
-
+pf.plot_specific_dirfs(weights_masked, masks, cell_ids, pairs, window, fig_save_path=fig_save_path/'fig_1')
+#
 # pf.weight_prediction_sweep(weights_masked, masks, weight_name='irms', fig_save_path=fig_save_path/'fig_1')
 # pf.weight_prediction_sweep(weights_masked, masks, weight_name='corr', fig_save_path=fig_save_path/'fig_1')
 # pf.weight_prediction(weights_masked, masks, weight_name='irms', fig_save_path=fig_save_path/'fig_1')
 # pf.weight_prediction(weights_masked, masks, weight_name='corr', fig_save_path=fig_save_path/'fig_1')
 
 # Figure 2
-pf.break_down_irf(models['synap'], weights, masks, cell_ids, window, fig_save_path=fig_save_path/'fig_2')
 # pf.weights_vs_connectome(weights, masks, fig_save_path=fig_save_path/'fig_2')
+# pf.direct_vs_indirect(weights_masked, masks, fig_save_path=fig_save_path/'fig_2', rng=rng)
+# pf.break_down_irf(models['synap'], weights, masks, cell_ids, window, fig_save_path=fig_save_path/'fig_2')
 
 # Figure 3
 # pf.plot_irms(weights, cell_ids, num_neurons=20, fig_save_path=fig_save_path/'fig_3')
@@ -389,5 +392,10 @@ pf.break_down_irf(models['synap'], weights, masks, cell_ids, window, fig_save_pa
 #                        sample_rate=sample_rate, fig_save_path=fig_save_path/'fig_4')
 
 
+# supplemental
+# fig_s1
+# pf.weight_prediction_sweep(weights_masked, masks, weight_name='corr', fig_save_path=fig_save_path/'fig_s1')
+# pf.weight_prediction(weights_masked, masks, weight_name='corr', fig_save_path=fig_save_path/'fig_s1')
 
-
+# fig_s3
+# pf.plot_irms(weights, cell_ids, num_neurons=None, fig_save_path=fig_save_path/'fig_s3')

@@ -294,7 +294,7 @@ def weights_vs_connectome(weights, masks, fig_save_path=None):
     # pull out the weights we will compare to the synapse counts
     gap_counts = weights['anatomy']['gap_conn']
     chem_counts = weights['anatomy']['chem_conn']
-    chem_size = weights['anatomy']['chem_size']
+    # chem_size = weights['anatomy']['chem_size']
     gap_mask = masks['gap']
     chem_mask = masks['chem']
     diag_bool = np.eye(gap_mask.shape[0], dtype=bool)
@@ -312,7 +312,7 @@ def weights_vs_connectome(weights, masks, fig_save_path=None):
     model_synap_weights_gap = model_synap_weights[gap_mask]
 
     synapse_counts_chem = chem_counts[chem_mask]
-    synapse_size_chem = chem_size[chem_mask]
+    # synapse_size_chem = chem_size[chem_mask]
     data_irms_chem = data_irms[chem_mask]
     model_uncon_weights_chem = model_uncon_weights[chem_mask]
     model_synap_weights_chem = model_synap_weights[chem_mask]
@@ -326,9 +326,9 @@ def weights_vs_connectome(weights, masks, fig_save_path=None):
     model_uncon_chem_corr, model_uncon_chem_corr_ci = met.nan_corr(synapse_counts_chem, model_uncon_weights_chem)
     model_synap_chem_corr, model_synap_chem_corr_ci = met.nan_corr(synapse_counts_chem, model_synap_weights_chem)
 
-    data_irms_chem_size_corr, data_irms_chem_size_corr_ci = met.nan_corr(synapse_size_chem, data_irms_chem)
-    model_uncon_chem_size_corr, model_uncon_chem_size_corr_ci = met.nan_corr(synapse_size_chem, model_uncon_weights_chem)
-    model_synap_chem_size_corr, model_synap_chem_size_corr_ci = met.nan_corr(synapse_size_chem, model_synap_weights_chem)
+    # data_irms_chem_size_corr, data_irms_chem_size_corr_ci = met.nan_corr(synapse_size_chem, data_irms_chem)
+    # model_uncon_chem_size_corr, model_uncon_chem_size_corr_ci = met.nan_corr(synapse_size_chem, model_uncon_weights_chem)
+    # model_synap_chem_size_corr, model_synap_chem_size_corr_ci = met.nan_corr(synapse_size_chem, model_synap_weights_chem)
 
     plt.figure()
     plt.scatter(np.log(model_synap_weights_gap), np.log(synapse_counts_gap), color=plot_color['synap'])
@@ -383,6 +383,8 @@ def weights_vs_connectome(weights, masks, fig_save_path=None):
         plt.savefig(fig_save_path / 'weights_vs_chem.pdf')
 
     plt.show()
+
+    return
 
 
 def uncon_vs_connectome(weights, masks, fig_save_path=None):
@@ -1198,65 +1200,51 @@ def break_down_irf(model, weights, masks, cell_ids, window, fig_save_path=None):
     # size multiplier to make it look better in illustrator
     i_mult = 0.5
     fontsize = 12 * i_mult
-    n_best_connections = 5
+    n_best_connections = 4
     num_neurons = model.dynamics_dim
     sample_rate = model.sample_rate
     num_t = int(window[1] * sample_rate)
 
     # here we are going to go through every incoming synapse to the responding neuron and individually
-    connectome = masks['synap']
-    connectome[np.eye(connectome.shape[0], dtype=bool)] = False  # don't consider self terms
+    model_weights = model.dynamics_weights.copy()
+
     broken_down_irfs = []  # list of the IRFs when each synapse is silenced
     top_cell_ids = []  # list of the synapses that most contributed
     data = []  # list of the actual measured perturbation response
     width_mult = [[50 * i_mult, 0.25 * i_mult],
                   [100 * i_mult, 1 * i_mult]]
-    counter = -1
 
     # find the postsynaptic sites that contribute most in the responding neuron when the stimulated neuron is activated
-    for resp, stim in zip(chosen_pairs[:, 0], chosen_pairs[:, 1]):
-        counter += 1
+    for pair_ind, (resp, stim) in enumerate(zip(chosen_pairs[:, 0], chosen_pairs[:, 1])):
         resp_ind = cell_ids['all'].index(resp)
         stim_ind = cell_ids['all'].index(stim)
         data.append(weights['data']['test']['irfs'][:, resp_ind, stim_ind])
 
-        connections_in = connectome[resp_ind, :]  # boolean vector of connections
-        connections_inds = connections_in.nonzero()[0]  # indices of presynaptic cells
-
-        # find the n best connections
-        # loop through every neuron find the post synapic site in the responding neuron that contributes most when
-        # the stimulating neuron is activated
-        response = np.zeros(connections_inds.shape[0])
-        for ci, c in enumerate(connections_inds):
-            if c == resp_ind:
-                continue
-
-            # zero out all incoming connections
-            all_resp_inds = np.arange(model.dynamics_dim)
-            # pull out the diagonal so we don't zero that
-            all_resp_inds = np.delete(all_resp_inds, (resp_ind, c))
-
-            # set all other connection to zero
-            new_model = deepcopy(model)
-            new_model.dynamics_weights[resp_ind, all_resp_inds] = 0
-
-            inputs = np.zeros((num_t, num_neurons))
-            inputs[0, stim_ind] = 1
-            predicted_irf = new_model.sample(num_time=num_t, inputs=inputs, add_noise=False)['emissions'][:, resp_ind]
-
-            response[ci] = np.sum(np.abs(predicted_irf))  # get the direct STAM for this connection
+        # get the magnitude of weights for paths of length 2 between stim and resp cells
+        model_weights_2_steps_all = model_weights[:, stim_ind] * model_weights[resp_ind, :]
+        connection_inds = model_weights_2_steps_all.nonzero()[0]
+        connection_inds = np.setdiff1d(connection_inds, (stim_ind, resp_ind))
+        model_weights_2_steps = model_weights_2_steps_all[connection_inds]
 
         # get the largest responses
         # keep adding in more synapses and calculating the IRF
         num_t_all = int(np.sum(window) * sample_rate)
 
-        # IRF components is each IRF with a subset of the synapses active. +1 to include the IRF with all synapses
-        irf_components = np.zeros((num_t_all, n_best_connections + 1))
-        sorted_connections = connections_inds[np.argsort(response)[::-1]]  # list of connections sorted by response size
+        # IRF components is each IRF with a subset of the synapses active
+        # save 1 extra spot for including the direct path
+        # save 1 extra spot for the response including all synapses
+        # +2 total
+
+        irf_components = np.zeros((num_t_all, n_best_connections + 2))
+        sorted_connections = connection_inds[np.argsort(model_weights_2_steps)[::-1]]  # list of connections sorted by response size
 
         # get the top best connections and their cell IDs
-        top_resp_inds = list(sorted_connections[:n_best_connections])
+        # make sure you always include the direct connection
+        top_resp_inds = [stim_ind] + list(sorted_connections[:n_best_connections])
         top_cell_ids.append([cell_ids['all'][i] for i in top_resp_inds])
+
+        # disable all incoming synapses onto the responding cell
+        # loop through and enable them one by one
         enabled_synapses = [resp_ind]  # start with the responding cells self term enabled
         inputs = np.zeros((num_t, num_neurons))
         inputs[0, stim_ind] = 1
@@ -1267,108 +1255,102 @@ def break_down_irf(model, weights, masks, cell_ids, window, fig_save_path=None):
             # get the indicies of every potential incoming connection
             # silence all neurons not in best_connections by deleting them from the array
             all_resp_inds = np.arange(model.dynamics_dim)
-            all_resp_inds = np.delete(all_resp_inds, enabled_synapses)
+            all_resp_inds = np.setdiff1d(all_resp_inds, enabled_synapses)
             new_model.dynamics_weights[resp_ind, all_resp_inds] = 0
 
             irf_components[-num_t:, tri] = new_model.sample(num_time=num_t, inputs=inputs, add_noise=False)['emissions'][:, resp_ind]
 
         # add in the normal model response
         irf_components[-num_t:, -1] = model.sample(num_time=num_t, inputs=inputs, add_noise=False)['emissions'][:, resp_ind]
-        top_cell_ids[-1].append('all synapses')
+        top_cell_ids[-1].append('all')
 
         broken_down_irfs.append(irf_components)
 
         # now we want to plot the graph of the network
         # get the outgoing connections from the stimulating cell
-        subnet_inds = np.array(top_resp_inds[1:-1] + [0] + [stim_ind] + [resp_ind])
-        subnet_ids = top_cell_ids[-1][1:-1] + ['other'] + [stim] + [resp]
-        weights_sub = np.abs(model.dynamics_weights[subnet_inds, :][:, subnet_inds])
-        weights_sub[np.eye(weights_sub.shape[0], dtype=bool)] = 0
-        # weights_sub = np.concatenate((weights_sub, np.zeros((weights_sub.shape[0], 1))), axis=1)
-        # weights_sub = np.concatenate((weights_sub, np.zeros((1, weights_sub.shape[1]))), axis=0)
+        top_resp_inds = np.array(top_resp_inds[1:])  # get rid of the direct connection
 
-        connectome_sub = weights['anatomy']['chem_conn'] + weights['anatomy']['gap_conn']
-        connectome_sub = connectome_sub[subnet_inds, :][:, subnet_inds]
-        connectome_sub[np.eye(connectome_sub.shape[0], dtype=bool)] = 0
-        # connectome_sub = np.concatenate((connectome_sub, np.zeros((connectome_sub.shape[0], 1))), axis=1)
-        # connectome_sub = np.concatenate((connectome_sub, np.zeros((1, connectome_sub.shape[1]))), axis=0)
+        # get the outgoing/incoming weights from the stimulated cell from the model
+        # extra index for the direct weight
+        model_weight_network = np.zeros((top_resp_inds.shape[0]+2, 2))
+        model_weight_network[0, 0] = model.dynamics_weights[resp_ind, stim_ind]
+        model_weight_network[1:-1, 0] = np.abs(model.dynamics_weights[top_resp_inds, stim_ind])
+        model_weight_network[1:-1, 1] = np.abs(model.dynamics_weights[resp_ind, top_resp_inds])
 
-        # mask out irrelevant connections
-        mask = np.zeros_like(connectome_sub)
-        mask[:, -2] = 1
-        mask[-1, :] = 1
+        # get the outgoing/incoming weights from the stimulated cell from the connectome
+        connectome = weights['anatomy']['chem_conn'] + weights['anatomy']['gap_conn']
+        conn_weights = np.zeros((top_resp_inds.shape[0] + 2, 2))
+        conn_weights[0, 0] = model.dynamics_weights[resp_ind, stim_ind]
+        conn_weights[1:-1, 0] = connectome[top_resp_inds, stim_ind]
+        conn_weights[1:-1, 1] = connectome[resp_ind, top_resp_inds]
 
-        weights_sub *= mask
-        connectome_sub *= mask
+        # get all other connections
+        all_other_conn = np.arange(model.dynamics_dim)
+        all_other_conn = all_other_conn[model_weights_2_steps_all.nonzero()[0]]
+        all_other_conn = np.setdiff1d(all_other_conn, top_resp_inds)
+        all_other_conn = np.setdiff1d(all_other_conn, (resp_ind, stim_ind))
+        model_weight_network[-1, 0] = np.sum(np.abs(model.dynamics_weights[all_other_conn, stim_ind]))
+        model_weight_network[-1, 1] = np.sum(np.abs(model.dynamics_weights[resp_ind, all_other_conn]))
+
+        conn_weights[-1, 0] = np.sum(connectome[all_other_conn, stim_ind])
+        conn_weights[-1, 1] = np.sum(connectome[resp_ind, all_other_conn])
 
         name = ['model', 'connectome']
 
+        # set the predetermined position of each of the nodes in the graph
+        node_names = top_cell_ids[-1][:-1] + ['other'] + [resp]
         pos_dict = []
-        pos_dict.append((0, -2 * i_mult))
-        pos_dict.append((0, -1 * i_mult))
-        pos_dict.append((0, 1 * i_mult))
-        pos_dict.append((0, 2 * i_mult))
-        pos_dict.append((0, 3 * i_mult))
         pos_dict.append((-2 * i_mult, 0))
+        pos_dict.append((0, 2 * i_mult))
+        pos_dict.append((0, 1 * i_mult))
+        pos_dict.append((0, -1 * i_mult))
+        pos_dict.append((0, -2 * i_mult))
+        pos_dict.append((0, -3 * i_mult))
         pos_dict.append((2 * i_mult, 0))
-        angles = [-np.arctan(2/2), -np.arctan(1/2), np.arctan(1/2), np.arctan(2/2), np.arctan(3/2)]
+        # angles = [-np.arctan(2/2), -np.arctan(1/2), np.arctan(1/2), np.arctan(2/2)]
+        angles = [np.arctan(2/2), np.arctan(1/2), -np.arctan(1/2), -np.arctan(2/2), -np.pi/2]
 
         circle_size = 0.35 * i_mult
         line_width = 2 * i_mult
-        head_width_mult = 1 / 20
+        head_width_mult = 1 / 120
 
-        # save the connection data so we can put it into graph making software
-        save_path = fig_save_path / ('resp_' + resp + '_stim_' + stim + '_model_weights.csv')
-        with open(save_path, 'w', newline='') as myfile:
-            wr = csv.writer(myfile, quoting=csv.QUOTE_ALL)
-            wr.writerow([''] + subnet_ids)
-            for i in range(connectome_sub.shape[0]):
-                wr.writerow([subnet_ids[i]] + list(weights_sub[i, :]))
-
-        save_path = fig_save_path / ('resp_' + resp + '_stim_' + stim + '_connectome_weights.csv')
-        with open(save_path, 'w', newline='') as myfile:
-            wr = csv.writer(myfile, quoting=csv.QUOTE_ALL)
-            wr.writerow([''] + subnet_ids)
-            for i in range(connectome_sub.shape[0]):
-                wr.writerow([subnet_ids[i]] + list(connectome_sub[i, :]))
-
-        for ni, n in enumerate([weights_sub, connectome_sub]):
+        for ni, n in enumerate([model_weight_network, conn_weights]):
             fig, ax = plt.subplots()
 
             x_circ = np.cos(np.linspace(0, 2 * np.pi, 100))
             y_circ = np.sin(np.linspace(0, 2 * np.pi, 100))
 
             # all the outgoing connections from the stimulated neuron
-            for stim_out in range(len(pos_dict)-2):
-                thickness = n[stim_out, -2] * width_mult[counter][ni]
-                x = pos_dict[-2][0] + circle_size * np.cos(angles[stim_out])
-                y = pos_dict[-2][1] + circle_size * np.sin(angles[stim_out])
-                dy = pos_dict[stim_out][1] - y
-                dx = pos_dict[stim_out][0] - x - (circle_size + thickness * 0.03)
+            for si in range(1, n.shape[0]):
+                thickness = n[si, 0] * width_mult[pair_ind][ni]
+                x = pos_dict[0][0] + circle_size * np.cos(angles[si-1])
+                y = pos_dict[0][1] + circle_size * np.sin(angles[si-1])
+                dy = pos_dict[si][1] - y
+                dx = pos_dict[si][0] - x - (circle_size + thickness * 0.03)
 
                 plt.arrow(x, y, dx, dy, head_width=thickness * head_width_mult, linewidth=thickness, color='k', length_includes_head=True)
 
             # plot the direct arrow
-            thickness = n[-1, -2] * width_mult[counter][ni]
-            x = pos_dict[-2][0] + circle_size
-            y = pos_dict[-2][1]
+            thickness = n[0, 0] * width_mult[pair_ind][ni]
+            x = pos_dict[0][0] + circle_size
+            y = pos_dict[0][1]
             dx = pos_dict[-1][0] - x - (circle_size + thickness * 0.03)
             dy = pos_dict[-1][1] - y
             plt.arrow(x, y, dx, dy, head_width=thickness * head_width_mult, linewidth=thickness, color='k', length_includes_head=True)
 
             # all the incoming connections for the responding neuron
-            for stim_out in range(len(pos_dict)-2):
-                thickness = n[-1, stim_out] * width_mult[counter][ni]
-                x = pos_dict[stim_out][0] + circle_size
-                y = pos_dict[stim_out][1]
-                dx = pos_dict[-1][0] - x - (circle_size + thickness * 0.03) * np.cos(angles[::-1][stim_out])
-                dy = pos_dict[-1][1] - y - (circle_size + thickness * 0.03) * np.sin(angles[::-1][stim_out])
+            for si in range(1, n.shape[0]):
+                thickness = n[si, 1] * width_mult[pair_ind][ni]
+                x = pos_dict[si][0] + circle_size
+                y = pos_dict[si][1]
+                dx = pos_dict[-1][0] - x - (circle_size + thickness * 0.03) * np.cos(-angles[si-1])
+                dy = pos_dict[-1][1] - y - (circle_size + thickness * 0.03) * np.sin(-angles[si-1])
                 plt.arrow(x, y, dx, dy, head_width=thickness * head_width_mult, linewidth=thickness, color='k', length_includes_head=True)
             plt.xlim((-2, 2))
             plt.ylim(-2, 2)
 
             for pdi, pd in enumerate(pos_dict):
-                plt.text(pd[0] - len(subnet_ids[pdi]) / 2 * fontsize * 0.009, pd[1] - 0.04, subnet_ids[pdi], fontsize=fontsize)
+                plt.text(pd[0] - len(node_names[pdi]) / 2 * fontsize * 0.009, pd[1] - 0.04, node_names[pdi], fontsize=fontsize)
                 circ = plt.Circle((pd[0], pd[1]), circle_size, color=[0.7, 0.7, 0.7])
                 ax.add_patch(circ)
                 plt.plot(circle_size * x_circ + pd[0], circle_size * y_circ + pd[1], linewidth=line_width, color='k')
@@ -1380,9 +1362,6 @@ def break_down_irf(model, weights, masks, cell_ids, window, fig_save_path=None):
 
         plt.show()
 
-
-        a=1
-
     plot_x = np.arange(-window[0] * sample_rate, window[1] * sample_rate)
     diplay_x = np.array([-15, 0, 15, 30])
     for ii, i in enumerate(broken_down_irfs):
@@ -1393,7 +1372,7 @@ def break_down_irf(model, weights, masks, cell_ids, window, fig_save_path=None):
         plt.xticks(diplay_x * sample_rate, diplay_x)
         plt.axvline(0, color='k', linestyle='--')
         for label_ind in range(i.shape[1]):
-            plt.text(plot_x[-1], i[-1, label_ind], top_cell_ids[ii][label_ind])
+            plt.text(plot_x[-1], i[-1, label_ind], '+' + top_cell_ids[ii][label_ind])
         plt.xlabel('time (s)')
         plt.ylabel('neural activity')
         plt.title(chosen_pairs[ii][1] + ' -> ' + chosen_pairs[ii][0])
@@ -2093,7 +2072,7 @@ def plot_missing_neuron(models, data, posterior_dict, post_save_path=None, sampl
     sorted_corr_inds = au.nan_argsort(missing_corr.reshape(-1))
     # best_offset = -5  # AVER
     best_offset = 0  # AVER
-    median_offset = -5  # URYDL
+    median_offset = -4  # URYVL
     best_neuron = np.unravel_index(sorted_corr_inds[-1 + best_offset], missing_corr.shape)
     median_neuron = np.unravel_index(sorted_corr_inds[int(sorted_corr_inds.shape[0] / 2) + median_offset], missing_corr.shape)
 
