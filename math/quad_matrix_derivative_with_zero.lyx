@@ -82,11 +82,22 @@
 \begin_body
 
 \begin_layout Standard
-Derivation of 
-\begin_inset Formula $\frac{\partial y}{\partial x}$
+The goal of this document is to derive the derivative of a quadratic matrix
+ equation when some values of 
+\begin_inset Formula $x$
 \end_inset
 
+ are not variables and are instead set to 
+\begin_inset Formula $0$
+\end_inset
 
+.
+ We want to see if there is a simple way to move between the regimes where
+ we take the derivative of 
+\begin_inset Formula $x$
+\end_inset
+
+ with respect to all or some of its components.
 \end_layout
 
 \begin_layout Standard
@@ -94,6 +105,79 @@ Derivation of
 \end_inset
 
 
+\end_layout
+
+\begin_layout Standard
+At the end, we will extend this to the case where 
+\begin_inset Formula $X$
+\end_inset
+
+ is a matrix as in the Kalman filter tutorial 
+\begin_inset Formula $y=\text{Tr}[X^{\intercal}AX]$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+NOTE that for the Kalman filter tutorial 
+\begin_inset Formula $x$
+\end_inset
+
+ corresponds to the system weights (one if which is called 
+\begin_inset Formula $A$
+\end_inset
+
+ sorry) and 
+\begin_inset Formula $y$
+\end_inset
+
+ and 
+\begin_inset Formula $A$
+\end_inset
+
+ correspond to sufficient statistics.
+\end_layout
+
+\begin_layout Paragraph
+Strategy for derivation of 
+\begin_inset Formula $\frac{\partial y}{\partial x}$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+:
+\end_layout
+
+\begin_layout Standard
+1.
+ expand 
+\begin_inset Formula $x^{\intercal}Ax$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+2.
+ Take the derivative of this equation with respect to each 
+\begin_inset Formula $x_{i}$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+3.
+ Consolidate into matrix form
+\end_layout
+
+\begin_layout Standard
+
+\series bold
+Step 1
 \end_layout
 
 \begin_layout Standard
@@ -139,7 +223,17 @@ A_{31}x_{1}+A_{32}x_{2}+A_{33}x_{3}
 \end_layout
 
 \begin_layout Standard
-\begin_inset Formula $\frac{\partial y}{\partial x}=\left[\begin{array}{c}
+
+\series bold
+Step 2
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\left[\begin{array}{c}
+\frac{\partial y}{\partial x_{1}}\\
+\frac{\partial y}{\partial x_{2}}\\
+\frac{\partial y}{\partial x_{3}}
+\end{array}\right]=\left[\begin{array}{c}
 2A_{11}x_{1}+A_{12}x_{2}+A_{13}x_{3}+A_{21}x_{2}+A_{31}x_{3}\\
 A_{12}x_{1}+A_{21}x_{1}+2A_{22}x_{2}+A_{23}x_{3}+A_{32}x_{3}\\
 A_{13}x_{1}+A_{23}x_{2}+A_{31}x_{1}+A_{32}x_{2}+2A_{33}x_{3}
@@ -150,7 +244,11 @@ A_{13}x_{1}+A_{23}x_{2}+A_{31}x_{1}+A_{32}x_{2}+2A_{33}x_{3}
 \end_layout
 
 \begin_layout Standard
-\begin_inset Formula $\frac{\partial y}{\partial x}=\left[\begin{array}{c}
+\begin_inset Formula $\left[\begin{array}{c}
+\frac{\partial y}{\partial x_{1}}\\
+\frac{\partial y}{\partial x_{2}}\\
+\frac{\partial y}{\partial x_{3}}
+\end{array}\right]=\left[\begin{array}{c}
 A_{11}x_{1}+A_{21}x_{2}+A_{31}x_{3}\\
 A_{12}x_{1}+A_{22}x_{2}+A_{32}x_{3}\\
 A_{13}x_{1}+A_{23}x_{2}+A_{33}x_{3}
@@ -165,14 +263,24 @@ A_{31}x_{1}+A_{32}x_{2}+A_{33}x_{3}
 \end_layout
 
 \begin_layout Standard
+
+\series bold
+Step 3
+\end_layout
+
+\begin_layout Standard
+Note that the above is equal to
+\end_layout
+
+\begin_layout Standard
 \begin_inset Formula $\frac{\partial y}{\partial x}=Ax+A^{\intercal}x=(A+A^{\intercal})x$
 \end_inset
 
 
 \end_layout
 
-\begin_layout Standard
-Derivation of 
+\begin_layout Paragraph*
+Now calculate the Derivation of 
 \begin_inset Formula $\frac{\partial y}{\partial x}$
 \end_inset
 
@@ -188,10 +296,20 @@ Derivation of
 \end_layout
 
 \begin_layout Standard
+:
+\end_layout
+
+\begin_layout Standard
 \begin_inset Formula $y=x^{\intercal}Ax$
 \end_inset
 
 
+\end_layout
+
+\begin_layout Standard
+
+\series bold
+Step 1
 \end_layout
 
 \begin_layout Standard
@@ -214,6 +332,20 @@ x_{3}
 \end_layout
 
 \begin_layout Standard
+
+\series bold
+Step 2
+\end_layout
+
+\begin_layout Standard
+note, you do not take the derivative with respect to 
+\begin_inset Formula $x_{1}$
+\end_inset
+
+ because it is not a variable
+\end_layout
+
+\begin_layout Standard
 \begin_inset Formula $\left[\begin{array}{c}
 \frac{\partial y}{\partial x_{2}}\\
 \frac{\partial y}{\partial x_{3}}
@@ -227,7 +359,10 @@ A_{23}x_{2}+A_{32}x_{2}+2A_{33}x_{3}
 \end_layout
 
 \begin_layout Standard
-\begin_inset Formula $\frac{\partial y}{\partial x}=\left[\begin{array}{c}
+\begin_inset Formula $\left[\begin{array}{c}
+\frac{\partial y}{\partial x_{2}}\\
+\frac{\partial y}{\partial x_{3}}
+\end{array}\right]=\left[\begin{array}{c}
 A_{22}x_{2}+A_{32}x_{3}\\
 A_{23}x_{2}+A_{33}x_{3}
 \end{array}\right]+\left[\begin{array}{c}
@@ -237,6 +372,23 @@ A_{32}x_{2}+A_{33}x_{3}
 \end_inset
 
 
+\end_layout
+
+\begin_layout Standard
+
+\series bold
+Step 3
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\frac{\partial y}{\partial\tilde{x}}=\tilde{A}\tilde{x}+\tilde{A}^{\intercal}\tilde{x}=(\tilde{A}+\tilde{A}^{\intercal})\tilde{x}$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+where
 \end_layout
 
 \begin_layout Standard
@@ -246,88 +398,187 @@ A_{32} & A_{33}
 \end{array}\right]$
 \end_inset
 
-
-\end_layout
-
-\begin_layout Standard
-\begin_inset Formula $\frac{\partial y}{\partial x}=\tilde{A}x+\tilde{A}^{\intercal}x=(\tilde{A}+\tilde{A}^{\intercal})x$
-\end_inset
-
-
-\end_layout
-
-\begin_layout Standard
-What if you use the original equation for derivative, with 
-\begin_inset Formula $x_{1}=0$
-\end_inset
-
-
-\end_layout
-
-\begin_layout Standard
-\begin_inset Formula $\frac{\partial y}{\partial x}=(A+A^{\intercal})x=\left[\begin{array}{c}
-A_{21}x_{2}+A_{31}x_{3}\\
-A_{22}x_{2}+A_{32}x_{3}\\
-A_{23}x_{2}+A_{33}x_{3}
-\end{array}\right]+\left[\begin{array}{c}
-A_{12}x_{2}+A_{13}x_{3}\\
-A_{22}x_{2}+A_{23}x_{3}\\
-A_{32}x_{2}+A_{33}x_{3}
+, 
+\begin_inset Formula $\tilde{x}=\left[\begin{array}{c}
+x_{2}\\
+x_{3}
 \end{array}\right]$
 \end_inset
 
 
 \end_layout
 
-\begin_layout Standard
-This gets the terms for 
-\begin_inset Formula $\frac{\partial y}{\partial x_{1}}$
-\end_inset
-
- and 
-\begin_inset Formula $\frac{\partial y}{\partial x_{2}}$
-\end_inset
-
- correct, but includes the first equation which has 
-\begin_inset Formula $x_{2}$
-\end_inset
-
- and 
-\begin_inset Formula $x_{3}$
-\end_inset
-
- in it.
- This will affect our updates for 
-\begin_inset Formula $x_{2}$
-\end_inset
-
- and 
-\begin_inset Formula $x_{3}$
-\end_inset
-
- even though the first equation shouldn't exist
+\begin_layout Paragraph*
+Conclusion
 \end_layout
 
 \begin_layout Standard
-Basically the first column 
-\series bold
-and
-\series default
- row should not be part of your regression because it corresponds to 
-\begin_inset Formula $\frac{\partial y}{\partial x_{1}}$
+:
+\end_layout
+
+\begin_layout Standard
+When 
+\begin_inset Formula $y=x^{\intercal}Ax$
+\end_inset
+
+, 
+\begin_inset Formula $\frac{\partial y}{\partial x}=(A+A^{\intercal})x$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Consider the case where some entry 
+\begin_inset Formula $i$
+\end_inset
+
+ in 
+\begin_inset Formula $x$
+\end_inset
+
+ is not a varible and is set to 
+\begin_inset Formula $0$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\frac{\partial y}{\partial\tilde{x}}=(\tilde{A}+\tilde{A}^{\intercal})\tilde{x}$
+\end_inset
+
+ where
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\tilde{A}$
+\end_inset
+
+ is equal to 
+\begin_inset Formula $A$
+\end_inset
+
+ with column and row 
+\begin_inset Formula $i$
+\end_inset
+
+ removed
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\tilde{x}$
+\end_inset
+
+ is equal to 
+\begin_inset Formula $x$
+\end_inset
+
+ with element 
+\begin_inset Formula $i$
+\end_inset
+
+ removed
+\end_layout
+
+\begin_layout Paragraph*
+Extra notes
+\end_layout
+
+\begin_layout Standard
+:
+\end_layout
+
+\begin_layout Standard
+A similar strategy of removing rows and columns works for calculating 
+\begin_inset Formula $\frac{\partial y}{\partial x}$
 \end_inset
 
  when 
-\begin_inset Formula $x_{1}$
+\begin_inset Formula $y=Ax$
 \end_inset
 
- isn't a variable
+
 \end_layout
 
 \begin_layout Standard
-If you don't go through the derivation for derivative then it would look
- like you just need to get rid of the first column, which is what I've been
- doing previously
+This also works if 
+\begin_inset Formula $x$
+\end_inset
+
+ is a matrix and 
+\begin_inset Formula $y=\text{Tr}[X^{\intercal}AX]$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $y=\text{Tr}\left[\left[\begin{array}{cc}
+X_{[:,1]} & X_{[:,2]}\end{array}\right]^{\intercal}A\left[\begin{array}{cc}
+X_{[:,1]} & X_{[:,2]}\end{array}\right]\right]$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $y=\text{Tr}\left[\left[\begin{array}{c}
+X_{[:,1]}^{\intercal}A\\
+X_{[:,2]}^{\intercal}A
+\end{array}\right]\left[\begin{array}{cc}
+X_{[:,1]} & X_{[:,2]}\end{array}\right]\right]$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $y=\text{Tr}\left[\left[\begin{array}{cc}
+X_{[:,1]}^{\intercal}AX_{[:,1]} & X_{[:,1]}^{\intercal}AX_{[:,2]}\\
+X_{[:,2]}^{\intercal}AX_{[:,1]} & X_{[:,2]}^{\intercal}AX_{[:,2]}
+\end{array}\right]\right]$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $y=X_{[:,1]}^{\intercal}AX_{[:,1]}+X_{[:,2]}^{\intercal}AX_{[:,2]}$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\frac{\partial y}{\partial X_{[:,i]}}=(A+A^{\intercal})X_{[:,i]}$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Since each column of 
+\begin_inset Formula $\frac{\partial y}{\partial X}$
+\end_inset
+
+ is calculated independently, you can still use our derived formula for
+ setting values of 
+\begin_inset Formula $x$
+\end_inset
+
+ to 
+\begin_inset Formula $0$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\frac{\partial y}{\partial\tilde{X}_{[:,i]}}=(\tilde{A}+\tilde{A}^{\intercal})\tilde{X}_{[:,i]}$
+\end_inset
+
+
 \end_layout
 
 \end_body
