@@ -96,11 +96,277 @@ def weight_prediction(weights, masks, weight_name, fig_save_path=None):
     plt.show()
 
 
-def compare_model_irms(weights, masks, weight_name, fig_save_path=None):
+def weight_prediction_direct_vs_poly(weights, masks, cell_ids, weight_name, fig_save_path=None):
     # this figure will demonstrate that the model can reconstruct the observed data correlation and IRMs
     # first we will sweep across the data and restrict to neuron pairs where a stimulation event was recorded N times
     # we will demonstrate that ratio between the best possible correlation and our model correlation remains constant
     # this suggests that this ratio is independent of number of data
+
+    #TODO this function is not finished. need to normalize each different prediction by its own train-test
+
+    # get the 53 pairs from andy's paper that are speculated to be extrasynaptic
+    extrasyn_pairs = [['ADLR', 'VB1'],
+                      ['AIMR', 'RMDDR'],
+                      ['ASHR', 'AVDR'],
+                      ['AVAR', 'SAAVL'],
+                      ['AVDL', 'AVDR'],
+                      ['AVDR', 'AWBL'],
+                      ['AVDR', 'RIVR'],
+                      ['AVEL', 'M3L'],
+                      ['AVJL', 'AVDR'],
+                      ['AVJR', 'CEPDL'],
+                      ['AVKL', 'M3L'],
+                      ['AWBL', 'IL2DR'],
+                      ['AWBR', 'AVDR'],
+                      ['AWBR', 'AWCL'],
+                      ['AWBR', 'RMEL'],
+
+                      ['AWBR', 'URXR'],
+                      ['CEPDL', 'RMDL'],
+                      ['CEPVL', 'RMDL'],
+                      ['FLPR', 'AVDR'],
+                      ['FLPR', 'M3L'],
+                      ['I1L', 'ASHL'],
+                      ['I1L', 'RMDVR'],
+                      ['I1R', 'FLPR'],
+                      ['I1R', 'M3L'],
+                      ['I2L', 'M3L'],
+                      ['I2R', 'I3'],
+                      ['I3', 'M3L'],
+                      ['IL1VL', 'RIVR'],
+                      ['IL2DR', 'M3L'],
+                      ['IL2R', 'M3L'],
+
+                      ['M1', 'M3L'],
+                      ['M2R', 'M3L'],
+                      ['M3R', 'IL1DL'],
+                      ['OLLR', 'I3'],
+                      ['OLLR', 'IL1DL'],
+                      ['OLQDR', 'IL1DL'],
+                      ['RIVR', 'AWBL'],
+                      ['RMDDL', 'RMDDR'],
+                      ['RMDDR', 'AVER'],
+                      ['RMDDR', 'RID'],
+                      ['RMDL', 'RMDDL'],
+                      ['RMDR', 'AWBL'],
+                      ['RMDR', 'RMDVR'],
+                      ['RMDVL', 'CEPVL'],
+                      ['RMEL', 'IL1DL'],
+
+                      ['RMEL', 'RMDVR'],
+                      ['RMER', 'IL1VL'],
+                      ['RMER', 'M3L'],
+                      ['URBL', 'AVKL'],
+                      ['URXL', 'AVDR'],
+                      ['URXL', 'IL1DL'],
+                      ['URYVL', 'M3L'],
+                      ['VB1', 'AWBR'],
+                      ]
+
+    extrasyn_mask = np.zeros_like(masks['synap']) == 1
+    for ep in extrasyn_pairs:
+        if (ep[0] not in cell_ids['all']) or (ep[1] not in cell_ids['all']):
+            continue
+        resp_ind = cell_ids['all'].index(ep[0])
+        stim_ind = cell_ids['all'].index(ep[1])
+
+        extrasyn_mask[resp_ind, stim_ind] = True
+
+    train_weights = weights['data']['train'][weight_name].copy()
+    test_weights = weights['data']['test'][weight_name].copy()
+    num_neurons = train_weights.shape[0]
+
+    test_weights[np.eye(num_neurons, dtype=bool)] = np.nan
+    train_weights[np.eye(num_neurons, dtype=bool)] = np.nan
+
+    # compare model corr to measured corr and compare model IRMs to measured IRMs
+    synap_irms_score = []
+    synap_irms_score_ci = []
+    uncon_irms_score = []
+    uncon_irms_score_ci = []
+
+    # get the baseline correlation and IRMs. This is the best the model could have done
+    # across all data
+    irms_baseline_connected = met.nan_corr(test_weights[masks['synap']], train_weights[masks['synap']])[0]
+    irms_baseline_unconnected = met.nan_corr(test_weights[~masks['synap']], train_weights[~masks['synap']])[0]
+    irms_baseline_extrasyn = met.nan_corr(test_weights[extrasyn_mask], train_weights[extrasyn_mask])[0]
+    irms_baseline = np.array([irms_baseline_connected, irms_baseline_unconnected, irms_baseline_extrasyn])
+
+    synap_connected = weights['models']['synap'][weight_name].copy()
+    synap_connected[~masks['synap']] = np.nan
+    synap_unconnected = weights['models']['synap'][weight_name].copy()
+    synap_unconnected[masks['synap']] = np.nan
+    synap_extrasyn = weights['models']['synap'][weight_name].copy()
+    synap_extrasyn[~extrasyn_mask] = np.nan
+
+    unconstrained_connected = weights['models']['unconstrained'][weight_name].copy()
+    unconstrained_connected[~masks['synap']] = np.nan
+    unconstrained_unconnected = weights['models']['unconstrained'][weight_name].copy()
+    unconstrained_unconnected[masks['synap']] = np.nan
+    unconstrained_extrasyn = weights['models']['unconstrained'][weight_name].copy()
+    unconstrained_extrasyn[~extrasyn_mask] = np.nan
+
+    weights_to_compare_synap = [synap_connected,
+                                synap_unconnected,
+                                synap_extrasyn
+                                ]
+
+    weights_to_compare_uncon = [unconstrained_connected,
+                                unconstrained_unconnected,
+                                unconstrained_extrasyn
+                                ]
+
+    # p_val, mean_corr, _ = met.two_sample_boostrap_corr_p(test_weights, synap_extrasyn, unconstrained_extrasyn, n_boot=10000)
+    p_val = met.two_sample_corr_p(test_weights, synap_extrasyn, unconstrained_extrasyn)
+
+    for ii, i in enumerate(weights_to_compare_synap):
+        weights_to_compare_synap[ii][np.eye(i.shape[0], dtype=bool)] = np.nan
+
+    for ii, i in enumerate(weights_to_compare_uncon):
+        weights_to_compare_uncon[ii][np.eye(i.shape[0], dtype=bool)] = np.nan
+
+    # get the comparison between model prediction and data irm/correlation
+    for mi, m in enumerate(weights_to_compare_synap):
+        model_irms_to_measured_irms_test, model_irms_to_measured_irms_test_ci = \
+            met.nan_corr(m, test_weights)
+
+        synap_irms_score.append(model_irms_to_measured_irms_test)
+        synap_irms_score_ci.append(model_irms_to_measured_irms_test_ci)
+
+    # get the comparison between model prediction and data irm/correlation
+    for mi, m in enumerate(weights_to_compare_uncon):
+        model_irms_to_measured_irms_test, model_irms_to_measured_irms_test_ci = \
+            met.nan_corr(m, test_weights)
+
+        uncon_irms_score.append(model_irms_to_measured_irms_test)
+        uncon_irms_score_ci.append(model_irms_to_measured_irms_test_ci)
+
+    # plot the 56 neurons for connectome-constrained and unconstrained
+    nan_loc = np.isnan(test_weights) | np.isnan(synap_extrasyn) | np.isnan(unconstrained_extrasyn)
+    target = test_weights[~nan_loc]
+    data_1 = synap_extrasyn[~nan_loc]
+    data_2 = unconstrained_extrasyn[~nan_loc]
+    corr_1 = met.nan_corr(target, data_1)[0]
+    corr_2 = met.nan_corr(target, data_2)[0]
+
+    plt.figure()
+    ax = plt.subplot(1, 2, 1)
+    plt.scatter(data_1, target, color=plot_color['synap'])
+    plt.title('correlation = ' + str(corr_1)[:6])
+    plt.xlabel('model STAMs')
+    plt.ylabel('measured STAM')
+    plt.legend(['connectome-constrained'])
+    plt.xlim([-2, 3])
+    plt.ylim([-2, 12])
+
+    ax = plt.subplot(1, 2, 2)
+    plt.scatter(data_2, target, color=plot_color['unconstrained'])
+    plt.title('correlation = ' + str(corr_2)[:6])
+    plt.xlabel('model STAM')
+    plt.legend(['unconstrained'])
+    plt.xlim([-2, 3])
+    plt.ylim([-2, 12])
+
+    plt.savefig(fig_save_path / ('55_neurons.pdf'))
+
+    plt.show()
+
+    # plot average reconstruction over all data without normalization
+    plt.figure()
+    y_val = np.array(synap_irms_score)
+    y_val_ci = np.stack(synap_irms_score_ci).T
+    plot_x = np.arange(y_val.shape[0])
+    bar_colors = [plot_color['anatomy'], plot_color['synap_randC'],  plot_color['synap']]
+    plt.bar(plot_x, y_val, color=bar_colors)
+    plt.errorbar(plot_x, y_val, y_val_ci, fmt='none', color='k')
+    plt.xticks(plot_x, labels=['synap connected', 'synap unconnected', 'synap extrasyn'], rotation=45)
+    plt.ylabel('correlation to measured ' + weight_name)
+    plt.tight_layout()
+
+    plt.figure()
+    y_val = np.array(uncon_irms_score)
+    y_val_ci = np.stack(uncon_irms_score_ci).T
+    plot_x = np.arange(y_val.shape[0])
+    bar_colors = [plot_color['anatomy'], plot_color['synap_randC'],  plot_color['synap']]
+    plt.bar(plot_x, y_val, color=bar_colors)
+    plt.errorbar(plot_x, y_val, y_val_ci, fmt='none', color='k')
+    plt.xticks(plot_x, labels=['unconstrained connected', 'unconstrained unconnected', 'unconstrained extrasyn'], rotation=45)
+    plt.ylabel('correlation to measured ' + weight_name)
+    plt.tight_layout()
+
+    # plot average reconstruction over all data
+    plt.figure()
+    y_val = np.array(synap_irms_score) / irms_baseline
+    y_val_ci = np.stack(synap_irms_score_ci).T / irms_baseline
+    plot_x = np.arange(y_val.shape[0])
+    bar_colors = [plot_color['anatomy'], plot_color['synap_randC'],  plot_color['synap']]
+    plt.bar(plot_x, y_val, color=bar_colors)
+    plt.errorbar(plot_x, y_val, y_val_ci, fmt='none', color='k')
+    plt.xticks(plot_x, labels=['synap connected', 'synap unconnected', 'synap extrasyn'], rotation=45)
+    plt.ylabel('relative correlation to measured ' + weight_name)
+    plt.tight_layout()
+
+    # plot average reconstruction over all data
+    plt.figure()
+    y_val = np.array(uncon_irms_score) / irms_baseline
+    y_val_ci = np.stack(uncon_irms_score_ci).T / irms_baseline
+    plot_x = np.arange(y_val.shape[0])
+    bar_colors = [plot_color['anatomy'], plot_color['synap_randC'],  plot_color['synap']]
+    plt.bar(plot_x, y_val, color=bar_colors)
+    plt.errorbar(plot_x, y_val, y_val_ci, fmt='none', color='k')
+    plt.xticks(plot_x, labels=['unconstrained connected', 'unconstrained unconnected', 'unconstrained extrasyn'], rotation=45)
+    plt.ylabel('relative correlation to measured ' + weight_name)
+    plt.tight_layout()
+
+    plt.show()
+
+    return
+
+
+def compare_model_irms(weights, masks, weight_name, cell_ids, fig_save_path=None):
+    # this figure will demonstrate that the model can reconstruct the observed data correlation and IRMs
+    # first we will sweep across the data and restrict to neuron pairs where a stimulation event was recorded N times
+    # we will demonstrate that ratio between the best possible correlation and our model correlation remains constant
+    # this suggests that this ratio is independent of number of data
+
+    import pickle
+    from pathlib import Path
+    # TODO Remove this
+    unc_path = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/exp_unc31_DL1_IL45_N80_NF10/20241023_190207')
+    unc_file = open(unc_path / 'models/model_trained.pkl', 'rb')
+    unc_model = pickle.load(unc_file)
+    unc_file.close()
+
+    unc_file = open(unc_path / 'data_train.pkl', 'rb')
+    data_train = pickle.load(unc_file)
+    unc_file.close()
+    unc_file = open(unc_path / 'data_test.pkl', 'rb')
+    data_test = pickle.load(unc_file)
+    unc_file.close()
+
+    data_irfs_train, data_irfs_sem_train, data_irfs_train_all = \
+        ssmu.get_impulse_response_functions(data_train['emissions'], data_train['inputs'],
+                                            sample_rate=2, window=(15, 30), sub_pre_stim=True)
+    data_irms_train = np.sum(data_irfs_train, axis=0) / 2
+    unc_irms = ssmu.calculate_irms(unc_model)[1:, :][:, 1:]
+
+    unc_ids = unc_model.cell_ids[1:]
+    cell_ids_both = list(set(cell_ids) & set(unc_ids))
+
+    # downsize the matricies to those in the unc data
+    new_ids = np.array([cell_ids.index(i) for i in cell_ids_both], dtype=int)
+    new_unc_ids = np.array([unc_ids.index(i) for i in cell_ids_both], dtype=int)
+
+    weights['data']['train']['irms'] = weights['data']['train']['irms'][new_ids, :][:, new_ids]
+    weights['data']['test']['irms'] = weights['data']['test']['irms'][new_ids, :][:, new_ids]
+
+    for i in weights['models']:
+        weights['models'][i]['irms'] = weights['models'][i]['irms'][new_ids, :][:, new_ids]
+
+    weights['models']['unc'] = {}
+    weights['models']['unc']['irms'] = unc_irms[new_unc_ids, :][:, new_unc_ids]
+
+    ### end of test code ###
 
     train_weights = weights['data']['train'][weight_name].copy()
     test_weights = weights['data']['test'][weight_name].copy()
@@ -116,7 +382,7 @@ def compare_model_irms(weights, masks, weight_name, fig_save_path=None):
     model_irms_score = []
     model_irms_score_ci = []
 
-    for m in ['synap', 'unconstrained', 'synap_randA']:
+    for m in ['unc', 'synap', 'unconstrained', 'synap_randA']:
         model_irms_to_measured_irms_test, model_irms_to_measured_irms_test_ci = \
         met.nan_corr(weights['models'][m][weight_name], test_weights)
         model_irms_score.append(model_irms_to_measured_irms_test)
@@ -128,10 +394,10 @@ def compare_model_irms(weights, masks, weight_name, fig_save_path=None):
     y_val = np.array(model_irms_score)
     y_val_ci = np.stack(model_irms_score_ci).T
     plot_x = np.arange(y_val.shape[0])
-    bar_colors = [plot_color['synap'], plot_color['unconstrained'], plot_color['synap_randA']]
+    bar_colors = [plot_color['synap'], plot_color['synap'], plot_color['unconstrained'], plot_color['synap_randA']]
     plt.bar(plot_x, y_val / irms_baseline, color=bar_colors)
     plt.errorbar(plot_x, y_val / irms_baseline, y_val_ci / irms_baseline, fmt='none', color='k')
-    plt.xticks(plot_x, labels=['model', 'model\n+ unconstrained', 'model\n+ scrambled anatomy'], rotation=45)
+    plt.xticks(plot_x, labels=['unc', 'model', 'model\n+ unconstrained', 'model\n+ scrambled anatomy'], rotation=45)
     plt.ylabel('% explainable correlation to measured ' + weight_name)
     plt.ylim(y_limits)
     plt.tight_layout()
