@@ -112,3 +112,58 @@ for i in sorted(data_path.rglob('calcium_to_multicolor_alignment.mat'))[::-1]:
     print('Data set', i.parent, 'preprocessed')
     print('Took', time.time() - start, 's')
 
+# look for data from unc31
+for i in sorted(data_path.rglob('*_gcamp.txt'))[::-1]:
+    preprocess_path = i.parent / preprocess_filename
+    name_index = i.name.split('_')[0]
+    this_emissions = np.loadtxt(str(i))
+
+    with open(str(i.parent / (name_index + '_labels.txt'))) as f:
+        this_cell_ids = f.readlines()
+
+    this_cell_ids = [i[:-1] for i in this_cell_ids]
+    this_cell_ids = [i if i != 'merge' else '' for i in this_cell_ids]
+
+    # load stimulation data
+    this_stim_cell_ids = np.loadtxt(str(i.parent / (name_index + '_stim_neurons.txt')), dtype=int)
+    this_stim_volume_inds = np.loadtxt(str(i.parent / (name_index + '_stim_volume_i.txt')), dtype=int)
+
+    this_inputs = np.zeros_like(this_emissions)
+    nonnegative_inds = (this_stim_cell_ids != -1) & (this_stim_cell_ids != -2) & (this_stim_cell_ids != -3)
+    this_stim_volume_inds = this_stim_volume_inds[nonnegative_inds]
+    this_stim_cell_ids = this_stim_cell_ids[nonnegative_inds]
+    this_inputs[this_stim_volume_inds, this_stim_cell_ids] = 1
+
+    start = time.time()
+    this_emissions, this_inputs = lu.preprocess_data(this_emissions, this_inputs, start_index=start_index,
+                                                     correct_photobleach=correct_photobleach,
+                                                     filter_size=filter_size, upsample_factor=upsample_factor)
+
+    if randomize_cell_ids:
+        measured_neurons = np.mean(np.isnan(this_emissions), axis=0) <= 0.5
+
+        # scramble IDs, but preserve scramble between measured and unmeasured neurons
+        measured_neuron_inds = np.where(measured_neurons)[0]
+        measured_neuron_inds_scrambled = rng.permutation(measured_neuron_inds)
+        unmeasured_neuron_inds = np.where(~measured_neurons)[0]
+        unmeasured_neuron_inds_scrambled = rng.permutation(unmeasured_neuron_inds)
+
+        new_cell_ids = np.array(this_cell_ids.copy())
+        this_cell_ids_array = np.array(this_cell_ids.copy())
+        new_cell_ids[measured_neuron_inds] = this_cell_ids_array[measured_neuron_inds_scrambled]
+        new_cell_ids[unmeasured_neuron_inds] = this_cell_ids_array[unmeasured_neuron_inds_scrambled]
+        this_cell_ids = list(new_cell_ids)
+
+    if interpolate_nans:
+        full_nan_loc = np.all(np.isnan(this_emissions), axis=0)
+        interp_emissions = tp.interpolate_over_nans(this_emissions[:, ~full_nan_loc])[0]
+        this_emissions[:, ~full_nan_loc] = interp_emissions
+
+    preprocessed_file = open(preprocess_path, 'wb')
+    pickle.dump(
+        {'emissions': this_emissions, 'inputs': this_inputs, 'cell_ids': this_cell_ids, 'sample_rate': sample_rate},
+        preprocessed_file)
+    preprocessed_file.close()
+
+    print('Data set', i.parent, 'preprocessed')
+    print('Took', time.time() - start, 's')

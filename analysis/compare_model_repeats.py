@@ -212,8 +212,44 @@ a=1
 #     plt.plot(np.sort(np.abs(i))[::-1])
 #     plt.subplot(1, 2, 2)
 #     plt.scatter(np.real(i), np.imag(i))
-
 plt.show()
-a=1
 
+# comparing similarity between model weights
+model_name = 'unconstrained'
+chosen_mask = models[model_name][0].param_props['mask']['dynamics_weights']
+
+chosen_model_file = open(
+    '/home/mcreamer/Documents/python/Creamer_LDS_2024/trained_models/exp_DL1_IL45_N80_R0_synap_nf10/20240422_152517/models/model_trained.pkl',
+    'rb')
+model_chosen = pickle.load(chosen_model_file)
+chosen_model_file.close()
+
+models[model_name].append(model_chosen)
+
+num_model = len(models[model_name])
+corr_out = np.zeros((num_model, num_model))
+
+for i in range(num_model):
+    for j in range(num_model):
+        a = models[model_name][i].dynamics_weights[chosen_mask]
+        b = models[model_name][j].dynamics_weights[chosen_mask]
+        corr_out[i, j] = met.nan_corr(a, b)[0]
+
+plt.figure()
+plt.imshow(corr_out)
+plt.clim(-1, 1)
+plt.colorbar()
+plt.xlabel('model repeats')
+plt.ylabel('model repeats')
+plt.title('correlation between model weights across repeats')
+
+plt.figure()
+upper_vals = corr_out[np.triu_indices(num_model, k=1)]
+plt.hist(upper_vals)
+plt.xlabel('correlation')
+plt.ylabel('count')
+plt.title('hist of correlation between model weights across repeats')
+plt.show()
+
+a=1
 

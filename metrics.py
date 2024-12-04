@@ -70,6 +70,7 @@ def two_sample_boostrap_corr_p(target, data_1, data_2, alpha=0.05, n_boot=1000, 
         booted_metric[n] = data_1_corr - data_2_corr
 
     data_mean = nan_corr(target, data_1)[0] - nan_corr(target, data_2)[0]
+
     ci = [np.percentile(booted_metric, alpha / 2 * 100),
           np.percentile(booted_metric, (1 - alpha / 2) * 100)]
     ci = np.abs(np.array(ci) - data_mean)
@@ -80,6 +81,29 @@ def two_sample_boostrap_corr_p(target, data_1, data_2, alpha=0.05, n_boot=1000, 
     p = 2 * np.mean(booted_metric <= 0)
 
     return p, data_mean, ci
+
+
+def two_sample_corr_p(target, data_1, data_2, alpha=0.05):
+    # get rid of nans
+    target = target.reshape(-1).astype(float).copy()
+    data_1 = data_1.reshape(-1).astype(float).copy()
+    data_2 = data_2.reshape(-1).astype(float).copy()
+
+    nan_loc = np.isnan(target) | np.isnan(data_1) | np.isnan(data_2)
+    target = target[~nan_loc]
+    data_1 = data_1[~nan_loc]
+    data_2 = data_2[~nan_loc]
+    n = target.shape[0]
+
+    s = np.corrcoef(np.concatenate((target[None, :], data_1[None, :], data_2[None, :]), axis=0))
+    s_det = np.linalg.det(s)
+    numerator = (n - 1) * (1 + s[1, 2])
+    denom_1 = 2 * ((n - 1) / (n - 3)) * s_det
+    denom_2 = 1/4 * (s[0, 1] + s[0, 2])**2 * (1 - s[1, 2])**3
+    t = (s[0, 1] - s[0, 2]) * np.sqrt(numerator / (denom_1 + denom_2))
+    p = scipy.stats.t.cdf(t, n - 3) * 2
+
+    return p
 
 
 def nan_corr(y_true, y_hat, alpha=0.05, mean_sub=True):
