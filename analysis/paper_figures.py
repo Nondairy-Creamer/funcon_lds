@@ -2104,7 +2104,9 @@ def predict_chem_synapse_sign(weights, masks, cell_ids, metric=met.accuracy, rng
     p = 2 * np.mean(booted_diff < 0)
 
     plt.figure()
-    plt.hist(booted_diff, bins=50)
+    plt.hist(booted_diff, bins=50, density=True)
+    plt.title('model prediction vs measured IRMs, p = ' + str(p)[:5])
+    plt.xlabel('paired similarity difference')
 
     plt.figure()
     y_val = np.array([chem_sign_predict_data_dirms, chem_sign_predict_model_synap])

@@ -16,6 +16,9 @@ def get_run_params(param_name):
     with open(param_name, 'r') as file:
         params = yaml.safe_load(file)
 
+    if 'hold_out_start' not in params:
+        params['hold_out_start'] = 0
+
     return params
 
 
@@ -95,7 +98,7 @@ def preprocess_data(emissions, inputs, start_index=0, correct_photobleach=False,
 
 
 def load_data(data_path, num_data_sets=None, neuron_freq=0.0, held_out_data=[],
-              hold_out='worm', upsample_factor=1):
+              hold_out='worm', upsample_factor=1, hold_out_start=0.9):
     data_path = Path(data_path)
 
     preprocess_filename = 'funcon_preprocessed_data.pkl'
@@ -136,17 +139,15 @@ def load_data(data_path, num_data_sets=None, neuron_freq=0.0, held_out_data=[],
                 inputs_test.append(inputs_train.pop(i))
                 cell_ids_test.append(cell_ids_train.pop(i))
 
-        emissions_test += emissions_train[num_data_sets:]
-        inputs_test += inputs_train[num_data_sets:]
-        cell_ids_test += cell_ids_train[num_data_sets:]
+        num_test = len(emissions_train) - num_data_sets
+        num_test = np.min((num_test, num_data_sets))
+        start_ind = int(hold_out_start * len(emissions_train))
+        test_inds = np.mod(np.arange(start_ind, start_ind + num_test), len(emissions_train))
 
-        emissions_test = emissions_test[:num_data_sets]
-        inputs_test = inputs_test[:num_data_sets]
-        cell_ids_test = cell_ids_test[:num_data_sets]
-
-        emissions_train = emissions_train[:num_data_sets]
-        inputs_train = inputs_train[:num_data_sets]
-        cell_ids_train = cell_ids_train[:num_data_sets]
+        for ti in reversed(sorted(test_inds)):
+            emissions_test.append(emissions_train.pop(ti))
+            inputs_test.append(inputs_train.pop(ti))
+            cell_ids_test.append(cell_ids_train.pop(ti))
 
     elif hold_out == 'middle':
         frac = 0.3

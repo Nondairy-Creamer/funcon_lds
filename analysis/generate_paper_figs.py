@@ -344,7 +344,7 @@ cell_ids['chosen'] = top_cells
 # pf.irm_vs_dirm(weights_masked, masks, cell_ids)
 
 # Figure 3
-# pf.predict_chem_synapse_sign(weights_masked, masks, cell_ids, metric=metric, rng=rng, fig_save_path=fig_save_path)
+pf.predict_chem_synapse_sign(weights, masks, cell_ids, metric=metric, rng=rng, fig_save_path=fig_save_path)
 # pf.predict_gap_synapse_sign(weights_masked, masks, metric=metric, rng=rng, fig_save_path=fig_save_path)
 # pf.unconstrained_vs_constrained_model(weights_masked, fig_save_path=fig_save_path/'fig_3')
 # pf.uncon_vs_synap(models, fig_save_path=fig_save_path/'fig_3')

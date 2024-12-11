@@ -131,7 +131,8 @@ def fit_experimental(param_name, save_folder):
                          held_out_data=run_params['held_out_data'],
                          neuron_freq=run_params['neuron_freq'],
                          hold_out=run_params['hold_out'],
-                         upsample_factor=upsample_factor)
+                         upsample_factor=upsample_factor,
+                         hold_out_start=run_params['hold_out_start'])
 
         # initialize the model and set model weights
         num_neurons = data_train['emissions'][0].shape[1]
