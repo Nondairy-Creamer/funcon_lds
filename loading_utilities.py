@@ -109,7 +109,7 @@ def load_data(data_path, num_data_sets=None, neuron_freq=0.0, held_out_data=[],
     sample_rate = 2 * upsample_factor  # seconds per sample DEFAULT
 
     # find all files in the folder that have francesco_green.npy
-    for i in sorted(data_path.rglob('funcon_preprocessed_data.pkl'))[::-1]:
+    for i in sorted(data_path.rglob('funcon_preprocessed_data.pkl')):
         path_name.append(i.parts[-2])
 
         # check if a processed version exists
