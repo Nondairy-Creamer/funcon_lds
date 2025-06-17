@@ -569,3 +569,512 @@ def run_fitting(run_params, model, data_train, data_test, save_folder, model_tru
 
     return model_trained
 
+
+def fit_mismatch(param_name, save_folder):
+    comm = pkl5.Intracomm(MPI.COMM_WORLD)
+    size = comm.Get_size()
+    cpu_id = comm.Get_rank()
+    is_parallel = size > 1
+
+    plot_color = {'data': np.array([217, 95, 2]) / 255,
+                  'synap': np.array([27, 158, 119]) / 255,
+                  'unconstrained': np.array([117, 112, 179]) / 255,
+                  'synap_randA': np.array([231, 41, 138]) / 255,
+                  # 'synap_randC': np.array([102, 166, 30]) / 255,
+                  'synap_randC': np.array([128, 128, 128]) / 255,
+                  'anatomy': np.array([64, 64, 64]) / 255,
+                  'true_model': np.array([60, 60, 245]) / 255,
+                  }
+
+    run_params = lu.get_run_params(param_name=param_name)
+
+    true_corr = []
+    mismatch_corr = []
+    uncon_corr = []
+
+    true_corr_ci = []
+    mismatch_corr_ci = []
+    uncon_corr_ci = []
+
+    # mask_array = [0.1, 0.11, 0.12, 0.13, 0.14, 0.15, 0.175, 0.2, 0.4]
+    mask_array = [0.2]
+    rng = np.random.default_rng(run_params['random_seed'])
+    num_repeats = 10
+
+    for i in range(num_repeats):
+        for true_mask_prob in mask_array:
+            if cpu_id == 0:
+                # rng = np.random.default_rng(run_params['random_seed'])
+
+                mismatch_mask_prob = 0.1
+                true_mask = rng.random((run_params['dynamics_dim'], run_params['dynamics_dim'])) < true_mask_prob
+                true_mask[np.eye(true_mask.shape[0], dtype=bool)] = True
+                mismatch_mask_mult = rng.random((run_params['dynamics_dim'], run_params['dynamics_dim'])) < mismatch_mask_prob / true_mask_prob
+                mismatch_mask = true_mask * mismatch_mask_mult
+                mismatch_mask[np.eye(mismatch_mask.shape[0], dtype=bool)] = True
+                unconstrained_mask = np.ones_like(mismatch_mask)
+
+                from matplotlib import pyplot as plt
+                true_mask_plot = np.repeat(true_mask[:, :, None], 3, axis=2) * plot_color['true_model'][None, None, :]
+                mismatch_mask_plot = np.repeat(mismatch_mask[:, :, None], 3, axis=2) * plot_color['synap'][None, None, :]
+                alpha_channel = mismatch_mask.astype(float)
+                mismatch_mask_rgba = np.dstack((mismatch_mask_plot, alpha_channel))
+
+                save_path = '/home/mcreamer/Documents/google_drive/leifer_pillow_lab/papers/2023_lds/figures/drafts_subpannels/nature_review_appeal/'
+
+                plt.figure()
+                plt.imshow(true_mask_plot)
+                plt.imshow(mismatch_mask_rgba)
+                plt.savefig(save_path + 'synth_model_mask.pdf')
+                plt.figure()
+                plt.imshow(mismatch_mask_plot)
+                plt.savefig(save_path + 'synth_constrained_model_mask.pdf')
+                plt.show()
+
+
+                # define the model, setting specific parameters
+                model_true = Lgssm(run_params['dynamics_dim'], run_params['emissions_dim'], run_params['input_dim'],
+                                   dynamics_lags=run_params['dynamics_lags'], dynamics_input_lags=run_params['dynamics_input_lags'],
+                                   emissions_input_lags=run_params['emissions_input_lags'], param_props=run_params['param_props'])
+
+                model_true.param_props['mask']['dynamics_weights'] = true_mask
+
+                model_true.randomize_weights(rng=rng)
+                if model_true.param_props['update']['emissions_weights']:
+                    emission_weights_values = rng.uniform(size=(model_true.emissions_dim, model_true.dynamics_lags))
+                    emission_weights_values = emission_weights_values / np.sum(emission_weights_values, axis=1, keepdims=True)
+                    emissions_weights_list = [np.diag(emission_weights_values[:, i]) for i in range(emission_weights_values.shape[1])]
+                    model_true.emissions_weights_init = np.concatenate(emissions_weights_list, axis=1)
+                else:
+                    model_true.emissions_weights_init = np.eye(model_true.emissions_dim, model_true.dynamics_dim_full)
+                model_true.emissions_input_weights_init = np.zeros(model_true.emissions_input_weights_init.shape)
+                model_true.set_to_init()
+
+                # sample from the randomized model
+                data_train = \
+                    model_true.sample_multiple(num_time=run_params['num_time'],
+                                               num_data_sets=run_params['num_data_sets'],
+                                               scattered_nan_freq=run_params['scattered_nan_freq'],
+                                               lost_emission_freq=run_params['lost_emission_freq'],
+                                               input_time_scale=run_params['input_time_scale'],
+                                               rng=rng)
+
+                data_test = \
+                    model_true.sample_multiple(num_time=run_params['num_time'],
+                                               num_data_sets=run_params['num_data_sets'],
+                                               scattered_nan_freq=run_params['scattered_nan_freq'],
+                                               lost_emission_freq=run_params['lost_emission_freq'],
+                                               input_time_scale=run_params['input_time_scale'],
+                                               rng=rng)
+
+                # make a new model to fit to the random model
+                model_trained = Lgssm(run_params['dynamics_dim'], run_params['emissions_dim'], run_params['input_dim'],
+                                      verbose=run_params['verbose'], param_props=run_params['param_props'],
+                                      dynamics_lags=run_params['dynamics_lags'], dynamics_input_lags=run_params['dynamics_input_lags'],
+                                      emissions_input_lags=run_params['emissions_input_lags'], ridge_lambda=run_params['ridge_lambda'])
+
+                model_trained_mismatch = Lgssm(run_params['dynamics_dim'], run_params['emissions_dim'], run_params['input_dim'],
+                                               verbose=run_params['verbose'], param_props=run_params['param_props'],
+                                               dynamics_lags=run_params['dynamics_lags'], dynamics_input_lags=run_params['dynamics_input_lags'],
+                                               emissions_input_lags=run_params['emissions_input_lags'], ridge_lambda=run_params['ridge_lambda'])
+
+                model_trained_unconstrained = Lgssm(run_params['dynamics_dim'], run_params['emissions_dim'], run_params['input_dim'],
+                                                    verbose=run_params['verbose'], param_props=run_params['param_props'],
+                                                    dynamics_lags=run_params['dynamics_lags'], dynamics_input_lags=run_params['dynamics_input_lags'],
+                                                    emissions_input_lags=run_params['emissions_input_lags'], ridge_lambda=run_params['ridge_lambda'])
+
+                model_trained.param_props['mask']['dynamics_weights'] = true_mask
+                model_trained_mismatch.param_props['mask']['dynamics_weights'] = mismatch_mask
+                model_trained_unconstrained.param_props['mask']['dynamics_weights'] = unconstrained_mask
+
+                # for any value that we are not fitting, set it to the true value
+                for k in model_trained.param_props['update'].keys():
+                    if not model_trained.param_props['update'][k]:
+                        init_key = k + '_init'
+                        setattr(model_trained, init_key, getattr(model_true, init_key))
+
+                # for any value that we are not fitting, set it to the true value
+                for k in model_trained_mismatch.param_props['update'].keys():
+                    if not model_trained_mismatch.param_props['update'][k]:
+                        init_key = k + '_init'
+                        setattr(model_trained_mismatch, init_key, getattr(model_true, init_key))
+
+                # for any value that we are not fitting, set it to the true value
+                for k in model_trained_unconstrained.param_props['update'].keys():
+                    if not model_trained_unconstrained.param_props['update'][k]:
+                        init_key = k + '_init'
+                        setattr(model_trained_unconstrained, init_key, getattr(model_true, init_key))
+
+                model_trained.set_to_init()
+                model_trained_mismatch.set_to_init()
+                model_trained_unconstrained.set_to_init()
+
+                lu.save_run(save_folder, model_true=model_true, model_trained=model_trained, ep=0, data_train=data_train,
+                            data_test=data_test, params=run_params)
+                lu.save_run(save_folder, model_true=model_true, model_trained=model_trained_mismatch, ep=0, data_train=data_train,
+                            data_test=data_test, params=run_params)
+                lu.save_run(save_folder, model_true=model_true, model_trained=model_trained_unconstrained, ep=0, data_train=data_train,
+                            data_test=data_test, params=run_params)
+            else:
+                model_trained = None
+                model_trained_mismatch = None
+                model_trained_unconstrained = None
+                data_train = None
+                data_test = None
+                model_true = None
+
+            # get the log likelihood of the true data
+            ll_true_params = iu.parallel_get_ll(model_true, data_train)
+
+            if cpu_id == 0:
+                print('log likelihood of true parameters: ', ll_true_params)
+
+                model_true.log_likelihood = [ll_true_params]
+                lu.save_run(save_folder, model_true=model_true)
+
+            training_output = run_fitting(run_params, model_trained, data_train, data_test, save_folder, model_true=model_true)
+            training_output_mismatch = run_fitting(run_params, model_trained_mismatch, data_train, data_test, save_folder, model_true=model_true)
+            training_output_unconstrained = run_fitting(run_params, model_trained_unconstrained, data_train, data_test, save_folder, model_true=model_true)
+            model_trained = training_output['model']
+            model_trained_mismatch = training_output_mismatch['model']
+            model_trained_unconstrained = training_output_unconstrained['model']
+
+            if cpu_id == 0:
+                import lgssm_utilities as ssmu
+                import metrics as met
+                from matplotlib import pyplot as plt
+
+                sample_rate = 2
+                window = (15, 30)
+
+                data_irfs_train, data_irfs_sem_train, data_irfs_train_all = \
+                    ssmu.get_impulse_response_functions(data_train['emissions'], data_train['inputs'],
+                                                        sample_rate=sample_rate, window=(15, 30), sub_pre_stim=True)
+
+                nan_loc = np.all(np.isnan(data_irfs_train), axis=0)
+                data_irms_train = np.nansum(data_irfs_train[int(window[0]*sample_rate):], axis=0) / sample_rate
+                data_irms_train[nan_loc] = np.nan
+
+                data_irfs_test, data_irfs_sem_test, data_irfs_test_all = \
+                    ssmu.get_impulse_response_functions(data_test['emissions'], data_test['inputs'],
+                                                        sample_rate=sample_rate, window=(15, 30), sub_pre_stim=True)
+
+                nan_loc = np.all(np.isnan(data_irfs_test), axis=0)
+                data_irms_test = np.nansum(data_irfs_test[int(window[0]*sample_rate):], axis=0) / sample_rate
+                data_irms_test[nan_loc] = np.nan
+
+                model_irms = ssmu.calculate_irms(model_trained, window=window)
+                model_irms_mismatch = ssmu.calculate_irms(model_trained_mismatch, window=window)
+                model_irms_unconstrained = ssmu.calculate_irms(model_trained_unconstrained, window=window)
+
+                data_irms_test[np.eye(data_irms_test.shape[0], dtype=bool)] = np.nan
+                data_irms_train[np.eye(data_irms_train.shape[0], dtype=bool)] = np.nan
+                model_irms[np.eye(model_irms.shape[0], dtype=bool)] = np.nan
+                model_irms_mismatch[np.eye(model_irms_mismatch.shape[0], dtype=bool)] = np.nan
+                model_irms_unconstrained[np.eye(model_irms_unconstrained.shape[0], dtype=bool)] = np.nan
+
+                train_test_corr = met.nan_corr(data_irms_train, data_irms_test)[0]
+                model_irms_score = []
+                model_irms_score_ci = []
+
+                for mi, m in enumerate([model_irms, model_irms_unconstrained, model_irms_mismatch]):
+                    model_irms_to_measured_irms_test, model_irms_to_measured_irms_test_ci = (
+                        met.nan_corr(m, data_irms_test))
+                    model_irms_score.append(model_irms_to_measured_irms_test)
+                    model_irms_score_ci.append(model_irms_to_measured_irms_test_ci)
+
+                    if mi == 0:
+                        true_corr.append(model_irms_to_measured_irms_test)
+                        true_corr_ci.append(model_irms_to_measured_irms_test_ci)
+                    elif mi == 1:
+                        uncon_corr.append(model_irms_to_measured_irms_test)
+                        uncon_corr_ci.append(model_irms_to_measured_irms_test_ci)
+                    elif mi == 2:
+                        mismatch_corr.append(model_irms_to_measured_irms_test)
+                        mismatch_corr_ci.append(model_irms_to_measured_irms_test_ci)
+
+                # plot average reconstruction over all data
+                # y_limits = [-0.25, 1.25]
+                # plt.figure()
+                # y_val = np.array(model_irms_score)
+                # y_val_ci = np.stack(model_irms_score_ci).T
+                # plot_x = np.arange(y_val.shape[0])
+                # bar_colors = [plot_color['data'], plot_color['unconstrained'], plot_color['synap']]
+                # plt.bar(plot_x, y_val, color=bar_colors)
+                # plt.errorbar(plot_x, y_val, y_val_ci, fmt='none', color='k')
+                # plt.xticks(plot_x, labels=['true_model', 'unconstrained', 'connectome_constrained'], rotation=45)
+                # plt.ylabel('correlation')
+                # # plt.ylim(y_limits)
+                # plt.tight_layout()
+                # save_path = '/home/mcreamer/Documents/google_drive/leifer_pillow_lab/papers/2023_lds/figures/drafts_subpannels/nature_review_appeal/'
+                # # save_path = '/home/mcreamer/Documents/google_drive/leifer_pillow_lab/papers/2023_lds/figures/drafts_subpannels/'
+                # plt.savefig(save_path + 'mismatch.pdf')
+                #
+                # plt.figure()
+                # plt.imshow(true_mask, cmap='gray')
+                # plt.savefig(save_path + 'true_mask.pdf')
+                #
+                # plt.figure()
+                # plt.imshow(mismatch_mask, cmap='gray')
+                # plt.savefig(save_path + 'mismatch_mask.pdf')
+                #
+                # plt.show()
+
+    # if cpu_id == 0:
+        # plt.figure()
+        # plt.plot(mask_array, true_corr)
+        # plt.plot(mask_array, uncon_corr)
+        # plt.plot(mask_array, mismatch_corr)
+        # plt.ylim([0, 1])
+        # plt.xlabel('true dynamics sparsity')
+        # plt.ylabel('correlation')
+        # plt.title('model prediction of STAMs')
+        #
+        # plt.savefig(save_path + 'mismatch_sweep.pdf')
+        #
+        # plt.show()
+    if cpu_id == 0:
+        save_path = '/home/mcreamer/Documents/google_drive/leifer_pillow_lab/papers/2023_lds/figures/drafts_subpannels/nature_review_appeal/'
+        save_dict = {'true_corr': true_corr, 'uncon_corr': uncon_corr, 'mismatch_corr': mismatch_corr}
+
+        save_file = open(save_path + 'mismatch_data.pkl', 'wb')
+        pickle.dump(save_dict, save_file)
+        save_file.close()
+    a=1
+
+
+def fit_smoothed_mismatch(param_name, save_folder):
+    import copy
+    from scipy.signal import convolve
+    import lgssm_utilities as ssmu
+    import metrics as met
+    from matplotlib import pyplot as plt
+
+    comm = pkl5.Intracomm(MPI.COMM_WORLD)
+    size = comm.Get_size()
+    cpu_id = comm.Get_rank()
+    is_parallel = size > 1
+
+    plot_color = {'data': np.array([217, 95, 2]) / 255,
+                  'synap': np.array([27, 158, 119]) / 255,
+                  'unconstrained': np.array([117, 112, 179]) / 255,
+                  'synap_randA': np.array([231, 41, 138]) / 255,
+                  # 'synap_randC': np.array([102, 166, 30]) / 255,
+                  'synap_randC': np.array([128, 128, 128]) / 255,
+                  'anatomy': np.array([64, 64, 64]) / 255,
+                  'true_model': np.array([60, 60, 245]) / 255,
+                  }
+
+    run_params = lu.get_run_params(param_name=param_name)
+
+    mismatch_to_true_weights_corr = []
+
+    true_corr = []
+    mismatch_corr = []
+    uncon_corr = []
+
+    true_corr_ci = []
+    mismatch_corr_ci = []
+    uncon_corr_ci = []
+
+    filter_tau = [0.1, 10, 20, 30, 40]
+    rng = np.random.default_rng(run_params['random_seed'])
+    num_repeats = 10
+    filt_length = int(np.max(filter_tau) * 3)
+
+    for i in range(num_repeats):
+        true_mask = rng.random((run_params['dynamics_dim'], run_params['dynamics_dim'])) < 0.1
+        true_mask[np.eye(true_mask.shape[0], dtype=bool)] = True
+        unconstrained_mask = np.ones_like(true_mask)
+
+        # define the model, setting specific parameters
+        model_true = Lgssm(run_params['dynamics_dim'], run_params['emissions_dim'], run_params['input_dim'],
+                           dynamics_lags=run_params['dynamics_lags'],
+                           dynamics_input_lags=run_params['dynamics_input_lags'],
+                           emissions_input_lags=run_params['emissions_input_lags'],
+                           param_props=run_params['param_props'])
+
+        model_true.param_props['mask']['dynamics_weights'] = true_mask
+        model_true.randomize_weights(rng=rng)
+        model_true.emissions_weights_init = np.eye(model_true.emissions_dim, model_true.dynamics_dim_full)
+        model_true.emissions_input_weights_init = np.zeros(model_true.emissions_input_weights_init.shape)
+        model_true.set_to_init()
+
+        # sample from the randomized model
+        data_train = \
+            model_true.sample_multiple(num_time=run_params['num_time'],
+                                       num_data_sets=run_params['num_data_sets'],
+                                       scattered_nan_freq=run_params['scattered_nan_freq'],
+                                       lost_emission_freq=run_params['lost_emission_freq'],
+                                       input_time_scale=run_params['input_time_scale'],
+                                       rng=rng)
+
+        data_test = \
+            model_true.sample_multiple(num_time=run_params['num_time'],
+                                       num_data_sets=run_params['num_data_sets'],
+                                       scattered_nan_freq=run_params['scattered_nan_freq'],
+                                       lost_emission_freq=run_params['lost_emission_freq'],
+                                       input_time_scale=run_params['input_time_scale'],
+                                       rng=rng)
+
+        # make a new model to fit to the data generated from the true model
+        model_trained = Lgssm(run_params['dynamics_dim'], run_params['emissions_dim'], run_params['input_dim'],
+                              verbose=run_params['verbose'], param_props=run_params['param_props'],
+                              dynamics_lags=run_params['dynamics_lags'],
+                              dynamics_input_lags=run_params['dynamics_input_lags'],
+                              emissions_input_lags=run_params['emissions_input_lags'],
+                              ridge_lambda=run_params['ridge_lambda'])
+
+        model_trained_mismatch = Lgssm(run_params['dynamics_dim'], run_params['emissions_dim'], run_params['input_dim'],
+                                       verbose=run_params['verbose'], param_props=run_params['param_props'],
+                                       dynamics_lags=run_params['dynamics_lags'],
+                                       dynamics_input_lags=run_params['dynamics_input_lags'],
+                                       emissions_input_lags=run_params['emissions_input_lags'],
+                                       ridge_lambda=run_params['ridge_lambda'])
+
+        model_trained_unconstrained = Lgssm(run_params['dynamics_dim'], run_params['emissions_dim'],
+                                            run_params['input_dim'],
+                                            verbose=run_params['verbose'], param_props=run_params['param_props'],
+                                            dynamics_lags=run_params['dynamics_lags'],
+                                            dynamics_input_lags=run_params['dynamics_input_lags'],
+                                            emissions_input_lags=run_params['emissions_input_lags'],
+                                            ridge_lambda=run_params['ridge_lambda'])
+
+        model_trained.param_props['mask']['dynamics_weights'] = true_mask
+        model_trained_mismatch.param_props['mask']['dynamics_weights'] = true_mask
+        model_trained_unconstrained.param_props['mask']['dynamics_weights'] = unconstrained_mask
+
+        # for any value that we are not fitting, set it to the true value
+        for k in model_trained.param_props['update'].keys():
+            if not model_trained.param_props['update'][k]:
+                init_key = k + '_init'
+                setattr(model_trained, init_key, getattr(model_true, init_key))
+
+        # for any value that we are not fitting, set it to the true value
+        for k in model_trained_mismatch.param_props['update'].keys():
+            if not model_trained_mismatch.param_props['update'][k]:
+                init_key = k + '_init'
+                setattr(model_trained_mismatch, init_key, getattr(model_true, init_key))
+
+        # for any value that we are not fitting, set it to the true value
+        for k in model_trained_unconstrained.param_props['update'].keys():
+            if not model_trained_unconstrained.param_props['update'][k]:
+                init_key = k + '_init'
+                setattr(model_trained_unconstrained, init_key, getattr(model_true, init_key))
+
+        model_trained.set_to_init()
+        model_trained_mismatch.set_to_init()
+        model_trained_unconstrained.set_to_init()
+
+        for tau in filter_tau:
+            if cpu_id == 0:
+                # create a filtered version of the train data
+                data_train_filtered = copy.deepcopy(data_train)
+                data_test_filtered = copy.deepcopy(data_test)
+
+                filt = np.exp(-1 / tau * np.arange(filt_length))
+                filt = filt[:, None] / np.sum(filt)
+                data_train_filtered['emissions'] = [convolve(i, filt, mode='full')[:-filt_length+1, :] for i in data_train_filtered['emissions']]
+                data_test_filtered['emissions'] = [convolve(i, filt, mode='full')[:-filt_length+1, :] for i in data_test_filtered['emissions']]
+
+                lu.save_run(save_folder, model_true=model_true, model_trained=model_trained, ep=0, data_train=data_train,
+                            data_test=data_test, params=run_params)
+                lu.save_run(save_folder, model_true=model_true, model_trained=model_trained_mismatch, ep=0, data_train=data_train_filtered,
+                            data_test=data_test, params=run_params)
+                lu.save_run(save_folder, model_true=model_true, model_trained=model_trained_unconstrained, ep=0, data_train=data_train_filtered,
+                            data_test=data_test, params=run_params)
+            else:
+                model_trained = None
+                model_trained_mismatch = None
+                model_trained_unconstrained = None
+                data_train = None
+                data_train_filtered = None
+                data_test = None
+                data_test_filtered = None
+                model_true = None
+
+            # get the log likelihood of the true data
+            ll_true_params = iu.parallel_get_ll(model_true, data_train)
+
+            if cpu_id == 0:
+                print('log likelihood of true parameters: ', ll_true_params)
+
+                model_true.log_likelihood = [ll_true_params]
+                lu.save_run(save_folder, model_true=model_true)
+
+            training_output = run_fitting(run_params, model_trained, data_train, data_test, save_folder, model_true=model_true)
+            training_output_mismatch = run_fitting(run_params, model_trained_mismatch, data_train_filtered, data_test_filtered, save_folder, model_true=model_true)
+            training_output_unconstrained = run_fitting(run_params, model_trained_unconstrained, data_train_filtered, data_test_filtered, save_folder, model_true=model_true)
+            model_trained = training_output['model']
+            model_trained_mismatch = training_output_mismatch['model']
+            model_trained_unconstrained = training_output_unconstrained['model']
+
+            if cpu_id == 0:
+                sample_rate = 2
+                window = (15, 30)
+
+                # measure the impulse responses in the data
+                data_irfs_train, data_irfs_sem_train, data_irfs_train_all = \
+                    ssmu.get_impulse_response_functions(data_train_filtered['emissions'], data_train_filtered['inputs'],
+                                                        sample_rate=sample_rate, window=(15, 30), sub_pre_stim=True)
+
+                nan_loc = np.all(np.isnan(data_irfs_train), axis=0)
+                data_irms_train = np.nansum(data_irfs_train[int(window[0]*sample_rate):], axis=0) / sample_rate
+                data_irms_train[nan_loc] = np.nan
+
+                data_irfs_test, data_irfs_sem_test, data_irfs_test_all = \
+                    ssmu.get_impulse_response_functions(data_test_filtered['emissions'], data_test_filtered['inputs'],
+                                                        sample_rate=sample_rate, window=(15, 30), sub_pre_stim=True)
+
+                nan_loc = np.all(np.isnan(data_irfs_test), axis=0)
+                data_irms_test = np.nansum(data_irfs_test[int(window[0]*sample_rate):], axis=0) / sample_rate
+                data_irms_test[nan_loc] = np.nan
+
+                # calculate the IRMs for each of the models
+                model_irms = ssmu.calculate_irms(model_trained, window=window)
+                model_irms_mismatch = ssmu.calculate_irms(model_trained_mismatch, window=window)
+                model_irms_unconstrained = ssmu.calculate_irms(model_trained_unconstrained, window=window)
+
+                data_irms_test[np.eye(data_irms_test.shape[0], dtype=bool)] = np.nan
+                data_irms_train[np.eye(data_irms_train.shape[0], dtype=bool)] = np.nan
+                model_irms[np.eye(model_irms.shape[0], dtype=bool)] = np.nan
+                model_irms_mismatch[np.eye(model_irms_mismatch.shape[0], dtype=bool)] = np.nan
+                model_irms_unconstrained[np.eye(model_irms_unconstrained.shape[0], dtype=bool)] = np.nan
+
+                model_irms_score = []
+                model_irms_score_ci = []
+                true_weights = model_trained.dynamics_weights.copy()
+                true_weights = true_weights[model_trained.param_props['mask']['dynamics_weights']]
+
+                mismatch_weights = model_trained_mismatch.dynamics_weights.copy()
+                mismatch_weights = mismatch_weights[model_trained_mismatch.param_props['mask']['dynamics_weights']]
+
+                c, ci = met.nan_corr(true_weights, mismatch_weights)
+                mismatch_to_true_weights_corr.append(c)
+                # mismatch_to_true_weights_corr.append(ci)
+
+                # for each model, correlate it to the measured irms in the test set
+                for mi, m in enumerate([model_irms, model_irms_unconstrained, model_irms_mismatch]):
+                    model_irms_to_measured_irms_test, model_irms_to_measured_irms_test_ci = (
+                        met.nan_corr(m, data_irms_test))
+                    model_irms_score.append(model_irms_to_measured_irms_test)
+                    model_irms_score_ci.append(model_irms_to_measured_irms_test_ci)
+
+                    if mi == 0:
+                        true_corr.append(model_irms_to_measured_irms_test)
+                        true_corr_ci.append(model_irms_to_measured_irms_test_ci)
+                    elif mi == 1:
+                        uncon_corr.append(model_irms_to_measured_irms_test)
+                        uncon_corr_ci.append(model_irms_to_measured_irms_test_ci)
+                    elif mi == 2:
+                        mismatch_corr.append(model_irms_to_measured_irms_test)
+                        mismatch_corr_ci.append(model_irms_to_measured_irms_test_ci)
+
+    if cpu_id == 0:
+        save_path = '/home/mcreamer/Documents/google_drive/leifer_pillow_lab/papers/2023_lds/figures/drafts_subpannels/nature_review_appeal/'
+        save_dict = {'true_corr': true_corr, 'uncon_corr': uncon_corr, 'mismatch_corr': mismatch_corr, 'mis_to_true_weights_corr': mismatch_to_true_weights_corr}
+
+        save_file = open(save_path + 'smoothed_mismatch_data.pkl', 'wb')
+        pickle.dump(save_dict, save_file)
+        save_file.close()
+    a=1
