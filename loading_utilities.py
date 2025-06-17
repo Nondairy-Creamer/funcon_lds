@@ -211,6 +211,16 @@ def load_data(data_path, num_data_sets=None, neuron_freq=0.0, held_out_data=[],
     data_test['cell_ids'] = [data_test['cell_ids'][i] for i in range(len(data_test['cell_ids'])) if neurons_to_keep[i]]
     data_test['sample_rate'] = sample_rate
 
+    train_save_path = data_path / 'data_train.pkl'
+    train_file = open(train_save_path, 'wb')
+    pickle.dump(data_train, train_file)
+    train_file.close()
+
+    test_save_path = data_path / 'data_test.pkl'
+    test_file = open(test_save_path, 'wb')
+    pickle.dump(data_test, test_file)
+    test_file.close()
+
     return data_train, data_test
 
 
