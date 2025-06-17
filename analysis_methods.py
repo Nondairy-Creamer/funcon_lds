@@ -182,6 +182,7 @@ def plot_model_params(model, model_true=None, cell_ids_chosen=None):
         A_full_true = model_params_true['trained']['dynamics_weights'][:model.dynamics_dim, :]
         A_true = np.split(A_full_true, model.dynamics_lags, axis=1)
         A_true = [i[np.ix_(neuron_inds_chosen, neuron_inds_chosen)] for i in A_true]
+        print(met.nan_corr(A_true[0], A[0])[0])
         # get rid of the diagonal
         for aa in range(len(A_true)):
             A_true[aa][np.eye(A_true[aa].shape[0], dtype=bool)] = np.nan
