@@ -319,6 +319,10 @@ for i in range(target_n - 1):
 cell_ids['chosen'] = top_cells
 
 ### Exploration
+
+# pf.compare_eig_spec(models)
+
+
 # Figure 1
 # pf.plot_irms(weights, cell_ids, fig_save_path=fig_save_path)
 # pf.plot_irms(weights, cell_ids, use_chosen_ids=False, fig_save_path=fig_save_path)
@@ -344,7 +348,7 @@ cell_ids['chosen'] = top_cells
 # pf.irm_vs_dirm(weights_masked, masks, cell_ids)
 
 # Figure 3
-pf.predict_chem_synapse_sign(weights, masks, cell_ids, metric=metric, rng=rng, fig_save_path=fig_save_path)
+# pf.predict_chem_synapse_sign(weights, masks, cell_ids, metric=metric, rng=rng, fig_save_path=fig_save_path)
 # pf.predict_gap_synapse_sign(weights_masked, masks, metric=metric, rng=rng, fig_save_path=fig_save_path)
 # pf.unconstrained_vs_constrained_model(weights_masked, fig_save_path=fig_save_path/'fig_3')
 # pf.uncon_vs_synap(models, fig_save_path=fig_save_path/'fig_3')
@@ -370,9 +374,9 @@ pairs = np.array([['RMDDR', 'RMDDL'],
 # pf.plot_sampled_model(data_train, posterior_dicts['synap'], sample_rate=sample_rate, cell_ids=cell_ids,
 #                       num_neurons=10, fig_save_path=fig_save_path/'fig_1')
 #
-pf.plot_specific_dirfs(weights_masked, masks, cell_ids, pairs, window, fig_save_path=fig_save_path/'fig_1')
+# pf.plot_specific_dirfs(weights_masked, masks, cell_ids, pairs, window, fig_save_path=fig_save_path/'fig_1')
 #
-# pf.weight_prediction_sweep(weights_masked, masks, weight_name='irms', fig_save_path=fig_save_path/'fig_1')
+pf.weight_prediction_sweep(weights_masked, masks, weight_name='irms', fig_save_path=fig_save_path/'fig_1')
 # pf.weight_prediction_sweep(weights_masked, masks, weight_name='corr', fig_save_path=fig_save_path/'fig_1')
 # pf.weight_prediction(weights_masked, masks, weight_name='irms', fig_save_path=fig_save_path/'fig_1')
 # pf.weight_prediction(weights_masked, masks, weight_name='corr', fig_save_path=fig_save_path/'fig_1')
@@ -384,8 +388,9 @@ pf.plot_specific_dirfs(weights_masked, masks, cell_ids, pairs, window, fig_save_
 
 # Figure 3
 # pf.plot_irms(weights, cell_ids, num_neurons=20, fig_save_path=fig_save_path/'fig_3')
-# pf.compare_model_irms(weights, masks, 'irms', fig_save_path=fig_save_path/'fig_3')
-# pf.compare_model_irms(weights, masks, 'corr', fig_save_path=fig_save_path/'fig_3')
+pf.compare_model_irms(weights, masks, 'irms', cell_ids=cell_ids['all'], fig_save_path=fig_save_path/'fig_3')
+pf.compare_model_irms(weights, masks, 'corr', cell_ids=cell_ids['all'], fig_save_path=fig_save_path/'fig_3')
+# pf.connected_unconnected_irms(weights, masks, 'irms', cell_ids=cell_ids['all'], fig_save_path=fig_save_path/'fig_s3')
 
 # Figure 4
 # pf.plot_missing_neuron(models, data_test, posterior_dicts['synap'], post_save_path=(saved_run_folder / model_folders['synap'] / 'posterior_test.pkl'),

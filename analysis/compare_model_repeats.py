@@ -6,6 +6,12 @@ import analysis_utilities as au
 import lgssm_utilities as ssmu
 import metrics as met
 from matplotlib import pyplot as plt
+import matplotlib as mpl
+
+# this file should plot the performance and test log likelihood for modesl trained
+# on the same data but initialized with random parameters
+
+colormap = mpl.colormaps['coolwarm']
 
 plot_color = {'data': np.array([217, 95, 2]) / 255,
               'synap': np.array([27, 158, 119]) / 255,
@@ -215,16 +221,9 @@ a=1
 plt.show()
 
 # comparing similarity between model weights
-model_name = 'unconstrained'
+model_name = 'synap'
 chosen_mask = models[model_name][0].param_props['mask']['dynamics_weights']
-
-chosen_model_file = open(
-    '/home/mcreamer/Documents/python/Creamer_LDS_2024/trained_models/exp_DL1_IL45_N80_R0_synap_nf10/20240422_152517/models/model_trained.pkl',
-    'rb')
-model_chosen = pickle.load(chosen_model_file)
-chosen_model_file.close()
-
-models[model_name].append(model_chosen)
+chosen_mask[np.eye(chosen_mask.shape[0], dtype=bool)] = False
 
 num_model = len(models[model_name])
 corr_out = np.zeros((num_model, num_model))
@@ -236,12 +235,13 @@ for i in range(num_model):
         corr_out[i, j] = met.nan_corr(a, b)[0]
 
 plt.figure()
-plt.imshow(corr_out)
+plt.imshow(corr_out, cmap=colormap)
 plt.clim(-1, 1)
 plt.colorbar()
 plt.xlabel('model repeats')
 plt.ylabel('model repeats')
 plt.title('correlation between model weights across repeats')
+plt.savefig(fig_save_path / 'fig_s3' / 'multiple_init_weight_corr.pdf')
 
 plt.figure()
 upper_vals = corr_out[np.triu_indices(num_model, k=1)]
