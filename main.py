@@ -66,17 +66,16 @@ def main(param_name, folder_name=None, extra_train_steps=None, prune_frac=None):
             slurm_fit = Slurm(**run_params['slurm'], output=slurm_output_path, job_name=job_name)
             cpus_per_task = run_params['slurm']['cpus_per_task']
 
-            run_command = ['module purge',
-                           'module load anaconda3/2022.10',
-                           'module load openmpi/gcc/4.1.6',
-                           'conda activate fast-mpi4py',
-                           'export MKL_NUM_THREADS=' + str(cpus_per_task),
-                           'export OPENBLAS_NUM_THREADS=' + str(cpus_per_task),
-                           'export OMP_NUM_THREADS=' + str(cpus_per_task),
-                           'srun python -uc \"import run_inference; ' + fit_model_command,
-                           ]
+            slurm_fit.add_cmd('module purge')
+            slurm_fit.add_cmd('module load anaconda3/2024.10')
+            slurm_fit.add_cmd('module load openmpi/gcc/4.1.6')
+            slurm_fit.add_cmd('conda activate fast-mpi4py')
+            slurm_fit.add_cmd(f'export MKL_NUM_THREADS={cpus_per_task}')
+            slurm_fit.add_cmd(f'export OPENBLAS_NUM_THREADS={cpus_per_task}')
+            slurm_fit.add_cmd(f'export OMP_NUM_THREADS={cpus_per_task}')
+            slurm_fit.add_cmd(f'srun python -uc "import run_inference; {fit_model_command}"')
 
-            slurm_fit.sbatch('\n'.join(run_command))
+            slurm_fit.sbatch()
 
     else:
         if run_type == 'new':
