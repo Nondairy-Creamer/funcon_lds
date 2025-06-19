@@ -68,7 +68,7 @@ def main(param_name, folder_name=None, extra_train_steps=None, prune_frac=None):
 
             run_command = ['module purge',
                            'module load anaconda3/2022.10',
-                           'module load openmpi/gcc/4.1.2',
+                           'module load openmpi/gcc/4.1.6',
                            'conda activate fast-mpi4py',
                            'export MKL_NUM_THREADS=' + str(cpus_per_task),
                            'export OPENBLAS_NUM_THREADS=' + str(cpus_per_task),
