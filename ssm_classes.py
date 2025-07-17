@@ -4,6 +4,7 @@ import inference_utilities as iu
 import warnings
 import analysis_utilities as au
 import copy
+import torch
 
 
 class Lgssm:
@@ -77,15 +78,15 @@ class Lgssm:
         tau = self.dynamics_lags / 3
         const = (np.exp(3) - 1) * np.exp(1 / tau - 3) / (np.exp(1 / tau) - 1)
         time_decay = np.exp(-np.arange(self.dynamics_lags) / tau) / const
-        self.dynamics_weights_init = 0.9 * np.tile(np.eye(self.dynamics_dim), (self.dynamics_lags, 1, 1))
+        self.dynamics_weights_init = 0.9 * torch.tile(torch.eye(self.dynamics_dim), (self.dynamics_lags, 1, 1))
         self.dynamics_weights_init = self.dynamics_weights_init * time_decay[:, None, None]
-        self.dynamics_cov_init = np.eye(self.dynamics_dim)
-        self.dynamics_input_weights_init = np.zeros((self.dynamics_input_lags, self.dynamics_dim, self.input_dim,))
+        self.dynamics_cov_init = torch.eye(self.dynamics_dim)
+        self.dynamics_input_weights_init = torch.zeros((self.dynamics_input_lags, self.dynamics_dim, self.input_dim,))
 
         # initialize emissions weights
-        self.emissions_weights_init = np.eye(self.emissions_dim, self.dynamics_dim_full)
-        self.emissions_input_weights_init = np.zeros((self.emissions_input_lags, self.emissions_dim, self.input_dim))
-        self.emissions_cov_init = np.eye(self.emissions_dim)
+        self.emissions_weights_init = torch.eye(self.emissions_dim, self.dynamics_dim_full)
+        self.emissions_input_weights_init = torch.zeros((self.emissions_input_lags, self.emissions_dim, self.input_dim))
+        self.emissions_cov_init = torch.eye(self.emissions_dim)
 
         self.pad_init_for_lags()
         self.set_to_init()
@@ -93,32 +94,32 @@ class Lgssm:
         # set up masks to constrain which parameters can be fit
         if self.param_props['shape']['dynamics_weights'] == 'anatomical':
             anat = au.load_anatomical_data(self.cell_ids)
-            combined_mask = (anat['chem_conn'] + anat['gap_conn'] + anat['pep_conn'] + np.eye(self.dynamics_dim)) > 0
-            self.param_props['mask']['dynamics_weights'] = np.tile(combined_mask, (1, self.dynamics_lags))
+            combined_mask = (anat['chem_conn'] + anat['gap_conn'] + anat['pep_conn'] + torch.eye(self.dynamics_dim)) > 0
+            self.param_props['mask']['dynamics_weights'] = torch.tile(combined_mask, (1, self.dynamics_lags))
         elif self.param_props['shape']['dynamics_weights'] == 'synaptic':
             anat = au.load_anatomical_data(self.cell_ids)
-            combined_mask = (anat['chem_conn'] + anat['gap_conn'] + np.eye(self.dynamics_dim)) > 0
-            self.param_props['mask']['dynamics_weights'] = np.tile(combined_mask, (1, self.dynamics_lags))
+            combined_mask = (anat['chem_conn'] + anat['gap_conn'] + torch.eye(self.dynamics_dim)) > 0
+            self.param_props['mask']['dynamics_weights'] = torch.tile(combined_mask, (1, self.dynamics_lags))
         elif self.param_props['shape']['dynamics_weights'] == 'not_synaptic':
             anat = au.load_anatomical_data(self.cell_ids)
-            combined_mask = ~(anat['chem_conn'] > 0) & ~(anat['gap_conn'] > 0) | np.eye(self.dynamics_dim, dtype=bool)
-            self.param_props['mask']['dynamics_weights'] = np.tile(combined_mask, (1, self.dynamics_lags))
+            combined_mask = ~(anat['chem_conn'] > 0) & ~(anat['gap_conn'] > 0) | torch.eye(self.dynamics_dim, dtype=bool)
+            self.param_props['mask']['dynamics_weights'] = torch.tile(combined_mask, (1, self.dynamics_lags))
         elif self.param_props['shape']['dynamics_weights'] == 'full':
-            self.param_props['mask']['dynamics_weights'] = np.ones((self.dynamics_dim, self.dynamics_dim_full)) == 1
+            self.param_props['mask']['dynamics_weights'] = torch.ones((self.dynamics_dim, self.dynamics_dim_full)) == 1
         else:
             raise Exception('dynamics weights mask shape not recognized')
 
         if self.param_props['shape']['dynamics_input_weights'] == 'diag':
-            self.param_props['mask']['dynamics_input_weights'] = np.tile(np.eye(self.input_dim, dtype=bool), (1, self.dynamics_input_lags))
+            self.param_props['mask']['dynamics_input_weights'] = torch.tile(torch.eye(self.input_dim, dtype=bool), (1, self.dynamics_input_lags))
         elif self.param_props['shape']['dynamics_input_weights'] == 'full':
-            self.param_props['mask']['dynamics_input_weights'] = np.ones((self.dynamics_dim, self.dynamics_input_dim_full)) == 1
+            self.param_props['mask']['dynamics_input_weights'] = torch.ones((self.dynamics_dim, self.dynamics_input_dim_full)) == 1
         else:
             raise Exception('dynamics input weights mask shape not recognized')
 
         if self.param_props['shape']['emissions_weights'] == 'diag':
-            self.param_props['mask']['emissions_weights'] = np.tile(np.eye(self.emissions_dim, dtype=bool), (1, self.dynamics_lags))
+            self.param_props['mask']['emissions_weights'] = torch.tile(torch.eye(self.emissions_dim, dtype=bool), (1, self.dynamics_lags))
         elif self.param_props['shape']['emissions_weights'] == 'full':
-            self.param_props['mask']['emissions_weights'] = np.ones((self.emissions_dim, self.dynamics_dim_full)) == 1
+            self.param_props['mask']['emissions_weights'] = torch.ones((self.emissions_dim, self.dynamics_dim_full)) == 1
         else:
             raise Exception('emissions weights mask shape not recognized')
 
@@ -136,12 +137,12 @@ class Lgssm:
         dynamics_tau = self.dynamics_lags / lag_factor
         dynamics_const = (np.exp(lag_factor) - 1) * np.exp(1 / dynamics_tau - lag_factor) / (np.exp(1 / dynamics_tau) - 1)
         dynamics_time_decay = np.exp(-np.arange(self.dynamics_lags) / dynamics_tau) / dynamics_const
-        self.dynamics_weights_init = rng.standard_normal((self.dynamics_dim, self.dynamics_dim))
-        self.dynamics_weights_init[np.eye(self.dynamics_dim, dtype=bool)] = max_eig_allowed
-        self.dynamics_weights_init = np.tile(self.dynamics_weights_init[None, :, :], (self.dynamics_lags, 1, 1))
+        self.dynamics_weights_init = torch.tensor(rng.standard_normal((self.dynamics_dim, self.dynamics_dim)))
+        self.dynamics_weights_init[torch.eye(self.dynamics_dim, dtype=torch.bool)] = max_eig_allowed
+        self.dynamics_weights_init = torch.tile(self.dynamics_weights_init[None, :, :], (self.dynamics_lags, 1, 1))
         self.dynamics_weights_init = self.dynamics_weights_init * self.param_props['mask']['dynamics_weights'][:, :self.dynamics_dim]
-        eig_vals, eig_vects = np.linalg.eig(self.dynamics_weights_init)
-        self.dynamics_weights_init = self.dynamics_weights_init / np.max(np.abs(eig_vals)) * max_eig_allowed
+        eig_vals, eig_vects = torch.linalg.eig(self.dynamics_weights_init)
+        self.dynamics_weights_init = self.dynamics_weights_init / torch.max(torch.abs(eig_vals)) * max_eig_allowed
         self.dynamics_weights_init = self.dynamics_weights_init * dynamics_time_decay[:, None, None]
 
         dynamics_input_tau = self.dynamics_input_lags / lag_factor
@@ -332,23 +333,18 @@ class Lgssm:
         dynamics_inputs = dynamics_inputs @ self.dynamics_input_weights.T
         emissions_inputs = emissions_inputs @ self.emissions_input_weights.T
 
-        filtered_means = np.zeros((num_timesteps, self.dynamics_dim_full))
-        if memmap_cpu_id is None:
-            filtered_covs = np.zeros((num_timesteps, self.dynamics_dim_full, self.dynamics_dim_full))
-        else:
-            file_path = '/tmp/filtered_covs_' + str(memmap_cpu_id) + '.tmp'
-            filtered_covs = np.memmap(file_path, dtype='float64', mode='w+',
-                                      shape=((num_timesteps, self.dynamics_dim_full, self.dynamics_dim_full)))
+        filtered_means = torch.zeros((num_timesteps, self.dynamics_dim_full))
+        filtered_covs = torch.zeros((num_timesteps, self.dynamics_dim_full, self.dynamics_dim_full))
 
         # Shorthand: get parameters and input for time index t
         y = emissions[0, :]
 
         # locate nans and set covariance at their location to a large number to marginalize over them
-        nan_loc = np.isnan(y)
-        y = np.where(nan_loc, 0, y)
-        R = np.where(np.diag(nan_loc), self.epsilon, self.emissions_cov)
+        nan_loc = torch.isnan(y)
+        y = torch.where(nan_loc, 0, y)
+        R = torch.where(torch.diag(nan_loc), self.epsilon, self.emissions_cov)
 
-        CtRinv = np.linalg.solve(R, self.emissions_weights).T
+        CtRinv = torch.linalg.solve(R, self.emissions_weights).T
         CtRinvC = CtRinv @ self.emissions_weights
 
         pred_mean = init_mean.copy()
@@ -358,18 +354,18 @@ class Lgssm:
         ll_mu = self.emissions_weights @ pred_mean + emissions_inputs[0, :] + emissions_offset
 
         ll_cov = self.emissions_weights @ pred_cov @ self.emissions_weights.T + R
-        ll_cov_logdet = np.linalg.slogdet(ll_cov)[1]
+        ll_cov_logdet = torch.linalg.slogdet(ll_cov)[1]
 
         mean_diff = y - ll_mu
         ll = ll + -1 / 2 * (emissions.shape[1] * np.log(2 * np.pi) + ll_cov_logdet +
-                            np.dot(mean_diff, np.linalg.solve(ll_cov, mean_diff)))
+                            torch.dot(mean_diff, torch.linalg.solve(ll_cov, mean_diff)))
 
         # K = pred_cov.T @ np.linalg.solve(ll_cov, self.emissions_weights).T
         # filtered_cov = pred_cov - K @ ll_cov @ K.T
-        filtered_cov = np.linalg.inv(np.linalg.inv(pred_cov) + CtRinvC)
+        filtered_cov = torch.linalg.inv(torch.linalg.inv(pred_cov) + CtRinvC)
 
         # filtered_mean = pred_mean + K @ mean_diff
-        filtered_mean = filtered_cov @ (CtRinv @ yyctr + np.linalg.solve(pred_cov, pred_mean))
+        filtered_mean = filtered_cov @ (CtRinv @ yyctr + torch.linalg.solve(pred_cov, pred_mean))
 
         filtered_means[0, :] = filtered_mean.copy()
         filtered_covs[0, :, :] = filtered_cov.copy()
@@ -381,10 +377,10 @@ class Lgssm:
 
             # locate nans and set covariance at their location to a large number to marginalize over them
             nan_loc = np.isnan(y)
-            y = np.where(nan_loc, 0, y)
-            R = np.where(np.diag(nan_loc), self.epsilon, self.emissions_cov)
+            y = torch.where(nan_loc, 0, y)
+            R = torch.where(torch.diag(nan_loc), self.epsilon, self.emissions_cov)
 
-            CtRinv = np.linalg.solve(R, self.emissions_weights).T
+            CtRinv = torch.linalg.solve(R, self.emissions_weights).T
             CtRinvC = CtRinv @ self.emissions_weights
 
             # Predict the next state
@@ -400,16 +396,16 @@ class Lgssm:
 
             mean_diff = y - ll_mu
             ll = ll + -1/2 * (emissions.shape[1] * np.log(2*np.pi) + ll_cov_logdet +
-                              np.dot(mean_diff, np.linalg.solve(ll_cov, mean_diff)))
+                              torch.dot(mean_diff, torch.linalg.solve(ll_cov, mean_diff)))
 
             # Condition on this emission
             # Compute the Kalman gain
             # K = pred_cov.T @ np.linalg.solve(ll_cov, self.emissions_weights).T
             # filtered_cov = pred_cov - K @ ll_cov @ K.T
-            filtered_cov = np.linalg.inv(np.linalg.inv(pred_cov) + CtRinvC)
+            filtered_cov = torch.linalg.inv(torch.linalg.inv(pred_cov) + CtRinvC)
 
             # filtered_mean = pred_mean + K @ mean_diff
-            filtered_mean = filtered_cov @ (CtRinv @ yyctr + np.linalg.solve(pred_cov, pred_mean))
+            filtered_mean = filtered_cov @ (CtRinv @ yyctr + torch.linalg.solve(pred_cov, pred_mean))
 
             filtered_means[t, :] = filtered_mean
             filtered_covs[t, :, :] = filtered_cov
@@ -842,18 +838,18 @@ class Lgssm:
 
         if add_pad:
             final_time = num_time
-            pad = np.zeros((lags - 1, num_neurons))
-            data = np.concatenate((pad, data), axis=0)
+            pad = torch.zeros((lags - 1, num_neurons))
+            data = torch.cat((pad, data), dim=0)
         else:
             final_time = num_time - lags + 1
 
-        lagged_data = np.zeros((final_time, 0))
+        lagged_data = torch.zeros((final_time, 0))
 
         for tau in reversed(range(lags)):
             if tau == lags-1:
-                lagged_data = np.concatenate((lagged_data, data[tau:, :]), axis=1)
+                lagged_data = torch.cat((lagged_data, data[tau:, :]), dim=1)
             else:
-                lagged_data = np.concatenate((lagged_data, data[tau:-lags + tau + 1, :]), axis=1)
+                lagged_data = torch.cat((lagged_data, data[tau:-lags + tau + 1, :]), dim=1)
 
         return lagged_data
 
