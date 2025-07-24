@@ -347,8 +347,8 @@ class Lgssm:
         CtRinv = torch.linalg.solve(R, self.emissions_weights).T
         CtRinvC = CtRinv @ self.emissions_weights
 
-        pred_mean = init_mean.copy()
-        pred_cov = init_cov.copy()
+        pred_mean = init_mean.clone()
+        pred_cov = init_cov.clone()
 
         yyctr = y - emissions_inputs[0, :] - emissions_offset
         ll_mu = self.emissions_weights @ pred_mean + emissions_inputs[0, :] + emissions_offset
@@ -367,8 +367,8 @@ class Lgssm:
         # filtered_mean = pred_mean + K @ mean_diff
         filtered_mean = filtered_cov @ (CtRinv @ yyctr + torch.linalg.solve(pred_cov, pred_mean))
 
-        filtered_means[0, :] = filtered_mean.copy()
-        filtered_covs[0, :, :] = filtered_cov.copy()
+        filtered_means[0, :] = filtered_mean.clone()
+        filtered_covs[0, :, :] = filtered_cov.clone()
 
         # step through the loop and keep calculating the covariances until they converge
         for t in range(1, num_timesteps):
@@ -392,7 +392,7 @@ class Lgssm:
             ll_mu = self.emissions_weights @ pred_mean + emissions_inputs[t, :] + emissions_offset
 
             ll_cov = self.emissions_weights @ pred_cov @ self.emissions_weights.T + R
-            ll_cov_logdet = np.linalg.slogdet(ll_cov)[1]
+            ll_cov_logdet = torch.linalg.slogdet(ll_cov)[1]
 
             mean_diff = y - ll_mu
             ll = ll + -1/2 * (emissions.shape[1] * np.log(2*np.pi) + ll_cov_logdet +

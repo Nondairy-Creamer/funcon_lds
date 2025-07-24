@@ -4,6 +4,9 @@ import warnings
 import copy
 import time
 import csv
+import torch
+from torch.autograd.functional import hessian
+from torch.autograd.functional import hvp
 
 
 def mask_weights_to_nan(weights, irm_mask, corr_mask, combine_masks=False):
@@ -401,3 +404,88 @@ def approximate_hessian_diagonal(model, data):
     with open('model_weights.csv', 'w', newline='') as f:
         writer = csv.writer(f)
         writer.writerows(csv_output)
+
+
+def cg_solve(Hv_fn, b, tol=1e-5, maxiter=None):
+    """Conjugate‑gradient to solve Hx = b for symmetric pos‑def H via Hv_fn."""
+    x = torch.zeros_like(b)
+    r = b.clone()
+    p = r.clone()
+    rsold = r.dot(r)
+    maxiter = maxiter or (2*b.numel())
+    for _ in range(maxiter):
+        Hp = Hv_fn(x, p)  # note: Hv_fn(w, v) -> H(w) @ v
+        alpha = rsold / (p.dot(Hp) + 1e-8)
+        x = x + alpha*p
+        r = r - alpha*Hp
+        rsnew = r.dot(r)
+        if torch.sqrt(rsnew) < tol:
+            break
+        p = r + (rsnew/rsold)*p
+        rsold = rsnew
+    return x
+
+
+def diag_inv_hessian_estimate(loss_fn, flat_w, mask, K=20):
+    """
+    Estimates diag(H^{-1}) for H = ∇² loss_fn(flat_w)
+    mask: boolean mask into the original full-weight tensor
+    flat_w: the 1‑D vector of free params
+    """
+    P = flat_w.numel()
+    est = torch.zeros(P, device=flat_w.device)
+    for _ in range(K):
+        # 1) sample v ∈ {+1, -1}^P
+        v = torch.randint(0, 2, (P,), device=flat_w.device, dtype=torch.float32)*2 - 1
+
+        # 2) define Hv_fn(w, v): compute H(w) @ v
+        def Hv_fn(_, vec):
+            _, hvps = hvp(loss_fn, (flat_w,), (vec,))
+            return hvps[0]
+
+        # 3) solve H x = v  →  x ≈ H^{-1}v
+        x = cg_solve(Hv_fn, v, tol=1e-5)
+
+        # 4) accumulate v * x
+        est += v * x
+
+    return est.div_(K)
+
+
+def calc_hessian_torch(model, data):
+    # this function will use finite differences to calculate the approximate 2nd order derivative
+    # of the loss wrt each parameter in the dynamics matrix A
+    cell_ids = model.cell_ids.copy()
+    num_neurons = len(cell_ids)
+    # model.dynamics_weights = torch.tensor(model.dynamics_weights, requires_grad=True)
+    W = model.dynamics_weights.clone().detach().requires_grad_(True)
+    weights_mask = model.param_props['mask']['dynamics_weights']
+    flat_w = W[weights_mask]
+    num_data = len(data['emissions'])
+    num_data = 1
+
+    def loss_fn(w):
+        full_weights = W.clone()
+        full_weights[weights_mask] = w
+        model.dynamics_weights = full_weights
+
+        loss = 0.0
+        for d in range(num_data):
+            loss += model.lgssm_filter(data['emissions'][d], data['inputs'][d], data['emissions_offset'][d], data['init_mean'][d], data['init_cov'][d])[0]
+
+        return loss
+
+    # calculate the hessian here
+    diag_est = diag_inv_hessian_estimate(loss_fn, flat_w, weights_mask, K=10)
+
+    H = hessian(loss_fn, flat_w)
+    H_inv = torch.linalg.inv(H)
+    vars = torch.diag(H_inv)
+    stds = torch.sqrt(vars)
+
+    csv_output = [['presynaptic cell', 'postsynaptic cell', 'weight', 'standard_deviation']]
+
+    with open('model_weights.csv', 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerows(csv_output)
+
