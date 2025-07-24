@@ -2,6 +2,8 @@ import numpy as np
 import analysis_utilities as au
 import warnings
 import copy
+import time
+import csv
 
 
 def mask_weights_to_nan(weights, irm_mask, corr_mask, combine_masks=False):
@@ -343,3 +345,59 @@ def predict_model_corr_coef(model, num_iter=100):
 
     return model_corr
 
+
+def approximate_hessian_diagonal(model, data):
+    # this function will use finite differences to calculate the approximate 2nd order derivative
+    # of the loss wrt each parameter in the dynamics matrix A
+
+    cell_ids = model.cell_ids.copy()
+    num_neurons = len(cell_ids)
+    weights = model.dynamics_weights
+    weights_mask = model.param_props['mask']['dynamics_weights']
+
+    smallest_weight = np.min(np.abs(weights[weights_mask]))
+    epsilon = 0.01 * smallest_weight
+    num_weights = np.sum(weights_mask) - num_neurons  # number of off-diagonal weights
+    num_data = len(data['emissions'])
+    num_data = 1
+
+    loss = 0
+    for d in range(num_data):
+        loss += model.lgssm_filter(data['emissions'][d], data['inputs'][d], data['emissions_offset'][d], data['init_mean'][d], data['init_cov'][d])[0]
+
+    csv_output = [['presynaptic cell', 'postsynaptic cell', 'weight', 'standard_deviation']]
+
+    counter = 0
+    start = time.time()
+    for i in range(num_neurons):
+        for j in range(num_neurons):
+            if i == j:
+                continue
+
+            if weights_mask[j, i]:
+                model_plus = copy.deepcopy(model)
+                model_minus = copy.deepcopy(model)
+                model_plus.dynamics_weights[j, i] += epsilon
+                model_minus.dynamics_weights[j, i] -= epsilon
+
+                loss_plus = 0
+                loss_minus = 0
+                for d in range(num_data):
+                    loss_plus += model_plus.lgssm_filter(data['emissions'][d], data['inputs'][d], data['emissions_offset'][d], data['init_mean'][d], data['init_cov'][d])[0]
+                    loss_minus += model_plus.lgssm_filter(data['emissions'][d], data['inputs'][d], data['emissions_offset'][d], data['init_mean'][d], data['init_cov'][d])[0]
+                hessian = 1 / epsilon**2 * (loss_plus - 2 * loss + loss_minus)
+
+                # save the output
+                standard_deviation = np.sqrt(- 1 / hessian)
+                csv_output.append([cell_ids[i], cell_ids[j], f"{weights[j, i]:.8f}", f"{standard_deviation:.8f}"])
+
+                counter += 1
+                time_elapsed = time.time() - start
+                print(counter, '/', num_weights, 'finished')
+                print(time.time() - start, 'elapsed')
+                time_remaining = time_elapsed / counter * (num_weights - counter)
+                print('Estimated', time_remaining, 's remaining')
+
+    with open('model_weights.csv', 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerows(csv_output)
