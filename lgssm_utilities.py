@@ -462,7 +462,6 @@ def calc_hessian_torch(model, data):
     weights_mask = torch.tensor(model.param_props['mask']['dynamics_weights'])
     flat_w = W[weights_mask]
     num_data = len(data['emissions'])
-    num_data = 1
 
     def loss_fn(w):
         full_weights = W.clone()
