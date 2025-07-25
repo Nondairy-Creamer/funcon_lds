@@ -1094,7 +1094,7 @@ def fit_hessian(param_name, save_folder):
         dtype = torch.float32
         device = 'cpu'
 
-        data_folder = Path(run_params['data_folder'])
+        data_folder = Path(run_params['data_path'])
 
         model_file = open(data_folder / 'models' / 'model_trained.pkl', 'rb')
         model = pickle.load(model_file)
