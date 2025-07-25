@@ -8,8 +8,8 @@ import torch
 dtype = torch.float32
 device = 'cpu'
 
-data_folder = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/exp_DL1_IL45_N80_R0_synap_nf10/20240422_152517/')
-# data_folder = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/syn_test/20250717_183110/')
+# data_folder = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/exp_DL1_IL45_N80_R0_synap_nf10/20240422_152517/')
+data_folder = Path('/home/mcreamer/Documents/python/funcon_lds/trained_models/syn_test/20250725_115753/')
 
 model_file = open(data_folder / 'models' / 'model_trained.pkl', 'rb')
 model = pickle.load(model_file)

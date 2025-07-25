@@ -459,7 +459,7 @@ def calc_hessian_torch(model, data):
     num_neurons = len(cell_ids)
     # model.dynamics_weights = torch.tensor(model.dynamics_weights, requires_grad=True)
     W = model.dynamics_weights.clone().detach().requires_grad_(True)
-    weights_mask = model.param_props['mask']['dynamics_weights']
+    weights_mask = torch.tensor(model.param_props['mask']['dynamics_weights'])
     flat_w = W[weights_mask]
     num_data = len(data['emissions'])
     num_data = 1
@@ -471,19 +471,28 @@ def calc_hessian_torch(model, data):
 
         loss = 0.0
         for d in range(num_data):
-            loss += model.lgssm_filter(data['emissions'][d], data['inputs'][d], data['emissions_offset'][d], data['init_mean'][d], data['init_cov'][d])[0]
+            loss += model.lgssm_filter_torch(data['emissions'][d], data['inputs'][d], data['emissions_offset'][d], data['init_mean'][d], data['init_cov'][d])[0]
 
         return loss
 
     # calculate the hessian here
-    diag_est = diag_inv_hessian_estimate(loss_fn, flat_w, weights_mask, K=10)
+    # diag_est = diag_inv_hessian_estimate(loss_fn, flat_w, weights_mask, K=10)
 
+    start = time.time()
     H = hessian(loss_fn, flat_w)
-    H_inv = torch.linalg.inv(H)
+    H_inv = torch.linalg.inv(-H)
     vars = torch.diag(H_inv)
     stds = torch.sqrt(vars)
+    print(len(flat_w), 'parameters took', time.time() - start, 's')
+
 
     csv_output = [['presynaptic cell', 'postsynaptic cell', 'weight', 'standard_deviation']]
+    count = 0
+    for i in range(num_neurons):
+        for j in range(num_neurons):
+            if weights_mask[i, j]:
+                csv_output.append([cell_ids[j], cell_ids[i], f"{W[i, j]:.8f}", f"{stds[count]:.8f}"])
+                count += 1
 
     with open('model_weights.csv', 'w', newline='') as f:
         writer = csv.writer(f)
