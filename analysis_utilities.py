@@ -1,5 +1,4 @@
 import numpy as np
-import wormneuroatlas as wa
 import pickle
 from pathlib import Path
 import metrics as met
@@ -62,7 +61,7 @@ def load_anatomical_data(cell_ids=None, comb_style='or'):
     # load in anatomical data
     # data downloaded from https://nemanode.org/ on November 1st, 2025
     connectome_folder = Path('anatomical_data/worm_connectomes')
-    connectome_files = ['white 1986_jsh.csv', 'white 1986_n2u.csv', 'witvliet_2020_7.csv', 'witvliet_2020_8.csv']
+    connectome_files = ['white_1986_jsh.csv', 'white_1986_n2u.csv', 'witvliet_2020_7.csv', 'witvliet_2020_8.csv']
 
     def read_in_connectome(file_name, cell_ids, included_types=['chem', 'gap'], delimiter='\t'):
         pre_cell_ids = list(np.loadtxt(connectome_folder / file_name, delimiter=delimiter, usecols=0, dtype=str))[1:]
@@ -112,7 +111,7 @@ def load_anatomical_data(cell_ids=None, comb_style='or'):
     all_gap_conn = np.stack(gap_conn)
 
     chem_conn = np.sum(all_chem_conn, axis=0)
-    gap_conn = np.sum(all_chem_conn, axis=0)
+    gap_conn = np.sum(all_gap_conn, axis=0)
 
     # if comb_style is 'or' then any connection found in any of the data sets is included. no changes necessary
     # if comb_style is 'and' then only keep connections found in each data set

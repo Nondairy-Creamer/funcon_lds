@@ -101,7 +101,7 @@ def preprocess_data(emissions, inputs, start_index=0, correct_photobleach=False,
 
 
 def load_data(data_path, num_data_sets=None, neuron_freq=0.0, held_out_data=[],
-              hold_out='worm', upsample_factor=1, hold_out_start=0.9):
+              hold_out='worm', upsample_factor=1, hold_out_start=0.9, black_list=['AWCL', 'AWCR']):
     data_path = Path(data_path)
 
     preprocess_filename = 'funcon_preprocessed_data.pkl'
@@ -125,6 +125,14 @@ def load_data(data_path, num_data_sets=None, neuron_freq=0.0, held_out_data=[],
         this_emissions = preprocessed_data['emissions']
         this_inputs = preprocessed_data['inputs']
         this_cell_ids = preprocessed_data['cell_ids']
+
+        # remove any neurons on the blacklist
+        for bl in black_list:
+            idx = this_cell_ids.index(bl) if bl in this_cell_ids else -1
+            if idx != -1:
+                this_cell_ids.pop(idx)
+                np.delete(this_emissions, idx, axis=1)
+                np.delete(this_inputs, idx, axis=1)
 
         emissions_train.append(this_emissions)
         inputs_train.append(this_inputs)
