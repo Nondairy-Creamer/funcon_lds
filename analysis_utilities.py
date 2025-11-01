@@ -58,52 +58,72 @@ def stack_weights(weights, num_split, axis=-1):
     return np.stack(np.split(weights, num_split, axis=axis))
 
 
-def load_anatomical_data(cell_ids=None):
+def load_anatomical_data(cell_ids=None, comb_style='or'):
     # load in anatomical data
-    chem_path = Path('anatomical_data/chemical.pkl')
-    if not chem_path.exists():
-        chem_path = Path('../') / chem_path
-    chem_file = open(chem_path, 'rb')
-    chemical_synapse_connectome = pickle.load(chem_file)
-    chem_file.close()
+    # data downloaded from https://nemanode.org/ on November 1st, 2025
+    connectome_folder = Path('anatomical_data/worm_connectomes')
+    connectome_files = ['white 1986_jsh.csv', 'white 1986_n2u.csv', 'witvliet_2020_7.csv', 'witvliet_2020_8.csv']
 
-    gap_path = Path('anatomical_data/gap.pkl')
-    if not gap_path.exists():
-        gap_path = Path('../') / gap_path
-    gap_file = open(gap_path, 'rb')
-    gap_junction_connectome = pickle.load(gap_file)
-    gap_file.close()
+    def read_in_connectome(file_name, cell_ids, included_types=['chem', 'gap'], delimiter='\t'):
+        pre_cell_ids = list(np.loadtxt(connectome_folder / file_name, delimiter=delimiter, usecols=0, dtype=str))[1:]
+        post_cell_ids = list(np.loadtxt(connectome_folder / file_name, delimiter=delimiter, usecols=1, dtype=str))[1:]
+        synapse_type = list(np.loadtxt(connectome_folder / file_name, delimiter=delimiter, usecols=2, dtype=str))[1:]
+        synapses = np.loadtxt(connectome_folder / file_name, skiprows=1, delimiter=delimiter, usecols=3)
+        num_connections = len(pre_cell_ids)
 
-    peptide_path = Path('anatomical_data/peptide.pkl')
-    if not peptide_path.exists():
-        peptide_path = Path('../') / peptide_path
-    peptide_file = open(peptide_path, 'rb')
-    peptide_connectome = pickle.load(peptide_file)
-    peptide_file.close()
+        connectome = np.zeros((len(cell_ids), len(cell_ids)))
+        for i in range(num_connections):
+            # check if both cells are in the list of cell ids
+            if pre_cell_ids[i] in cell_ids and post_cell_ids[i] in cell_ids:
+                pre_index = cell_ids.index(pre_cell_ids[i])
+                post_index = cell_ids.index(post_cell_ids[i])
 
-    # syn_size_connectome = load_synapse_size(cell_ids.copy())
+                if synapse_type[i] == 'electrical':
+                    if 'gap' in included_types:
+                        # add the post to pre electrical synapse
+                        connectome[post_index, pre_index] += synapses[i]
 
-    ids_path = Path('anatomical_data/cell_ids.pkl')
-    if not ids_path.exists():
-        ids_path = Path('../') / ids_path
-    ids_file = open(ids_path, 'rb')
-    atlas_ids = pickle.load(ids_file)
-    ids_file.close()
+                        # if the neurons are different add in the connection in the other direction
+                        if pre_index != post_index:
+                            connectome[pre_index, post_index] += synapses[i]
+                else:
+                    if 'chem' in included_types:
+                        # add in the pre to post chemical synapse
+                        connectome[post_index, pre_index] += synapses[i]
 
-    if cell_ids is not None:
-        if '0' in cell_ids:
-            # if the data is synthetic just choose the first n neurons for testing
-            atlas_inds = np.arange(len(cell_ids))
-        else:
-            atlas_inds = [atlas_ids.index(i) for i in cell_ids]
+        return connectome
+    
+    if cell_ids is None:
+        ids_path = Path('anatomical_data/cell_ids.pkl')
+        if not ids_path.exists():
+            ids_path = Path('../') / ids_path
+        ids_file = open(ids_path, 'rb')
+        cell_ids = pickle.load(ids_file)
+        ids_file.close()
 
-        chemical_synapse_connectome = chemical_synapse_connectome[np.ix_(atlas_inds, atlas_inds)]
-        gap_junction_connectome = gap_junction_connectome[np.ix_(atlas_inds, atlas_inds)]
-        peptide_connectome = peptide_connectome[np.ix_(atlas_inds, atlas_inds)]
+    chem_conn = []
+    gap_conn = []
 
-    anatomy_dict = {'chem_conn': chemical_synapse_connectome,
-                    'gap_conn': gap_junction_connectome,
-                    'pep_conn': peptide_connectome}
+    for f in connectome_files:
+        chem_conn.append(read_in_connectome(f, cell_ids, included_types=['chem'], delimiter='\t'))
+        gap_conn.append(read_in_connectome(f, cell_ids, included_types=['gap'], delimiter='\t'))
+
+    all_chem_conn = np.stack(chem_conn)
+    all_gap_conn = np.stack(gap_conn)
+
+    chem_conn = np.sum(all_chem_conn, axis=0)
+    gap_conn = np.sum(all_chem_conn, axis=0)
+
+    # if comb_style is 'or' then any connection found in any of the data sets is included. no changes necessary
+    # if comb_style is 'and' then only keep connections found in each data set
+    if comb_style == 'and':
+        shared_chem_connections = np.all(all_chem_conn > 0, axis=0)
+        shared_gap_connections = np.all(all_gap_conn > 0, axis=0)
+        chem_conn[~shared_chem_connections] = 0
+        gap_conn[~shared_gap_connections] = 0
+
+    anatomy_dict = {'chem_conn': chem_conn,
+                    'gap_conn': gap_conn}
 
     return anatomy_dict
 
@@ -142,23 +162,6 @@ def load_synapse_size(cell_ids):
         synapse_size[ii, :] = synapse_size_data[presynaptic_cell_ids.index(i), postsynaptic_cell_indicies]
 
     return synapse_size
-
-
-def get_anatomical_data(cell_ids):
-    # load in anatomical data
-    watlas = wa.NeuroAtlas()
-    atlas_ids = list(watlas.neuron_ids)
-    chemical_connectome_full = watlas.get_chemical_synapses()
-    gap_junction_connectome_full = watlas.get_gap_junctions()
-    peptide_connectome_full = watlas.get_peptidergic_connectome()
-    atlas_ids[atlas_ids.index('AWCON')] = 'AWCR'
-    atlas_ids[atlas_ids.index('AWCOFF')] = 'AWCL'
-    atlas_inds = [atlas_ids.index(i) for i in cell_ids]
-    chem_conn = chemical_connectome_full[np.ix_(atlas_inds, atlas_inds)]
-    gap_conn = gap_junction_connectome_full[np.ix_(atlas_inds, atlas_inds)]
-    pep_conn = peptide_connectome_full[np.ix_(atlas_inds, atlas_inds)]
-
-    return chem_conn, gap_conn, pep_conn
 
 
 def interleave(a, b):

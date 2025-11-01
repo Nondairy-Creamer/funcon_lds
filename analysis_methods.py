@@ -583,10 +583,10 @@ def plot_irm(model_weights, measured_irm, model_irm, data_corr, cell_ids, cell_i
 def compare_irm_w_anatomy(model_weights, measured_irm, model_irm, data_corr, cell_ids, cell_ids_chosen):
     chosen_neuron_inds = [cell_ids.index(i) for i in cell_ids_chosen]
 
-    chem_conn, gap_conn, pep_conn = au.load_anatomical_data(cell_ids)
+    chem_conn, gap_conn = au.load_anatomical_data(cell_ids)
 
     # compare each of the weights against measured
-    anatomy_list = [chem_conn, gap_conn, pep_conn]
+    anatomy_list = [chem_conn, gap_conn]
 
     # get everything in magnitudes
     model_weights = [np.abs(i) for i in model_weights]
