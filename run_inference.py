@@ -29,7 +29,8 @@ def fit_synthetic(param_name, save_folder):
         # define the model, setting specific parameters
         model_true = Lgssm(run_params['dynamics_dim'], run_params['emissions_dim'], run_params['input_dim'],
                            dynamics_lags=run_params['dynamics_lags'], dynamics_input_lags=run_params['dynamics_input_lags'],
-                           emissions_input_lags=run_params['emissions_input_lags'], param_props=run_params['param_props'])
+                           emissions_input_lags=run_params['emissions_input_lags'], param_props=run_params['param_props'],
+                           anatomy_combine_style=run_params['anatomy_combine_style'])
 
         model_true.randomize_weights(rng=rng)
         if model_true.param_props['update']['emissions_weights']:
@@ -65,7 +66,8 @@ def fit_synthetic(param_name, save_folder):
         model_trained = Lgssm(run_params['dynamics_dim'], run_params['emissions_dim'], run_params['input_dim'],
                               verbose=run_params['verbose'], param_props=run_params['param_props'],
                               dynamics_lags=run_params['dynamics_lags'], dynamics_input_lags=run_params['dynamics_input_lags'],
-                              emissions_input_lags=run_params['emissions_input_lags'], ridge_lambda=run_params['ridge_lambda'])
+                              emissions_input_lags=run_params['emissions_input_lags'], ridge_lambda=run_params['ridge_lambda'],
+                              anatomy_combine_style=run_params['anatomy_combine_style'])
 
         # for any value that we are not fitting, set it to the true value
         for k in model_trained.param_props['update'].keys():
@@ -143,7 +145,8 @@ def fit_experimental(param_name, save_folder):
                               verbose=run_params['verbose'],
                               param_props=run_params['param_props'],
                               ridge_lambda=run_params['ridge_lambda'],
-                              cell_ids=data_train['cell_ids'])
+                              cell_ids=data_train['cell_ids'],
+                              anatomy_combine_style=run_params['anatomy_combine_style'])
 
         # model_trained.emissions_weights = np.eye(model_trained.emissions_dim, model_trained.dynamics_dim_full)
         model_trained.emissions_input_weights = np.zeros(model_trained.emissions_input_weights.shape)
@@ -635,7 +638,8 @@ def fit_mismatch(param_name, save_folder):
                 # define the model, setting specific parameters
                 model_true = Lgssm(run_params['dynamics_dim'], run_params['emissions_dim'], run_params['input_dim'],
                                    dynamics_lags=run_params['dynamics_lags'], dynamics_input_lags=run_params['dynamics_input_lags'],
-                                   emissions_input_lags=run_params['emissions_input_lags'], param_props=run_params['param_props'])
+                                   emissions_input_lags=run_params['emissions_input_lags'], param_props=run_params['param_props'],
+                                   anatomy_combine_style=run_params['anatomy_combine_style'])
 
                 model_true.param_props['mask']['dynamics_weights'] = true_mask
 
@@ -671,17 +675,20 @@ def fit_mismatch(param_name, save_folder):
                 model_trained = Lgssm(run_params['dynamics_dim'], run_params['emissions_dim'], run_params['input_dim'],
                                       verbose=run_params['verbose'], param_props=run_params['param_props'],
                                       dynamics_lags=run_params['dynamics_lags'], dynamics_input_lags=run_params['dynamics_input_lags'],
-                                      emissions_input_lags=run_params['emissions_input_lags'], ridge_lambda=run_params['ridge_lambda'])
+                                      emissions_input_lags=run_params['emissions_input_lags'], ridge_lambda=run_params['ridge_lambda'],
+                                      anatomy_combine_style=run_params['anatomy_combine_style'])
 
                 model_trained_mismatch = Lgssm(run_params['dynamics_dim'], run_params['emissions_dim'], run_params['input_dim'],
                                                verbose=run_params['verbose'], param_props=run_params['param_props'],
                                                dynamics_lags=run_params['dynamics_lags'], dynamics_input_lags=run_params['dynamics_input_lags'],
-                                               emissions_input_lags=run_params['emissions_input_lags'], ridge_lambda=run_params['ridge_lambda'])
+                                               emissions_input_lags=run_params['emissions_input_lags'], ridge_lambda=run_params['ridge_lambda'],
+                                               anatomy_combine_style=run_params['anatomy_combine_style'])
 
                 model_trained_unconstrained = Lgssm(run_params['dynamics_dim'], run_params['emissions_dim'], run_params['input_dim'],
                                                     verbose=run_params['verbose'], param_props=run_params['param_props'],
                                                     dynamics_lags=run_params['dynamics_lags'], dynamics_input_lags=run_params['dynamics_input_lags'],
-                                                    emissions_input_lags=run_params['emissions_input_lags'], ridge_lambda=run_params['ridge_lambda'])
+                                                    emissions_input_lags=run_params['emissions_input_lags'], ridge_lambda=run_params['ridge_lambda'],
+                                                    anatomy_combine_style=run_params['anatomy_combine_style'])
 
                 model_trained.param_props['mask']['dynamics_weights'] = true_mask
                 model_trained_mismatch.param_props['mask']['dynamics_weights'] = mismatch_mask
@@ -892,7 +899,8 @@ def fit_smoothed_mismatch(param_name, save_folder):
                            dynamics_lags=run_params['dynamics_lags'],
                            dynamics_input_lags=run_params['dynamics_input_lags'],
                            emissions_input_lags=run_params['emissions_input_lags'],
-                           param_props=run_params['param_props'])
+                           param_props=run_params['param_props'],
+                           anatomy_combine_style=run_params['anatomy_combine_style'])
 
         model_true.param_props['mask']['dynamics_weights'] = true_mask
         model_true.randomize_weights(rng=rng)
@@ -923,14 +931,16 @@ def fit_smoothed_mismatch(param_name, save_folder):
                               dynamics_lags=run_params['dynamics_lags'],
                               dynamics_input_lags=run_params['dynamics_input_lags'],
                               emissions_input_lags=run_params['emissions_input_lags'],
-                              ridge_lambda=run_params['ridge_lambda'])
+                              ridge_lambda=run_params['ridge_lambda'],
+                              anatomy_combine_style=run_params['anatomy_combine_style'])
 
         model_trained_mismatch = Lgssm(run_params['dynamics_dim'], run_params['emissions_dim'], run_params['input_dim'],
                                        verbose=run_params['verbose'], param_props=run_params['param_props'],
                                        dynamics_lags=run_params['dynamics_lags'],
                                        dynamics_input_lags=run_params['dynamics_input_lags'],
                                        emissions_input_lags=run_params['emissions_input_lags'],
-                                       ridge_lambda=run_params['ridge_lambda'])
+                                       ridge_lambda=run_params['ridge_lambda'],
+                                       anatomy_combine_style=run_params['anatomy_combine_style'])
 
         model_trained_unconstrained = Lgssm(run_params['dynamics_dim'], run_params['emissions_dim'],
                                             run_params['input_dim'],
@@ -938,7 +948,8 @@ def fit_smoothed_mismatch(param_name, save_folder):
                                             dynamics_lags=run_params['dynamics_lags'],
                                             dynamics_input_lags=run_params['dynamics_input_lags'],
                                             emissions_input_lags=run_params['emissions_input_lags'],
-                                            ridge_lambda=run_params['ridge_lambda'])
+                                            ridge_lambda=run_params['ridge_lambda'],
+                                            anatomy_combine_style=run_params['anatomy_combine_style'])
 
         model_trained.param_props['mask']['dynamics_weights'] = true_mask
         model_trained_mismatch.param_props['mask']['dynamics_weights'] = true_mask

@@ -13,7 +13,7 @@ class Lgssm:
 
     def __init__(self, dynamics_dim, emissions_dim, input_dim,
                  dynamics_lags=1, emissions_lags=1, dynamics_input_lags=1, emissions_input_lags=1,
-                 cell_ids=None, param_props=None, verbose=True, epsilon=1e8, ridge_lambda=0):
+                 cell_ids=None, param_props=None, verbose=True, epsilon=1e8, ridge_lambda=0, anatomy_combine_style='or'):
         self.dynamics_lags = dynamics_lags
         self.dynamics_input_lags = dynamics_input_lags
         self.emissions_input_lags = emissions_input_lags
@@ -92,11 +92,11 @@ class Lgssm:
 
         # set up masks to constrain which parameters can be fit
         if self.param_props['shape']['dynamics_weights'] == 'synaptic':
-            anat = au.load_anatomical_data(self.cell_ids)
+            anat = au.load_anatomical_data(self.cell_ids, anatomy_combine_style)
             combined_mask = (anat['chem_conn'] + anat['gap_conn'] + np.eye(self.dynamics_dim)) > 0
             self.param_props['mask']['dynamics_weights'] = np.tile(combined_mask, (1, self.dynamics_lags))
         elif self.param_props['shape']['dynamics_weights'] == 'not_synaptic':
-            anat = au.load_anatomical_data(self.cell_ids)
+            anat = au.load_anatomical_data(self.cell_ids, anatomy_combine_style)
             combined_mask = ~(anat['chem_conn'] > 0) & ~(anat['gap_conn'] > 0) | np.eye(self.dynamics_dim, dtype=bool)
             self.param_props['mask']['dynamics_weights'] = np.tile(combined_mask, (1, self.dynamics_lags))
         elif self.param_props['shape']['dynamics_weights'] == 'full':

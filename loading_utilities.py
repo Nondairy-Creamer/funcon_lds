@@ -19,6 +19,9 @@ def get_run_params(param_name):
     if 'hold_out_start' not in params:
         params['hold_out_start'] = 0
 
+    if 'anatomy_combine_style' not in params:
+        params['anatomy_combine_style'] = 'or'
+
     return params
 
 
