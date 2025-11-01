@@ -131,8 +131,8 @@ def load_data(data_path, num_data_sets=None, neuron_freq=0.0, held_out_data=[],
             idx = this_cell_ids.index(bl) if bl in this_cell_ids else -1
             if idx != -1:
                 this_cell_ids.pop(idx)
-                np.delete(this_emissions, idx, axis=1)
-                np.delete(this_inputs, idx, axis=1)
+                this_emissions = np.delete(this_emissions, idx, axis=1)
+                this_inputs = np.delete(this_inputs, idx, axis=1)
 
         emissions_train.append(this_emissions)
         inputs_train.append(this_inputs)
