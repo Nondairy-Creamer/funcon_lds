@@ -1,6 +1,6 @@
 from matplotlib import pyplot as plt
 import numpy as np
-import wormneuroatlas as wa
+# import wormneuroatlas as wa
 import metrics as met
 import lgssm_utilities as ssmu
 import matplotlib as mpl
@@ -359,6 +359,7 @@ def compare_model_irms(weights, masks, weight_name, cell_ids, fig_save_path=None
     plt.errorbar(plot_x, y_val / irms_baseline, y_val_ci / irms_baseline, fmt='none', color='k')
     plt.xticks(plot_x, labels=['model', 'model\n+ unconstrained', 'model\n+ scrambled anatomy'], rotation=45)
     plt.ylabel('% explainable correlation to measured ' + weight_name)
+    plt.title('AND connectome constraint')
     plt.ylim(y_limits)
     plt.tight_layout()
 
@@ -2089,26 +2090,26 @@ def predict_chem_synapse_sign(weights, masks, cell_ids, metric=met.accuracy, rng
     data_irms_chem[nan_loc_chem] = np.nan
 
     # get the sign of the chemical synapses
-    watlas = wa.NeuroAtlas()
-    chem_sign_out = watlas.get_chemical_synapse_sign()
+    # watlas = wa.NeuroAtlas()
+    # chem_sign_out = watlas.get_chemical_synapse_sign()
 
-    cmplx = np.logical_and(np.any(chem_sign_out == -1, axis=0),
-                           np.any(chem_sign_out == 1, axis=0))
-    chem_sign = np.nansum(chem_sign_out, axis=0)
-    chem_sign[cmplx] = 0
-    chem_mask = chem_sign == 0
+    # cmplx = np.logical_and(np.any(chem_sign_out == -1, axis=0),
+    #                        np.any(chem_sign_out == 1, axis=0))
+    # chem_sign = np.nansum(chem_sign_out, axis=0)
+    # chem_sign[cmplx] = 0
+    # chem_mask = chem_sign == 0
 
-    chem_sign[chem_sign > 0] = 1
-    chem_sign[chem_sign < 0] = 0
-    chem_sign[chem_mask] = np.nan
+    # chem_sign[chem_sign > 0] = 1
+    # chem_sign[chem_sign < 0] = 0
+    # chem_sign[chem_mask] = np.nan
 
-    atlas_ids = list(watlas.neuron_ids)
-    atlas_ids[atlas_ids.index('AWCON')] = 'AWCL'
-    atlas_ids[atlas_ids.index('AWCOFF')] = 'AWCR'
-    cell_inds = np.array([atlas_ids.index(i) for i in cell_ids['all']])
-    chem_sign = chem_sign[np.ix_(cell_inds, cell_inds)]
-    chem_sign[masks['irm_nans']] = np.nan
-    chem_sign = chem_sign[chem_no_gap]
+    # atlas_ids = list(watlas.neuron_ids)
+    # atlas_ids[atlas_ids.index('AWCON')] = 'AWCL'
+    # atlas_ids[atlas_ids.index('AWCOFF')] = 'AWCR'
+    # cell_inds = np.array([atlas_ids.index(i) for i in cell_ids['all']])
+    # chem_sign = chem_sign[np.ix_(cell_inds, cell_inds)]
+    # chem_sign[masks['irm_nans']] = np.nan
+    # chem_sign = chem_sign[chem_no_gap]
 
     # prediction accuracy
     chem_sign_predict_model_synap, chem_sign_predict_model_synap_ci = met.metric_ci(metric, chem_sign, model_synap_dirms_chem, rng=rng)

@@ -1,4 +1,7 @@
 from pathlib import Path
+import sys
+sys.path.append(str(Path(__file__).resolve().parents[1]))
+sys.path.append(str(Path(__file__).resolve().parents[1] / 'tmac'))
 import analysis_utilities as au
 import lgssm_utilities as ssmu
 import tmac.preprocessing as tp
@@ -9,7 +12,8 @@ import pickle
 import loading_utilities as lu
 import analysis.paper_figures as pf
 
-run_params = lu.get_run_params(param_name='../analysis_params/paper_figures.yml')
+param_path = Path(__file__).resolve().parents[1] / 'analysis_params' / 'paper_figures.yml'
+run_params = lu.get_run_params(param_name=str(param_path))
 
 # this analysis requires 4 models
  # synap: a model constrained to have weights only between neurons that have synapses in the connectome
@@ -22,8 +26,6 @@ model_folders = run_params['model_folders']
 for k in model_folders:
     model_folders[k] = Path(model_folders[k])
 fig_save_path = Path(run_params['fig_save_path'])
-q_path = Path(run_params['q_path'])
-q_alpha = run_params['q_alpha']
 required_num_stim = run_params['required_num_stim']
 sub_pre_stim = run_params['sub_pre_stim']
 window = run_params['window']
@@ -32,7 +34,7 @@ num_obs_sweep_params = run_params['num_obs_sweep_params']
 rng = np.random.default_rng(run_params['random_seed'])
 metric = getattr(met, run_params['metric'])
 filter_tau = run_params['filter_tau']
-num_chosen = run_params['num_cell_ids_chosen']
+# num_chosen = run_params['num_cell_ids_chosen']
 
 # get the models
 models = {}
@@ -170,7 +172,7 @@ ids_file = open(ids_path, 'rb')
 atlas_ids = pickle.load(ids_file)
 ids_file.close()
 atlas_inds = [atlas_ids.index(i) for i in cell_ids['all']]
-q_in = np.load(str(q_path))[np.ix_(atlas_inds, atlas_inds)]
+# q_in = np.load(str(q_path))[np.ix_(atlas_inds, atlas_inds)]
 
 weights = {'data': {}}
 weights['data']['train'] = {'irms': data_irms_train,
@@ -178,7 +180,7 @@ weights['data']['train'] = {'irms': data_irms_train,
                             'irfs_sem': data_irfs_sem_train,
                             'corr': data_corr_train,
                             'corr_binarized': ((data_corr_train_ci[0] > 0) | (data_corr_train_ci[1] < 0)).astype(float),
-                            'q': (q_in < q_alpha).astype(float),
+                            # 'q': (q_in < q_alpha).astype(float),
                             }
 
 weights['data']['test'] = {'irms': data_irms_test,
@@ -186,7 +188,7 @@ weights['data']['test'] = {'irms': data_irms_test,
                            'irfs_sem': data_irfs_sem_test,
                            'corr': data_corr_test,
                            'corr_binarized': ((data_corr_test_ci[0] > 0) | (data_corr_test_ci[1] < 0)).astype(float),
-                           'q': (q_in < q_alpha).astype(float),
+                        #    'q': (q_in < q_alpha).astype(float),
                            }
 
 # get anatomical data
@@ -376,7 +378,7 @@ pairs = np.array([['RMDDR', 'RMDDL'],
 #
 # pf.plot_specific_dirfs(weights_masked, masks, cell_ids, pairs, window, fig_save_path=fig_save_path/'fig_1')
 #
-pf.weight_prediction_sweep(weights_masked, masks, weight_name='irms', fig_save_path=fig_save_path/'fig_1')
+# pf.weight_prediction_sweep(weights_masked, masks, weight_name='irms', fig_save_path=fig_save_path/'fig_1')
 # pf.weight_prediction_sweep(weights_masked, masks, weight_name='corr', fig_save_path=fig_save_path/'fig_1')
 # pf.weight_prediction(weights_masked, masks, weight_name='irms', fig_save_path=fig_save_path/'fig_1')
 # pf.weight_prediction(weights_masked, masks, weight_name='corr', fig_save_path=fig_save_path/'fig_1')
