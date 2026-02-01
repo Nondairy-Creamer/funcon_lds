@@ -5,7 +5,6 @@ import pickle
 import loading_utilities as lu
 from matplotlib import pyplot as plt
 import scipy.optimize as sio
-import tmac.optimization as opt
 import torch
 import time
 
@@ -58,7 +57,7 @@ def outer_loss_svd_torch(p):
     return -auc
 
 
-p_hat = opt.scipy_minimize_with_grad(outer_loss_svd_torch, 1).x
+p_hat = au.scipy_minimize_with_grad(outer_loss_svd_torch, 1).x
 fit_diag_cum_var = get_cum_var(W - p_hat * np.eye(n))
 
 ###### low d approx
@@ -100,7 +99,7 @@ for di, d in enumerate(range(min_dim, max_dim + 1)):
     C_0[:, :-1] = C_hat
     p_0 = np.concatenate((R_0.reshape(-1), C_0.reshape(-1)))
 
-    p_hat = opt.scipy_minimize_with_grad(loss_low_d_torch, p_0).x
+    p_hat = au.scipy_minimize_with_grad(loss_low_d_torch, p_0).x
     R_hat = p_hat[: n * d].reshape((n, d))
     C_hat = p_hat[n * d:].reshape((n, d))
 

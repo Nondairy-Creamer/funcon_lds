@@ -4,6 +4,8 @@ from pathlib import Path
 import metrics as met
 import itertools
 import csv
+import torch
+from scipy import optimize
 
 
 def auto_select_ids(inputs, cell_ids, num_neurons=10):
@@ -378,4 +380,23 @@ def single_sample_boostrap_p(data, metric=np.mean, n_boot=10000, rng=np.random.d
     p = 2 * np.mean(booted_metric <= 0)
 
     return p
+
+
+def scipy_minimize_with_grad(loss_fn_torch, variables_np, optimizer='BFGS', device='cpu', dtype=torch.float64):
+    """Minimize a torch loss using scipy with provided gradients."""
+
+    def loss_fn_np(variables_np_in):
+        training_variables = torch.tensor(variables_np_in, device=device, dtype=dtype)
+        return loss_fn_torch(training_variables).numpy()
+
+    def loss_jacobian_np(variables_np_in):
+        variables_torch = torch.tensor(variables_np_in, dtype=dtype, device=device, requires_grad=True)
+        loss = loss_fn_torch(variables_torch)
+        return torch.autograd.grad(loss, variables_torch, create_graph=False)[0].numpy()
+
+    trained_variables = optimize.minimize(loss_fn_np, variables_np,
+                                          jac=loss_jacobian_np,
+                                          method=optimizer)
+
+    return trained_variables
 

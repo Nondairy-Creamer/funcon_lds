@@ -4,7 +4,6 @@ import scipy.io as sio
 from pathlib import Path
 import loading_utilities as lu
 import pickle
-import tmac.preprocessing as tp
 import scipy.signal as ssig
 
 run_params = lu.get_run_params(param_name='submission_params/create_data_set.yml')

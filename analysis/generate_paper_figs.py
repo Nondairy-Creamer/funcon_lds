@@ -1,10 +1,8 @@
 from pathlib import Path
 import sys
 sys.path.append(str(Path(__file__).resolve().parents[1]))
-sys.path.append(str(Path(__file__).resolve().parents[1] / 'tmac'))
 import analysis_utilities as au
 import lgssm_utilities as ssmu
-import tmac.preprocessing as tp
 import scipy.signal as ss
 import metrics as met
 import numpy as np
@@ -133,10 +131,10 @@ for i in range(obs_train.shape[1]):
 
 # interpolate nans in data for viewing
 for di, d in enumerate(data_train['emissions']):
-    data_train['emissions'][di] = tp.interpolate_over_nans(d)[0]
+    data_train['emissions'][di] = lu.interpolate_over_nans(d)[0]
 
 for di, d in enumerate(data_test['emissions']):
-    data_test['emissions'][di] = tp.interpolate_over_nans(d)[0]
+    data_test['emissions'][di] = lu.interpolate_over_nans(d)[0]
 
 # make a causal filter to smooth the data with
 if filter_tau > 0:

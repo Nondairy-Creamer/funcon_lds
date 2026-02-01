@@ -2,10 +2,11 @@ import numpy as np
 from pathlib import Path
 import yaml
 import pickle
-import tmac.preprocessing as tp
 import analysis_utilities as au
 import warnings
 import os
+import torch
+from scipy import interpolate
 
 
 # utilities for loading and saving the data
@@ -23,6 +24,80 @@ def get_run_params(param_name):
         params['anatomy_combine_style'] = 'or'
 
     return params
+
+
+def check_input_format(data):
+    if type(data) is not np.ndarray:
+        raise Exception('The red and green matricies must be the numpy arrays')
+
+    if data.ndim != 1 and data.ndim != 2:
+        raise Exception('The red and green matricies should be 1 or 2 dimensional')
+
+    if data.ndim == 1:
+        data = data[:, None]
+
+    return data
+
+
+def interpolate_over_nans(input_mat, t=None):
+    """Interpolate over NaN values along the first dimension of a matrix."""
+    input_mat = check_input_format(input_mat)
+
+    if t is None:
+        t = np.arange(input_mat.shape[0])
+
+    output_mat = np.zeros(input_mat.shape)
+
+    sample_rate = 1 / np.mean(np.diff(t, axis=0))
+    t_interp = np.arange(input_mat.shape[0]) / sample_rate
+
+    for c in range(input_mat.shape[1]):
+        if np.all(np.isnan(input_mat[:, c])):
+            print('column ' + str(c) + ' is all NaN, skipping')
+            continue
+
+        no_nan_ind = ~np.isnan(input_mat[:, c])
+        no_nan_t = t[no_nan_ind]
+        no_nan_data_mat = input_mat[no_nan_ind, c]
+
+        interp_obj = interpolate.interp1d(no_nan_t, no_nan_data_mat, kind='linear', fill_value='extrapolate')
+        output_mat[:, c] = interp_obj(t_interp)
+
+    return output_mat, t_interp
+
+
+def photobleach_correction(time_by_neurons, t=None, optimizer='BFGS', num_exp=1, fit_offset=False):
+    """Fit a shared exponential decay and correct photobleaching."""
+    time_by_neurons = check_input_format(time_by_neurons)
+
+    if t is None:
+        t = np.arange(time_by_neurons.shape[0])
+    device = 'cpu'
+    dtype = torch.float64
+
+    t_torch = torch.tensor(t, dtype=dtype, device=device)
+    time_by_neurons_torch = torch.tensor(time_by_neurons, dtype=dtype, device=device)
+
+    tau_0 = t[-1, None] / 2
+    a_0 = np.nanmean(time_by_neurons, axis=0)
+    p_0 = np.concatenate((tau_0, a_0), axis=0)
+
+    mask = ~torch.isnan(time_by_neurons_torch)
+    time_by_neurons_torch[~mask] = 0
+
+    def loss_fn(p):
+        exponential_approx = p[None, 1:] * torch.exp(-t_torch[:, None] / p[0])
+        squared_error = ((exponential_approx - time_by_neurons_torch) ** 2)
+        squared_error = squared_error * mask
+        return squared_error.sum()
+
+    p_hat = au.scipy_minimize_with_grad(loss_fn, p_0,
+                                        optimizer=optimizer, device=device, dtype=dtype)
+
+    time_by_neurons_corrected = time_by_neurons_torch / torch.exp(-t_torch[:, None] / p_hat.x[0])
+    time_by_neurons_corrected[~mask] = np.nan
+
+    return time_by_neurons_corrected.numpy()
 
 
 def preprocess_data(emissions, inputs, start_index=0, correct_photobleach=False, filter_size=2, upsample_factor=1):
@@ -54,7 +129,7 @@ def preprocess_data(emissions, inputs, start_index=0, correct_photobleach=False,
         # photobleach correction
         emissions_filtered_corrected = np.zeros_like(emissions_filtered)
         for c in range(emissions_filtered.shape[1]):
-            emissions_filtered_corrected[:, c] = tp.photobleach_correction(emissions_filtered[:, c], num_exp=2, fit_offset=False)[:, 0]
+            emissions_filtered_corrected[:, c] = photobleach_correction(emissions_filtered[:, c], num_exp=2, fit_offset=False)[:, 0]
 
         # occasionally the fit fails check for outputs who don't have a mean close to 1
         # fit those with a single exponential
@@ -64,7 +139,7 @@ def preprocess_data(emissions, inputs, start_index=0, correct_photobleach=False,
             bad_fits_2exp = np.where(np.abs(np.nanmean(emissions_filtered_corrected, axis=0) - 1) > 0.1)[0]
 
             for bf in bad_fits_2exp:
-                emissions_filtered_corrected[:, bf] = tp.photobleach_correction(emissions_filtered[:, bf], num_exp=1, fit_offset=True)[:, 0]
+                emissions_filtered_corrected[:, bf] = photobleach_correction(emissions_filtered[:, bf], num_exp=1, fit_offset=True)[:, 0]
 
             bad_fits_1xp = np.where(np.abs(np.nanmean(emissions_filtered_corrected, axis=0) - 1) > 0.2)[0]
             if len(bad_fits_1xp) > 0:
