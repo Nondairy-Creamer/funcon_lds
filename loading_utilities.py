@@ -5,8 +5,8 @@ import pickle
 import analysis_utilities as au
 import warnings
 import os
-import torch
 from scipy import interpolate
+import scipy.optimize as sio
 
 
 # utilities for loading and saving the data
@@ -66,38 +66,80 @@ def interpolate_over_nans(input_mat, t=None):
     return output_mat, t_interp
 
 
-def photobleach_correction(time_by_neurons, t=None, optimizer='BFGS', num_exp=1, fit_offset=False):
-    """Fit a shared exponential decay and correct photobleaching."""
-    time_by_neurons = check_input_format(time_by_neurons)
+def photobleach_correction(time_by_neurons_full, t=None, num_exp=1, fit_offset=False):
+    """Function to fit an exponential with a shared tau to all columns."""
+    time_by_neurons_full = check_input_format(time_by_neurons_full)
+    nan_neurons = np.all(np.isnan(time_by_neurons_full), axis=0)
+    time_by_neurons = time_by_neurons_full.copy()
+    time_by_neurons = time_by_neurons[:, ~nan_neurons]
+    num_neurons = time_by_neurons.shape[1]
+
+    if num_neurons == 0:
+        return time_by_neurons_full
 
     if t is None:
         t = np.arange(time_by_neurons.shape[0])
-    device = 'cpu'
-    dtype = torch.float64
 
-    t_torch = torch.tensor(t, dtype=dtype, device=device)
-    time_by_neurons_torch = torch.tensor(time_by_neurons, dtype=dtype, device=device)
+    tau_0 = t[-1, None] / np.arange(2 + num_exp, 2, -1)
+    data_max = np.nanmax(time_by_neurons, axis=0)
+    a_0 = np.concatenate([data_max / i for i in np.arange(2, 2 + num_exp)], axis=0)
+    offset_0 = np.zeros(num_neurons)
 
-    tau_0 = t[-1, None] / 2
-    a_0 = np.nanmean(time_by_neurons, axis=0)
-    p_0 = np.concatenate((tau_0, a_0), axis=0)
+    # fit in log space to ensure everything stays positive
+    if fit_offset:
+        p_0 = np.concatenate((np.log(tau_0), offset_0, np.log(a_0)), axis=0)
+    else:
+        p_0 = np.concatenate((np.log(tau_0), np.log(a_0)), axis=0)
 
-    mask = ~torch.isnan(time_by_neurons_torch)
-    time_by_neurons_torch[~mask] = 0
+    # mask out any nans
+    mask = ~np.isnan(time_by_neurons)
+    time_by_neurons[~mask] = 0
+
+    if fit_offset:
+        amp_ind_start = num_exp + num_neurons
+    else:
+        amp_ind_start = num_exp
+
+    def get_exponential_approx(p):
+        tau = np.exp(p[:num_exp])
+        offset = p[num_exp:amp_ind_start]
+        amp = np.exp(p[amp_ind_start:])
+
+        exponential = np.zeros_like(time_by_neurons)
+
+        for ex in range(num_exp):
+            exponential = exponential + amp[ex] * np.exp(-t[:, None] / tau[ex])
+
+        if fit_offset:
+            exponential = exponential + offset
+
+        return exponential
 
     def loss_fn(p):
-        exponential_approx = p[None, 1:] * torch.exp(-t_torch[:, None] / p[0])
-        squared_error = ((exponential_approx - time_by_neurons_torch) ** 2)
+        exponential_approx = get_exponential_approx(p)
+
+        squared_error = ((exponential_approx - time_by_neurons) ** 2)
+        # set unmeasured values to 0, so they don't show up in the sum
         squared_error = squared_error * mask
         return squared_error.sum()
 
-    p_hat = au.scipy_minimize_with_grad(loss_fn, p_0,
-                                        optimizer=optimizer, device=device, dtype=dtype)
+    p_hat = sio.minimize(loss_fn, p_0).x
+    offset = p_hat[num_exp:amp_ind_start]
 
-    time_by_neurons_corrected = time_by_neurons_torch / torch.exp(-t_torch[:, None] / p_hat.x[0])
+    exponential_approx = get_exponential_approx(p_hat)
+
+    if fit_offset:
+        time_by_neurons_corrected = (time_by_neurons - offset) / (exponential_approx - offset)
+    else:
+        time_by_neurons_corrected = time_by_neurons / exponential_approx
+
+    # put the unmeasured value nans back in
     time_by_neurons_corrected[~mask] = np.nan
 
-    return time_by_neurons_corrected.numpy()
+    time_by_neurons_final = time_by_neurons_full.copy()
+    time_by_neurons_final[:, ~nan_neurons] = time_by_neurons_corrected
+
+    return time_by_neurons_final
 
 
 def preprocess_data(emissions, inputs, start_index=0, correct_photobleach=False, filter_size=2, upsample_factor=1):

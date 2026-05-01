@@ -46,10 +46,18 @@ def weight_prediction(weights, masks, weight_name, fig_save_path=None):
     # across all data
     irms_baseline = met.nan_corr(test_weights, train_weights)[0]
 
-    weights_to_compare = [weights['anatomy']['chem_conn'] + weights['anatomy']['gap_conn'],
-                          weights['models']['synap_randC'][weight_name],
-                          weights['models']['synap'][weight_name],
-                          ]
+    has_randC = 'synap_randC' in weights['models']
+
+    weights_to_compare = [weights['anatomy']['chem_conn'] + weights['anatomy']['gap_conn']]
+    compare_labels = ['connectome']
+    compare_colors = [plot_color['anatomy']]
+    if has_randC:
+        weights_to_compare.append(weights['models']['synap_randC'][weight_name])
+        compare_labels.append('model\n+ scrambled labels')
+        compare_colors.append(plot_color['synap_randC'])
+    weights_to_compare.append(weights['models']['synap'][weight_name])
+    compare_labels.append('model')
+    compare_colors.append(plot_color['synap'])
 
     for ii, i in enumerate(weights_to_compare):
         weights_to_compare[ii][np.eye(i.shape[0], dtype=bool)] = np.nan
@@ -63,7 +71,7 @@ def weight_prediction(weights, masks, weight_name, fig_save_path=None):
         model_irms_score_ci.append(model_irms_to_measured_irms_test_ci)
 
     # plot average reconstruction over all data without normalization
-    y_limits = [0, 1.3]
+    y_limits = [0, 1.0]
     plt.figure()
     y_val = np.array([model_irms_score[-1]])
     y_val_ci = np.stack([model_irms_score_ci[-1]]).T
@@ -76,22 +84,22 @@ def weight_prediction(weights, masks, weight_name, fig_save_path=None):
     plt.ylabel('correlation to measured ' + weight_name)
     plt.ylim(y_limits)
     plt.tight_layout()
-    plt.savefig(fig_save_path / ('measured_vs_model_randC_' + weight_name + '_raw.pdf'))
+    fname_suffix = '_randC' if has_randC else ''
+    plt.savefig(fig_save_path / ('measured_vs_model' + fname_suffix + '_' + weight_name + '_raw.pdf'))
 
     # plot average reconstruction over all data
     plt.figure()
     y_val = np.array(model_irms_score)
     y_val_ci = np.stack(model_irms_score_ci).T
     plot_x = np.arange(y_val.shape[0])
-    bar_colors = [plot_color['anatomy'], plot_color['synap_randC'],  plot_color['synap']]
-    plt.bar(plot_x, y_val / irms_baseline, color=bar_colors)
+    plt.bar(plot_x, y_val / irms_baseline, color=compare_colors)
     plt.errorbar(plot_x, y_val / irms_baseline, y_val_ci / irms_baseline, fmt='none', color='k')
-    plt.xticks(plot_x, labels=['connectome', 'model\n+ scrambled labels', 'model'], rotation=45)
+    plt.xticks(plot_x, labels=compare_labels, rotation=45)
     plt.ylabel('relative correlation to measured ' + weight_name)
     plt.ylim(y_limits)
     plt.tight_layout()
 
-    plt.savefig(fig_save_path / ('measured_vs_model_randC_' + weight_name + '.pdf'))
+    plt.savefig(fig_save_path / ('measured_vs_model' + fname_suffix + '_' + weight_name + '.pdf'))
 
     plt.show()
 
@@ -349,7 +357,7 @@ def compare_model_irms(weights, masks, weight_name, cell_ids, fig_save_path=None
         model_irms_score_ci.append(model_irms_to_measured_irms_test_ci)
 
     # plot average reconstruction over all data
-    y_limits = [0, 1.1]
+    y_limits = [0, 1.0]
     plt.figure()
     y_val = np.array(model_irms_score)
     y_val_ci = np.stack(model_irms_score_ci).T
@@ -359,13 +367,13 @@ def compare_model_irms(weights, masks, weight_name, cell_ids, fig_save_path=None
     plt.errorbar(plot_x, y_val / irms_baseline, y_val_ci / irms_baseline, fmt='none', color='k')
     plt.xticks(plot_x, labels=['model', 'model\n+ unconstrained', 'model\n+ scrambled anatomy'], rotation=45)
     plt.ylabel('% explainable correlation to measured ' + weight_name)
-    plt.title('AND connectome constraint')
+    plt.title('connectome constraint')
     plt.ylim(y_limits)
     plt.tight_layout()
 
-    plt.show()
-
     plt.savefig(fig_save_path / ('measured_vs_model_randA_' + weight_name + '.pdf'))
+
+    plt.show()
 
 
 def connected_unconnected_irms(weights, masks, weight_name, cell_ids, fig_save_path=None):
@@ -506,8 +514,8 @@ def weight_prediction_sweep(weights, masks, weight_name, fig_save_path=None):
 
 
     # plot model reconstruction of IRMs
-    y_limits = [0, 1.3]
-    x_limits = [0, 14]
+    y_limits = [0, 1.1]
+    x_limits = [-1, 10]
     plt.figure()
     plt.subplot(1, 2, 1)
     plt.errorbar(n_stim_sweep, irms_baseline_sweep, irms_baseline_sweep_ci, label='explainable correlation', color=plot_color['data'])
@@ -1518,9 +1526,9 @@ def plot_silencing_results(model, cell_ids, weights, fig_save_path=None, silence
 
 def break_down_irf(model, weights, masks, cell_ids, window, fig_save_path=None):
     # format is [responding neuron, stimulated neuron]
-    chosen_pairs = np.array([['AVAL', 'AVEL'],
-                             ['AVDL', 'AIML']])
-                             #['RMDDR', 'RMDDL']])
+    chosen_pairs = np.array([#['AVAL', 'AVEL'],
+                             ['AVDL', 'AIML'],
+                             ['RMDDR', 'RMDDL']])
     # size multiplier to make it look better in illustrator
     i_mult = 0.5
     fontsize = 12 * i_mult

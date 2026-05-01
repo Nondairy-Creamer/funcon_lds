@@ -367,40 +367,40 @@ cell_ids['chosen'] = top_cells
 # format is responding, stimulated
 pairs = np.array([['RMDDR', 'RMDDL'],
                   ['AVEL', 'SAADL'],
-                  ['AVDR', 'AVJR']
+                  ['AVDR', 'AVJR'],
                   ])
 
-# Figure 1
-# pf.plot_sampled_model(data_train, posterior_dicts['synap'], sample_rate=sample_rate, cell_ids=cell_ids,
-#                       num_neurons=10, fig_save_path=fig_save_path/'fig_1')
-#
+# # Figure 1
+# ########## pf.plot_sampled_model(data_train, posterior_dicts['synap'], sample_rate=sample_rate, cell_ids=cell_ids,
+# #                       num_neurons=10, fig_save_path=fig_save_path/'fig_1')
+
 # pf.plot_specific_dirfs(weights_masked, masks, cell_ids, pairs, window, fig_save_path=fig_save_path/'fig_1')
-#
+
 # pf.weight_prediction_sweep(weights_masked, masks, weight_name='irms', fig_save_path=fig_save_path/'fig_1')
 # pf.weight_prediction_sweep(weights_masked, masks, weight_name='corr', fig_save_path=fig_save_path/'fig_1')
 # pf.weight_prediction(weights_masked, masks, weight_name='irms', fig_save_path=fig_save_path/'fig_1')
-# pf.weight_prediction(weights_masked, masks, weight_name='corr', fig_save_path=fig_save_path/'fig_1')
+# ########## pf.weight_prediction(weights_masked, masks, weight_name='corr', fig_save_path=fig_save_path/'fig_1')
 
-# Figure 2
+# # Figure 2
 # pf.weights_vs_connectome(weights, masks, fig_save_path=fig_save_path/'fig_2')
 # pf.direct_vs_indirect(weights_masked, masks, fig_save_path=fig_save_path/'fig_2', rng=rng)
 # pf.break_down_irf(models['synap'], weights, masks, cell_ids, window, fig_save_path=fig_save_path/'fig_2')
 
-# Figure 3
+# # Figure 3
 # pf.plot_irms(weights, cell_ids, num_neurons=20, fig_save_path=fig_save_path/'fig_3')
 pf.compare_model_irms(weights, masks, 'irms', cell_ids=cell_ids['all'], fig_save_path=fig_save_path/'fig_3')
 pf.compare_model_irms(weights, masks, 'corr', cell_ids=cell_ids['all'], fig_save_path=fig_save_path/'fig_3')
 # pf.connected_unconnected_irms(weights, masks, 'irms', cell_ids=cell_ids['all'], fig_save_path=fig_save_path/'fig_s3')
 
-# Figure 4
+# # Figure 4
 # pf.plot_missing_neuron(models, data_test, posterior_dicts['synap'], post_save_path=(saved_run_folder / model_folders['synap'] / 'posterior_test.pkl'),
-#                        sample_rate=sample_rate, fig_save_path=fig_save_path/'fig_4')
+                    #    sample_rate=sample_rate, fig_save_path=fig_save_path/'fig_4')
 
 
-# supplemental
-# fig_s1
+# # supplemental
+# # fig_s1
 # pf.weight_prediction_sweep(weights_masked, masks, weight_name='corr', fig_save_path=fig_save_path/'fig_s1')
-# pf.weight_prediction(weights_masked, masks, weight_name='corr', fig_save_path=fig_save_path/'fig_s1')
+# ###### pf.weight_prediction(weights_masked, masks, weight_name='corr', fig_save_path=fig_save_path/'fig_s1')
 
-# fig_s3
+# # fig_s3
 # pf.plot_irms(weights, cell_ids, num_neurons=None, fig_save_path=fig_save_path/'fig_s3')
