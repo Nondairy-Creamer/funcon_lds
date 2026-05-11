@@ -1,11 +1,14 @@
+from pathlib import Path
+import sys
+sys.path.append(str(Path(__file__).resolve().parents[1]))
 import numpy as np
 import loading_utilities as lu
-from pathlib import Path
 import pickle
 import analysis_utilities as au
 import lgssm_utilities as ssmu
 import metrics as met
 from matplotlib import pyplot as plt
+from scipy.stats import wilcoxon, mannwhitneyu
 
 # the goal of this function is to test whether we get the same performance when evaluating the model on different
 # subsets of the data
@@ -19,7 +22,8 @@ plot_color = {'data': np.array([217, 95, 2]) / 255,
               }
 
 likelihood_divisor = 1
-run_params = lu.get_run_params(param_name='../analysis_params/hold_out_cuts.yml')
+param_path = Path(__file__).resolve().parents[1] / 'analysis_params' / 'hold_out_cuts.yml'
+run_params = lu.get_run_params(param_name=str(param_path))
 model_paths = run_params['models']
 saved_run_folder = Path(run_params['saved_run_folder'])
 window = run_params['window']
@@ -160,8 +164,38 @@ for model_name in model_paths:
         eigs_this = np.linalg.eigvals(models[model_name][-1].dynamics_weights)
         model_eigs[model_name].append(eigs_this)
 
+def _pairwise_median_test(name, a, b):
+    a = np.asarray(a, dtype=float)
+    b = np.asarray(b, dtype=float)
+    print(f'\n[{name}] synap vs unconstrained')
+    print(f'  synap         (n={len(a)}): median={np.median(a):.4e}, values={a}')
+    print(f'  unconstrained (n={len(b)}): median={np.median(b):.4e}, values={b}')
+    if len(a) == len(b):
+        try:
+            w_stat, w_p = wilcoxon(a, b, alternative='two-sided', zero_method='wilcox')
+            print(f'  Wilcoxon signed-rank (paired by hs cut): stat={w_stat:.4g}, p={w_p:.4g}')
+        except ValueError as e:
+            print(f'  Wilcoxon signed-rank failed: {e}')
+    u_stat, u_p = mannwhitneyu(a, b, alternative='two-sided')
+    print(f'  Mann-Whitney U (unpaired):               stat={u_stat:.4g}, p={u_p:.4g}')
+
+
+if 'synap' in model_paths and 'unconstrained' in model_paths:
+    print('\n=== synap vs unconstrained: pairwise tests of equal medians (across hs cuts) ===')
+    ttci = np.array(train_test_corr_irms)
+    ttcc = np.array(train_test_corr_corr)
+    _pairwise_median_test('relative IRM correlation',
+                          np.array(model_score['synap']) / ttci,
+                          np.array(model_score['unconstrained']) / ttci)
+    _pairwise_median_test('relative model-corr correlation',
+                          np.array(model_corr_score['synap']) / ttcc,
+                          np.array(model_corr_score['unconstrained']) / ttcc)
+    _pairwise_median_test('test log-likelihood',
+                          model_ll['synap'],
+                          model_ll['unconstrained'])
+
 # plot the model score and the test log likelihood
-model_list = ['synap', 'unconstrained', 'synap_randA']
+model_list = [m for m in ['synap', 'unconstrained', 'synap_randA'] if m in model_paths]
 
 all_scores = []
 for ml in model_list:
@@ -171,6 +205,7 @@ all_scores = np.array(all_scores) / np.array(train_test_corr_irms)[None, :]
 
 # plot the models correlation to the measured IRMs across multi-fold cross validation
 y_lim = (0, 1.1)
+x_lim = (-0.5, len(model_list) - 0.5)
 plt.figure()
 plt.plot(all_scores, color=(0.9, 0.9, 0.9), zorder=1)
 
@@ -178,7 +213,7 @@ for mi, m in enumerate(model_list):
     plot_x = np.ones(len(model_score[m])) * mi
     plt.scatter(plot_x, model_score[m] / np.array(train_test_corr_irms), color=plot_color[m], zorder=2)
 
-plt.xlim((-0.5, 2.5))
+plt.xlim(x_lim)
 plt.ylim(y_lim)
 plt.ylabel('relative correlation')
 plt.xticks(np.arange(len(model_list)), model_list, rotation=45)
@@ -198,7 +233,7 @@ for mi, m in enumerate(model_list):
     plot_x = np.ones(len(model_corr_score[m])) * mi
     plt.scatter(plot_x, model_corr_score[m] / np.array(train_test_corr_corr), color=plot_color[m], zorder=2)
 
-plt.xlim((-0.5, 2.5))
+plt.xlim(x_lim)
 plt.ylim(y_lim)
 plt.ylabel('relative correlation')
 plt.xticks(np.arange(len(model_list)), model_list, rotation=45)

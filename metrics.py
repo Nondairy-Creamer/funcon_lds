@@ -136,6 +136,55 @@ def nan_corr(y_true, y_hat, alpha=0.05, mean_sub=True):
     return corr, ci
 
 
+def nan_mse(y_true, y_hat, normalize=False):
+    """Mean squared error between two arrays, ignoring entries where either is NaN.
+
+    If `normalize` is True, divide by mean(y_true**2) (i.e. the target's mean
+    squared value). The result is then 0 for a perfect match and ~1 when the
+    prediction is zero, giving a roughly [0, 1] scale-invariant score.
+    """
+    y_true = y_true.reshape(-1)
+    y_hat = y_hat.reshape(-1)
+
+    mask = ~np.isnan(y_true) & ~np.isnan(y_hat)
+    y_true = y_true[mask]
+    y_hat = y_hat[mask]
+
+    if y_true.size == 0:
+        return np.nan
+
+    mse = np.mean((y_true - y_hat) ** 2)
+
+    if normalize:
+        target_ms = np.mean(y_true ** 2)
+        if target_ms == 0:
+            return np.nan
+        return mse / target_ms
+
+    return mse
+
+
+def nan_cos_sim(y_true, y_hat):
+    """Cosine similarity between two arrays, ignoring entries where either is NaN."""
+    y_true = y_true.reshape(-1)
+    y_hat = y_hat.reshape(-1)
+
+    mask = ~np.isnan(y_true) & ~np.isnan(y_hat)
+    y_true = y_true[mask]
+    y_hat = y_hat[mask]
+
+    if y_true.size == 0:
+        return np.nan
+
+    y_true_norm = np.linalg.norm(y_true)
+    y_hat_norm = np.linalg.norm(y_hat)
+
+    if y_true_norm == 0 or y_hat_norm == 0:
+        return np.nan
+
+    return np.dot(y_true, y_hat) / (y_true_norm * y_hat_norm)
+
+
 def accuracy(y_true, y_hat):
     y_true = y_true.reshape(-1)
     y_hat = y_hat.reshape(-1)

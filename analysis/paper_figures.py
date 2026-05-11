@@ -25,11 +25,32 @@ plot_color = {'data': np.array([217, 95, 2]) / 255,
               }
 
 
-def weight_prediction(weights, masks, weight_name, fig_save_path=None):
+def _propagate_connectome(connectome, n_steps=30, stability_factor=0.95):
+    # treat the connectome as an LDS dynamics matrix and return the cumulative
+    # impulse-response matrix sum_{k=1}^{n_steps} A^k (response[i, j] = response of neuron i
+    # to a unit impulse at neuron j). Normalize A by its spectral radius * (1 / stability_factor)
+    # so the iteration stays bounded for the requested number of steps.
+    A = connectome.astype(float)
+    spectral_radius = np.max(np.abs(np.linalg.eigvals(A)))
+    if spectral_radius > 0:
+        A = A * (stability_factor / spectral_radius)
+
+    A_pow = np.eye(A.shape[0])
+    cumulative = np.zeros_like(A)
+    for _ in range(n_steps):
+        A_pow = A_pow @ A
+        cumulative = cumulative + A_pow
+
+    return cumulative
+
+
+def weight_prediction(weights, masks, weight_name, fig_save_path=None, exp_connectome=False, n_steps=30):
     # this figure will demonstrate that the model can reconstruct the observed data correlation and IRMs
     # first we will sweep across the data and restrict to neuron pairs where a stimulation event was recorded N times
     # we will demonstrate that ratio between the best possible correlation and our model correlation remains constant
     # this suggests that this ratio is independent of number of data
+    # if exp_connectome=True, propagate the connectome forward as if it were an LDS dynamics matrix
+    # and use the cumulative impulse-response matrix sum_{k=1}^{n_steps} A^k as the connectome comparison
 
     train_weights = weights['data']['train'][weight_name].copy()
     test_weights = weights['data']['test'][weight_name].copy()
@@ -48,8 +69,14 @@ def weight_prediction(weights, masks, weight_name, fig_save_path=None):
 
     has_randC = 'synap_randC' in weights['models']
 
-    weights_to_compare = [weights['anatomy']['chem_conn'] + weights['anatomy']['gap_conn']]
-    compare_labels = ['connectome']
+    connectome_weight = weights['anatomy']['chem_conn'] + weights['anatomy']['gap_conn']
+    connectome_label = 'connectome'
+    if exp_connectome:
+        connectome_weight = _propagate_connectome(connectome_weight, n_steps=n_steps)
+        connectome_label = 'connectome\nA + A^2 + ... + A^' + str(n_steps)
+
+    weights_to_compare = [connectome_weight]
+    compare_labels = [connectome_label]
     compare_colors = [plot_color['anatomy']]
     if has_randC:
         weights_to_compare.append(weights['models']['synap_randC'][weight_name])
@@ -85,6 +112,8 @@ def weight_prediction(weights, masks, weight_name, fig_save_path=None):
     plt.ylim(y_limits)
     plt.tight_layout()
     fname_suffix = '_randC' if has_randC else ''
+    if exp_connectome:
+        fname_suffix = fname_suffix + '_expconn'
     plt.savefig(fig_save_path / ('measured_vs_model' + fname_suffix + '_' + weight_name + '_raw.pdf'))
 
     # plot average reconstruction over all data
@@ -102,7 +131,6 @@ def weight_prediction(weights, masks, weight_name, fig_save_path=None):
     plt.savefig(fig_save_path / ('measured_vs_model' + fname_suffix + '_' + weight_name + '.pdf'))
 
     plt.show()
-
 
 def weight_prediction_direct_vs_poly(weights, masks, cell_ids, weight_name, fig_save_path=None):
     # this figure will demonstrate that the model can reconstruct the observed data correlation and IRMs
@@ -224,8 +252,22 @@ def weight_prediction_direct_vs_poly(weights, masks, cell_ids, weight_name, fig_
                                 unconstrained_extrasyn
                                 ]
 
-    # p_val, mean_corr, _ = met.two_sample_boostrap_corr_p(test_weights, synap_extrasyn, unconstrained_extrasyn, n_boot=10000)
-    p_val = met.two_sample_corr_p(test_weights, synap_extrasyn, unconstrained_extrasyn)
+    p_val, mean_corr_diff, _ = met.two_sample_boostrap_corr_p(test_weights, synap_extrasyn, unconstrained_extrasyn, n_boot=10000)
+    print('bootstrap p-value (synap vs unconstrained, extrasyn pairs): p = ' + str(p_val))
+    print('bootstrap mean corr difference (synap - unconstrained): ' + str(mean_corr_diff))
+
+    # paired Wilcoxon signed-rank on squared residuals: directly tests whether
+    # one model's prediction errors are systematically larger pair-by-pair
+    _nan_loc_resid = np.isnan(test_weights) | np.isnan(synap_extrasyn) | np.isnan(unconstrained_extrasyn)
+    _target_resid = test_weights[~_nan_loc_resid]
+    _sq_err_synap = (_target_resid - synap_extrasyn[~_nan_loc_resid]) ** 2
+    _sq_err_uncon = (_target_resid - unconstrained_extrasyn[~_nan_loc_resid]) ** 2
+    _wilcoxon_res = scipy.stats.wilcoxon(_sq_err_synap, _sq_err_uncon, alternative='two-sided')
+    print('paired Wilcoxon on squared residuals (synap vs unconstrained, extrasyn pairs): '
+          'p = ' + str(_wilcoxon_res.pvalue) + ', statistic = ' + str(_wilcoxon_res.statistic))
+    print('mean squared error: synap = ' + str(np.mean(_sq_err_synap)) +
+          ', unconstrained = ' + str(np.mean(_sq_err_uncon)) +
+          ', n pairs = ' + str(_target_resid.shape[0]))
 
     for ii, i in enumerate(weights_to_compare_synap):
         weights_to_compare_synap[ii][np.eye(i.shape[0], dtype=bool)] = np.nan
@@ -573,8 +615,9 @@ def direct_vs_indirect(weights, masks, fig_save_path=None, rng=np.random.default
     model_irms_corr, model_irms_corr_ci = met.nan_corr(data_test_irms, model_irms)
     model_dirms_corr, model_dirms_corr_ci = met.nan_corr(data_test_irms, model_dirms)
 
-    n_boot = 1000
+    n_boot = 10000
     alpha = 0.05
+    y_lim = (0.0, 1.0)
     p = met.two_sample_boostrap_corr_p(data_test_irms, model_irms, model_dirms, alpha=alpha, n_boot=n_boot, rng=rng)[0]
 
     y_val = np.array([model_irms_corr, model_dirms_corr]) / test_train_corr
@@ -588,6 +631,7 @@ def direct_vs_indirect(weights, masks, fig_save_path=None, rng=np.random.default
     plt.ylabel('relative correlation')
     plt.xticks(plot_x, ['STAMs', 'direct STAMs'])
     plt.title('p = ' + str(p) + ', number of bootstrap samples = ' + str(n_boot))
+    plt.ylim(y_lim)
     plt.tight_layout()
 
     plt.savefig(fig_save_path / 'direct_vs_indirect.pdf')
@@ -1347,11 +1391,17 @@ def plot_irfs(weights, masks, cell_ids, window, num_plot=10, fig_save_path=None)
     model_irms = no_nan_irfs['model_irms']
     cell_ids = no_nan_irfs['cell_ids']
 
-    # get the highest model dirm vs model irm diff
-    irm_corr = np.zeros(data_irfs.shape[1])
+    # rank traces by a combined score: normalized MSE + (1 - cosine similarity),
+    # both NaN-aware. Each term is in roughly [0, ~2] with 0 = perfect match,
+    # so lower = better. Traces with undefined scores (empty / zero target)
+    # are pushed to +inf so they don't sort to the top.
+    irm_score = np.full(data_irfs.shape[1], np.inf)
     for i in range(data_irfs.shape[1]):
-        irm_corr[i] = met.nan_corr(model_irfs[:, i], data_irfs[:, i])[0]
-    irm_dirm_mag_inds = np.argsort(irm_corr)[::-1]
+        nmse = met.nan_mse(model_irfs[:, i], data_irfs[:, i], normalize=True)
+        cos = met.nan_cos_sim(model_irfs[:, i], data_irfs[:, i])
+        if np.isfinite(nmse) and np.isfinite(cos):
+            irm_score[i] = nmse + (1 - cos)
+    irm_dirm_mag_inds = np.argsort(irm_score)
 
     plot_x = np.linspace(-window[0], window[1], data_irfs.shape[0])
 
@@ -1526,9 +1576,16 @@ def plot_silencing_results(model, cell_ids, weights, fig_save_path=None, silence
 
 def break_down_irf(model, weights, masks, cell_ids, window, fig_save_path=None):
     # format is [responding neuron, stimulated neuron]
-    chosen_pairs = np.array([#['AVAL', 'AVEL'],
-                             ['AVDL', 'AIML'],
-                             ['RMDDR', 'RMDDL']])
+    # chosen_pairs_old = np.array([#['AVAL', 'AVEL'],
+    #                          ['AVDL', 'AIML'],
+    #                          ['RMDDR', 'RMDDL']])    
+    chosen_pairs = np.array([#['AVDL', 'AIML'],
+                             #['SAAVL','AVEL'],
+                            #  ['RMDDL','RMDVL'],
+                            # ['OLQVR', 'AVEL'],
+                              ['RIMR', 'RMDDR'],
+                            #  ['SAADL', 'RMDDL'],
+                             ])
     # size multiplier to make it look better in illustrator
     i_mult = 0.5
     fontsize = 12 * i_mult
@@ -1544,7 +1601,8 @@ def break_down_irf(model, weights, masks, cell_ids, window, fig_save_path=None):
     top_cell_ids = []  # list of the synapses that most contributed
     data = []  # list of the actual measured perturbation response
     width_mult = [[50 * i_mult, 0.25 * i_mult],
-                  [100 * i_mult, 1 * i_mult]]
+                  [100 * i_mult, 0.5 * i_mult],
+                  ]
 
     # find the postsynaptic sites that contribute most in the responding neuron when the stimulated neuron is activated
     for pair_ind, (resp, stim) in enumerate(zip(chosen_pairs[:, 0], chosen_pairs[:, 1])):
@@ -1567,13 +1625,15 @@ def break_down_irf(model, weights, masks, cell_ids, window, fig_save_path=None):
         # save 1 extra spot for the response including all synapses
         # +2 total
 
-        irf_components = np.zeros((num_t_all, n_best_connections + 2))
         sorted_connections = connection_inds[np.argsort(model_weights_2_steps)[::-1]]  # list of connections sorted by response size
 
         # get the top best connections and their cell IDs
         # make sure you always include the direct connection
         top_resp_inds = [stim_ind] + list(sorted_connections[:n_best_connections])
         top_cell_ids.append([cell_ids['all'][i] for i in top_resp_inds])
+
+        # one column per top connection (incl. direct) plus one extra for the full-model response
+        irf_components = np.zeros((num_t_all, len(top_resp_inds) + 1))
 
         # disable all incoming synapses onto the responding cell
         # loop through and enable them one by one
@@ -1629,18 +1689,24 @@ def break_down_irf(model, weights, masks, cell_ids, window, fig_save_path=None):
 
         name = ['model', 'connectome']
 
-        # set the predetermined position of each of the nodes in the graph
+        # set the position of each of the nodes in the graph. Built dynamically
+        # so it works regardless of how many top connections were found.
         node_names = top_cell_ids[-1][:-1] + ['other'] + [resp]
-        pos_dict = []
-        pos_dict.append((-2 * i_mult, 0))
-        pos_dict.append((0, 2 * i_mult))
-        pos_dict.append((0, 1 * i_mult))
-        pos_dict.append((0, -1 * i_mult))
-        pos_dict.append((0, -2 * i_mult))
-        pos_dict.append((0, -3 * i_mult))
+        # number of intermediate nodes between stim and resp (top connections + 'other')
+        n_intermediate = top_resp_inds.shape[0] + 1
+        # split intermediates symmetrically around y=0 (skipping y=0 for the direct arrow)
+        n_top = n_intermediate // 2
+        n_bot = n_intermediate - n_top
+
+        pos_dict = [(-2 * i_mult, 0)]
+        for k in range(n_top):
+            pos_dict.append((0, (n_top - k) * i_mult))
+        for k in range(n_bot):
+            pos_dict.append((0, -(k + 1) * i_mult))
         pos_dict.append((2 * i_mult, 0))
-        # angles = [-np.arctan(2/2), -np.arctan(1/2), np.arctan(1/2), np.arctan(2/2)]
-        angles = [np.arctan(2/2), np.arctan(1/2), -np.arctan(1/2), -np.arctan(2/2), -np.pi/2]
+
+        # arrow angles from the stim node to each intermediate node
+        angles = [np.arctan(pos_dict[k + 1][1] / (2 * i_mult)) for k in range(n_intermediate)]
 
         circle_size = 0.35 * i_mult
         line_width = 2 * i_mult
@@ -2390,7 +2456,7 @@ def plot_missing_neuron(models, data, posterior_dict, post_save_path=None, sampl
                 missing_corr_null[ei, n] = np.nan
 
     # get the p value that the reconstructed neuron accuracy is significantly different than the null
-    p = au.single_sample_boostrap_p(missing_corr - missing_corr_null, n_boot=1000000)
+    p = au.single_sample_boostrap_p(missing_corr - missing_corr_null, n_boot=10000)
 
     plt.figure()
     plt.hist(missing_corr_null.reshape(-1), label='null', alpha=0.5, color='k')
@@ -2407,6 +2473,7 @@ def plot_missing_neuron(models, data, posterior_dict, post_save_path=None, sampl
     # best_offset = -5  # AVER
     best_offset = 0  # AVER
     median_offset = -4  # URYVL
+    median_offset = -0  # IL1VR
     best_neuron = np.unravel_index(sorted_corr_inds[-1 + best_offset], missing_corr.shape)
     median_neuron = np.unravel_index(sorted_corr_inds[int(sorted_corr_inds.shape[0] / 2) + median_offset], missing_corr.shape)
 
@@ -2414,6 +2481,13 @@ def plot_missing_neuron(models, data, posterior_dict, post_save_path=None, sampl
     best_neuron_ind = best_neuron[1]
     median_data_ind = median_neuron[0]
     median_neuron_ind = median_neuron[1]
+
+    best_corr = met.nan_corr(emissions[best_data_ind][:, best_neuron_ind],
+                             posterior_missing[best_data_ind][:, best_neuron_ind])[0]
+    median_corr = met.nan_corr(emissions[median_data_ind][:, median_neuron_ind],
+                               posterior_missing[median_data_ind][:, median_neuron_ind])[0]
+    print('best neuron (' + cell_ids[best_neuron_ind] + ') correlation: ' + str(best_corr))
+    print('median neuron (' + cell_ids[median_neuron_ind] + ') correlation: ' + str(median_corr))
 
     plot_x = np.arange(emissions[best_data_ind].shape[0]) / sample_rate
     display_x = np.arange(0, emissions[best_data_ind].shape[0], 5*60*sample_rate) / sample_rate

@@ -189,6 +189,64 @@ weights['data']['test'] = {'irms': data_irms_test,
                         #    'q': (q_in < q_alpha).astype(float),
                            }
 
+# save copies of the measured correlation and STAM (IRM) matrices to the repo root
+root_path = Path(__file__).resolve().parents[1]
+with open(root_path / 'measured_corr.pkl', 'wb') as f:
+    pickle.dump({'train': data_corr_train, 'test': data_corr_test}, f)
+with open(root_path / 'measured_stams.pkl', 'wb') as f:
+    pickle.dump({'train': data_irms_train, 'test': data_irms_test}, f)
+
+# save the initial conditions for the synap model used by plot_missing_neuron (figure 4).
+# match the dataset selection logic in pf.plot_missing_neuron: pick the (dataset, neuron) pair
+# with the highest correlation between posterior_missing and the measured emissions.
+synap_posterior = posterior_dicts['synap']
+posterior_missing = synap_posterior['posterior_missing']
+missing_corr = np.zeros((len(data_test['emissions']), data_test['emissions'][0].shape[1]))
+for ei in range(len(data_test['emissions'])):
+    for n in range(data_test['emissions'][ei].shape[1]):
+        if np.mean(~np.isnan(data_test['emissions'][ei][:, n])) > 0.5:
+            missing_corr[ei, n] = met.nan_corr(data_test['emissions'][ei][:, n],
+                                               posterior_missing[ei][:, n])[0]
+        else:
+            missing_corr[ei, n] = np.nan
+sorted_corr_inds = au.nan_argsort(missing_corr.reshape(-1))
+best_data_ind = np.unravel_index(sorted_corr_inds[-1], missing_corr.shape)[0]
+
+# the synap model in `models['synap']` was normalized in-place by au.normalize_model on load,
+# but the init_mean / init_cov in the posterior dict are still in the un-normalized basis.
+# transform them into the same basis as the normalized model (x' = h x) so the downstream
+# smoother call uses consistent coordinates. emissions_offset is unchanged by normalization.
+with open(saved_run_folder / model_folders['synap'] / 'models' / 'model_trained.pkl', 'rb') as f:
+    synap_model_raw = pickle.load(f)
+_, _, init_mean_norm_list, init_cov_norm_list = au.normalize_model(
+    synap_model_raw,
+    init_mean=synap_posterior['init_mean'],
+    init_cov=synap_posterior['init_cov'],
+)
+
+initial_conditions = {
+    'emissions_offset': synap_posterior['emissions_offset'][best_data_ind],
+    'init_mean': init_mean_norm_list[best_data_ind],
+    'init_cov': init_cov_norm_list[best_data_ind],
+}
+with open(root_path / 'initial_conditions.pkl', 'wb') as f:
+    pickle.dump(initial_conditions, f)
+
+# save the matching example recording so initial_conditions.pkl and example_recording.pkl
+# are guaranteed to come from the same dataset.
+# re-load data_test from disk to get the raw, unfiltered, NaN-laden emissions that the model's
+# inference (and therefore the saved initial_conditions / posterior_missing) was run against.
+# the smoother handles NaNs natively, so feeding it the raw recording reproduces figure 4.
+with open(saved_run_folder / data_folder / 'data_test.pkl', 'rb') as f:
+    data_test_raw = pickle.load(f)
+example_recording = {
+    'cell_ids': data_test_raw['cell_ids'],
+    'activity': data_test_raw['emissions'][best_data_ind],
+    'inputs': data_test_raw['inputs'][best_data_ind],
+}
+with open(root_path / 'example_recording.pkl', 'wb') as f:
+    pickle.dump(example_recording, f)
+
 # get anatomical data
 weights['anatomy'] = au.load_anatomical_data(cell_ids=cell_ids['all'])
 
@@ -377,9 +435,7 @@ pairs = np.array([['RMDDR', 'RMDDL'],
 # pf.plot_specific_dirfs(weights_masked, masks, cell_ids, pairs, window, fig_save_path=fig_save_path/'fig_1')
 
 # pf.weight_prediction_sweep(weights_masked, masks, weight_name='irms', fig_save_path=fig_save_path/'fig_1')
-# pf.weight_prediction_sweep(weights_masked, masks, weight_name='corr', fig_save_path=fig_save_path/'fig_1')
 # pf.weight_prediction(weights_masked, masks, weight_name='irms', fig_save_path=fig_save_path/'fig_1')
-# ########## pf.weight_prediction(weights_masked, masks, weight_name='corr', fig_save_path=fig_save_path/'fig_1')
 
 # # Figure 2
 # pf.weights_vs_connectome(weights, masks, fig_save_path=fig_save_path/'fig_2')
@@ -387,20 +443,24 @@ pairs = np.array([['RMDDR', 'RMDDL'],
 # pf.break_down_irf(models['synap'], weights, masks, cell_ids, window, fig_save_path=fig_save_path/'fig_2')
 
 # # Figure 3
-# pf.plot_irms(weights, cell_ids, num_neurons=20, fig_save_path=fig_save_path/'fig_3')
+pf.plot_irms(weights, cell_ids, num_neurons=20, fig_save_path=fig_save_path/'fig_3')
 pf.compare_model_irms(weights, masks, 'irms', cell_ids=cell_ids['all'], fig_save_path=fig_save_path/'fig_3')
 pf.compare_model_irms(weights, masks, 'corr', cell_ids=cell_ids['all'], fig_save_path=fig_save_path/'fig_3')
 # pf.connected_unconnected_irms(weights, masks, 'irms', cell_ids=cell_ids['all'], fig_save_path=fig_save_path/'fig_s3')
 
 # # Figure 4
 # pf.plot_missing_neuron(models, data_test, posterior_dicts['synap'], post_save_path=(saved_run_folder / model_folders['synap'] / 'posterior_test.pkl'),
-                    #    sample_rate=sample_rate, fig_save_path=fig_save_path/'fig_4')
+#                        sample_rate=sample_rate, fig_save_path=fig_save_path/'fig_4')
 
 
 # # supplemental
 # # fig_s1
 # pf.weight_prediction_sweep(weights_masked, masks, weight_name='corr', fig_save_path=fig_save_path/'fig_s1')
-# ###### pf.weight_prediction(weights_masked, masks, weight_name='corr', fig_save_path=fig_save_path/'fig_s1')
+# pf.weight_prediction(weights_masked, masks, weight_name='corr', fig_save_path=fig_save_path/'fig_s1')
+
 
 # # fig_s3
 # pf.plot_irms(weights, cell_ids, num_neurons=None, fig_save_path=fig_save_path/'fig_s3')
+
+# # fig_s4
+# pf.weight_prediction_direct_vs_poly(weights_masked, masks, cell_ids, weight_name='irms', fig_save_path=fig_save_path/'fig_s4')

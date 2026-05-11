@@ -1,12 +1,15 @@
+from pathlib import Path
+import sys
+sys.path.append(str(Path(__file__).resolve().parents[1]))
 import numpy as np
 import loading_utilities as lu
-from pathlib import Path
 import pickle
 import analysis_utilities as au
 import lgssm_utilities as ssmu
 import metrics as met
 from matplotlib import pyplot as plt
 import matplotlib as mpl
+from scipy.stats import wilcoxon, mannwhitneyu
 
 # this file should plot the performance and test log likelihood for modesl trained
 # on the same data but initialized with random parameters
@@ -23,7 +26,8 @@ plot_color = {'data': np.array([217, 95, 2]) / 255,
               }
 
 likelihood_divisor = 1
-run_params = lu.get_run_params(param_name='../analysis_params/paper_figures.yml')
+param_path = Path(__file__).resolve().parents[1] / 'analysis_params' / 'paper_figures.yml'
+run_params = lu.get_run_params(param_name=str(param_path))
 model_repeat_paths = run_params['model_repeats']
 saved_run_folder = Path(run_params['saved_run_folder'])
 window = run_params['window']
@@ -158,7 +162,39 @@ for model_name in model_repeat_paths:
         eigs_this = np.linalg.eigvals(models[model_name][-1].dynamics_weights)
         model_eigs[model_name].append(eigs_this)
 
-# plot the model score and the test log likelihood
+print('test log-likelihood (positive = densities >1, negative = densities <1):')
+for model_name in model_ll:
+    vals = np.array(model_ll[model_name])
+    print(f'  {model_name}: mean={vals.mean():.4e}, min={vals.min():.4e}, max={vals.max():.4e}')
+
+
+def _pairwise_median_test(name, a, b):
+    a = np.asarray(a, dtype=float)
+    b = np.asarray(b, dtype=float)
+    print(f'\n[{name}] synap vs unconstrained')
+    print(f'  synap         (n={len(a)}): median={np.median(a):.4e}, values={a}')
+    print(f'  unconstrained (n={len(b)}): median={np.median(b):.4e}, values={b}')
+    if len(a) == len(b):
+        try:
+            w_stat, w_p = wilcoxon(a, b, alternative='two-sided', zero_method='wilcox')
+            print(f'  Wilcoxon signed-rank (paired by RI index): stat={w_stat:.4g}, p={w_p:.4g}')
+        except ValueError as e:
+            print(f'  Wilcoxon signed-rank failed: {e}')
+    u_stat, u_p = mannwhitneyu(a, b, alternative='two-sided')
+    print(f'  Mann-Whitney U (unpaired):                 stat={u_stat:.4g}, p={u_p:.4g}')
+
+
+print('\n=== synap vs unconstrained: pairwise tests of equal medians ===')
+_pairwise_median_test('relative IRM correlation',
+                      np.array(model_score['synap']) / train_test_corr_irms,
+                      np.array(model_score['unconstrained']) / train_test_corr_irms)
+_pairwise_median_test('relative model-corr correlation',
+                      np.array(model_corr_score['synap']) / train_test_corr_corr,
+                      np.array(model_corr_score['unconstrained']) / train_test_corr_corr)
+_pairwise_median_test('test log-likelihood',
+                      model_ll['synap'],
+                      model_ll['unconstrained'])
+
 model_list = ['synap', 'unconstrained', 'synap_randA']
 plt.figure()
 plt.subplot(1, 2, 1)
@@ -178,7 +214,7 @@ plt.xlim((-0.5, 2.5))
 plt.ylabel('test log-likelihood')
 plt.xticks(np.arange(len(model_list)), model_list, rotation=45)
 plt.tight_layout()
-plt.savefig(fig_save_path / 'fig_s2' / 'stam_ll_rand_init.pdf')
+plt.savefig(fig_save_path / 'fig_s3' / 'stam_ll_rand_init.pdf')
 
 plt.figure()
 for mi, m in enumerate(model_list):
@@ -189,7 +225,7 @@ plt.ylim((0, 1))
 plt.ylabel('relative correlation')
 plt.xticks(np.arange(len(model_list)), model_list, rotation=45)
 plt.tight_layout()
-plt.savefig(fig_save_path / 'fig_s2' / 'corr_rand_init.pdf')
+plt.savefig(fig_save_path / 'fig_s3' / 'corr_rand_init.pdf')
 
 plt.show()
 a=1
@@ -234,13 +270,19 @@ for i in range(num_model):
         b = models[model_name][j].dynamics_weights[chosen_mask]
         corr_out[i, j] = met.nan_corr(a, b)[0]
 
-plt.figure()
-plt.imshow(corr_out, cmap=colormap)
-plt.clim(-1, 1)
-plt.colorbar()
-plt.xlabel('model repeats')
-plt.ylabel('model repeats')
-plt.title('correlation between model weights across repeats')
+fig, ax = plt.subplots()
+mesh = ax.pcolormesh(corr_out, cmap=colormap, vmin=-1, vmax=1,
+                     edgecolors='none', shading='flat', rasterized=False)
+ax.set_aspect('equal')
+ax.invert_yaxis()
+ax.set_xticks(np.arange(num_model) + 0.5)
+ax.set_xticklabels(np.arange(num_model))
+ax.set_yticks(np.arange(num_model) + 0.5)
+ax.set_yticklabels(np.arange(num_model))
+plt.colorbar(mesh, ax=ax)
+ax.set_xlabel('model repeats')
+ax.set_ylabel('model repeats')
+ax.set_title('correlation between model weights across repeats')
 plt.savefig(fig_save_path / 'fig_s3' / 'multiple_init_weight_corr.pdf')
 
 plt.figure()
